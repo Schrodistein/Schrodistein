@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escala Schrodistein</title>
+<meta name="description" content="Estimación del cociente intelectual con una batería adaptativa basada en la teoría CHC y la teoría de respuesta al ítem.">
+<meta name="theme-color" content="#2f4bd8">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<!--APP-START-->
+<header class="topbar">
+  <div class="wrap">
+    <button class="brand" type="button" data-go="home" aria-label="Escala Schrodistein, inicio">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><path d="M4 24 C10 24 11 8 16 8 S22 24 28 24" fill="none" stroke="var(--accent-ink)" stroke-width="2.4" stroke-linecap="round"/><line x1="16" y1="8" x2="16" y2="24" stroke="var(--accent-ink)" stroke-width="1.4" stroke-dasharray="2 2"/></svg>
+      Escala Schrodistein
+    </button>
+    <nav class="nav" id="nav" aria-label="Secciones">
+      <button type="button" data-go="home" aria-current="page">Inicio</button>
+      <button type="button" data-go="train">Entrenar</button>
+      <button type="button" data-go="ranges">Rangos</button>
+      <button type="button" data-go="science">Ciencia</button>
+      <button type="button" data-go="history">Historial</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- INICIO -->
+  <section class="screen" id="screen-home">
+    <div class="hero">
+      <p class="eyebrow">Batería cognitiva adaptativa · 5 índices · 9 subpruebas</p>
+      <h1>¿Dónde estás en la curva?</h1>
+      <p class="lead">Una estimación de tu cociente intelectual con los métodos que usa la psicometría actual: tareas de las cinco grandes capacidades del modelo CHC, dificultad que se adapta a ti y un resultado con su margen de error.</p>
+      <div id="home-bell"></div>
+    </div>
+
+    <form class="panel setup" id="setup" novalidate>
+      <h2>Empezar la evaluación</h2>
+      <div class="field">
+        <label for="age">Tu edad</label>
+        <input type="number" id="age" inputmode="numeric" min="16" max="90" placeholder="30" required>
+        <span class="small muted">El CI se calcula comparándote con personas de tu edad (16–90 años).</span>
+      </div>
+      <fieldset class="field">
+        <legend>Versión</legend>
+        <div class="choice">
+          <label><input type="radio" name="mode" id="mode-full" value="full" checked><strong>Completa · 9 subpruebas</strong><span class="small muted">35–45 min · intervalo de confianza más estrecho</span></label>
+          <label><input type="radio" name="mode" id="mode-short" value="short"><strong>Breve · 8 subpruebas</strong><span class="small muted">20–25 min · algo menos precisa</span></label>
+        </div>
+      </fieldset>
+      <label class="check"><input type="checkbox" id="consent" required> <span>Entiendo que es una estimación orientativa, no un diagnóstico clínico. Haré la prueba en un lugar tranquilo, sin ayuda ni calculadora, y de una sola vez.</span></label>
+      <p class="small" id="setup-error" role="alert" hidden></p>
+      <div class="row"><button class="btn primary" type="submit" id="start">Comenzar la prueba</button><span class="small muted">No hay pausa: cada ítem tiene un tiempo máximo.</span></div>
+    </form>
+
+    <div class="stack">
+      <h2>Qué se mide</h2>
+      <div class="indexes" id="home-indexes"></div>
+    </div>
+  </section>
+
+  <!-- PRUEBA -->
+  <section class="screen" id="screen-test" hidden>
+    <div class="testbar">
+      <div class="row"><span class="eyebrow" id="t-title">Subprueba</span><span class="small muted num" id="t-count"></span></div>
+      <div class="progress" aria-hidden="true"><i id="t-progress"></i></div>
+      <div class="timer" id="t-timer" aria-hidden="true"><i></i></div>
+    </div>
+    <div class="stage" id="stage" aria-live="polite"></div>
+    <div class="row" style="justify-content:center"><button class="btn ghost small" type="button" id="abort">Abandonar</button></div>
+  </section>
+
+  <!-- RESULTADOS -->
+  <section class="screen" id="screen-results" hidden></section>
+
+  <!-- ENTRENAR -->
+  <section class="screen" id="screen-train" hidden>
+    <div class="stack">
+      <p class="eyebrow">Práctica sin puntuación</p>
+      <h2>Entrenar</h2>
+      <p class="muted" style="max-width:62ch">Prueba cada tipo de tarea con corrección inmediata y explicación. Practicar antes de la evaluación mejora el resultado alrededor de un cuarto de desviación típica (Hausknecht et al., 2007), así que tu CI saldrá algo inflado si practicas mucho antes.</p>
+    </div>
+    <div class="train-grid" id="train-grid"></div>
+    <div class="panel stack" id="hanoi-panel">
+      <div class="row" style="justify-content:space-between"><h3>Torre de Hanói</h3><span class="small muted num" id="hanoi-info"></span></div>
+      <p class="small muted">Pasa todos los discos a la varilla de la derecha. Mueve un disco cada vez y nunca pongas uno grande sobre uno pequeño. Toca una varilla para coger el disco superior y otra para dejarlo. Es una tarea clásica de planificación.</p>
+      <div class="row">
+        <label class="small" for="hanoi-n">Discos</label>
+        <select id="hanoi-n" class="btn" style="min-height:38px;padding:4px 10px"><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+        <button class="btn" type="button" id="hanoi-reset">Reiniciar</button>
+      </div>
+      <div class="hanoi" id="hanoi"></div>
+      <p class="small" id="hanoi-msg" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <!-- RANGOS -->
+  <section class="screen" id="screen-ranges" hidden>
+    <div class="stack">
+      <p class="eyebrow">Escala de desviación · media 100 · DT 15</p>
+      <h2>Rangos de CI</h2>
+      <p class="muted" style="max-width:62ch">El CI no es una cantidad absoluta: indica tu posición respecto a personas de tu edad. Las categorías son las descriptivas de la WAIS-IV (Wechsler, 2008). El porcentaje de población sale de la curva normal teórica.</p>
+    </div>
+    <div id="ranges-bell"></div>
+    <div class="table-wrap"><table id="ranges-table"></table></div>
+    <div class="prose">
+      <h3>Cómo leer un intervalo de confianza</h3>
+      <p>Toda medida tiene error. Un resultado de «112, IC 95 % 105–119» significa que, con el error de medida de esta prueba, tu puntuación verdadera cae con un 95 % de probabilidad entre 105 y 119. Si el intervalo cruza el límite entre dos categorías, las dos son compatibles con tu resultado.</p>
+      <h3>Qué significa una diferencia de puntos</h3>
+      <p>Las diferencias de menos de 5–7 puntos entre dos personas, o entre dos aplicaciones a la misma persona, entran dentro del error de medida habitual incluso en pruebas clínicas.</p>
+    </div>
+  </section>
+
+  <!-- CIENCIA -->
+  <section class="screen" id="screen-science" hidden>
+    <div class="stack">
+      <p class="eyebrow">Metodología</p>
+      <h2>En qué se basa</h2>
+    </div>
+    <div class="prose">
+      <h3>1. Qué es el CI y por qué se puede medir</h3>
+      <p>Las puntuaciones de todas las pruebas cognitivas correlacionan entre sí de forma positiva. Ese factor común, el factor <em>g</em> (Spearman, 1904; Jensen, 1998), es lo que resume el CI. El modelo de Cattell-Horn-Carroll (CHC; Carroll, 1993; McGrew, 2009) organiza las capacidades en tres niveles: <em>g</em> arriba, capacidades amplias en medio y tareas concretas abajo. Las escalas Wechsler actuales informan de cinco índices amplios, y esta batería mide los mismos cinco.</p>
+      <p>El CI predice de forma sólida el rendimiento académico. En una muestra de más de 70 000 alumnos ingleses, <em>g</em> a los 11 años correlacionó 0,81 con una variable latente de resultados en los exámenes nacionales a los 16 (Deary et al., 2007).</p>
+
+      <h3>2. Las subpruebas</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Índice</th><th>Subprueba</th><th>Paradigma de referencia</th></tr></thead>
+        <tbody>
+          <tr><td>Razonamiento fluido (Gf)</td><td>Matrices</td><td>Matrices progresivas de Raven; reglas de Carpenter, Just &amp; Shell (1990)</td></tr>
+          <tr><td></td><td>Series numéricas</td><td>Razonamiento inductivo (Thurstone, 1938; Simon &amp; Kotovsky, 1963)</td></tr>
+          <tr><td></td><td>Acertijos lógicos</td><td>Silogismos, prueba de reflexión cognitiva (Frederick, 2005), tarea de Wason (1968)</td></tr>
+          <tr><td>Comprensión verbal (Gc)</td><td>Analogías, vocabulario, categorías</td><td>Subpruebas de Vocabulario y Semejanzas de Wechsler; ICAR verbal (Condon &amp; Revelle, 2014)</td></tr>
+          <tr><td>Visoespacial (Gv)</td><td>Rotación mental</td><td>Shepard &amp; Metzler (1971); ICAR 3D rotation</td></tr>
+          <tr><td>Memoria de trabajo (Gwm)</td><td>Dígitos directos e inversos</td><td>Retención de dígitos de Wechsler; Miller (1956)</td></tr>
+          <tr><td></td><td>Bloques de Corsi</td><td>Corsi (1972); normas de Kessels et al. (2000)</td></tr>
+          <tr><td>Velocidad (Gs)</td><td>Búsqueda de símbolos</td><td>Búsqueda de símbolos de Wechsler</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>3. Cómo se puntúa: teoría de respuesta al ítem</h3>
+      <p>Cada ítem tiene una dificultad (<span class="mono">b</span>), una discriminación (<span class="mono">a</span>) y una probabilidad de acierto por azar (<span class="mono">c</span>), según el modelo logístico de tres parámetros. Tu nivel en cada capacidad (θ) se estima por el método EAP, que combina todas tus respuestas con una distribución previa normal (Embretson &amp; Reise, 2000). La precisión no depende del número de aciertos, sino de la información que aportan los ítems cerca de tu nivel.</p>
+      <p>La prueba es <strong>adaptativa</strong>: después de cada respuesta se elige el siguiente ítem que más información aporta en tu nivel estimado (van der Linden &amp; Glas, 2010). Así, con menos ítems se consigue la misma precisión que con un test fijo largo.</p>
+      <p>Los ítems de matrices, series y rotación se <strong>generan automáticamente</strong> a partir de reglas cuya dificultad está estudiada (Embretson, 1998). Los distractores de las matrices siguen el método I-RAVEN (Hu et al., 2021), para que no se pueda acertar eligiendo la opción con los rasgos más repetidos. Como cada prueba es nueva, repetirla no sirve para memorizar respuestas.</p>
+
+      <h3>4. Del nivel θ al CI</h3>
+      <ol>
+        <li>Se estima θ para cada índice y se corrige según tu edad, siguiendo las tendencias de Salthouse (2009): el razonamiento fluido y la velocidad bajan desde la mitad de la veintena y el vocabulario sube hasta los 60–65 años.</li>
+        <li>Índice = 100 + 15·θ, con intervalo de confianza al 95 % = ±1,96 × 15 × error típico.</li>
+        <li>El CI total es la media de los cinco índices, re-estandarizada según la correlación típica entre índices (≈ 0,5). Así se construyen las puntuaciones compuestas de las escalas Wechsler.</li>
+        <li>Al error típico se le suma 0,2 DT de «incertidumbre de calibración», porque los parámetros de los ítems no proceden de una muestra normativa propia.</li>
+      </ol>
+
+      <h3>5. Control de validez</h3>
+      <p>La aplicación registra si respondes demasiado rápido para haber leído el ítem, si se agota el tiempo a menudo, si sales de la aplicación durante la prueba y si cometes muchos errores en la tarea de velocidad. Estos avisos aparecen junto al resultado.</p>
+
+      <h3>6. Limitaciones</h3>
+      <ul>
+        <li><strong>No está baremada con una muestra representativa.</strong> Los parámetros de los ítems y las normas de velocidad y memoria son estimaciones a priori basadas en la literatura. Sin una muestra normativa ninguna aplicación puede ofrecer la precisión de un test clínico, y el intervalo de confianza intenta reflejarlo con honestidad.</li>
+        <li>Solo un psicólogo que aplica una prueba estandarizada (WAIS-IV/5, WISC-V, Stanford-Binet 5…) en condiciones controladas puede dar un CI con validez diagnóstica.</li>
+        <li>El cansancio, la ansiedad, la falta de sueño, el idioma (los ítems verbales están en español) y la familiaridad con este tipo de tareas afectan al resultado.</li>
+        <li>Repetir la prueba produce efectos de práctica (Hausknecht et al., 2007). La primera aplicación es la más representativa.</li>
+        <li>Las normas envejecen: la media poblacional subió unos 3 puntos por década durante el siglo XX (efecto Flynn; Flynn, 1987).</li>
+      </ul>
+
+      <h3>Referencias</h3>
+      <ul class="refs">
+        <li>Carpenter, P. A., Just, M. A., &amp; Shell, P. (1990). What one intelligence test measures: A theoretical account of the processing in the Raven Progressive Matrices Test. <em>Psychological Review, 97</em>(3), 404–431.</li>
+        <li>Carroll, J. B. (1993). <em>Human cognitive abilities: A survey of factor-analytic studies</em>. Cambridge University Press.</li>
+        <li>Condon, D. M., &amp; Revelle, W. (2014). The International Cognitive Ability Resource: Development and initial validation of a public-domain measure. <em>Intelligence, 43</em>, 52–64.</li>
+        <li>Corsi, P. M. (1972). <em>Human memory and the medial temporal region of the brain</em> [Tesis doctoral]. McGill University.</li>
+        <li>Deary, I. J., Strand, S., Smith, P., &amp; Fernandes, C. (2007). Intelligence and educational achievement. <em>Intelligence, 35</em>(1), 13–21.</li>
+        <li>Embretson, S. E. (1998). A cognitive design system approach to generating valid tests: Application to abstract reasoning. <em>Psychological Methods, 3</em>(3), 380–396.</li>
+        <li>Embretson, S. E., &amp; Reise, S. P. (2000). <em>Item response theory for psychologists</em>. Erlbaum.</li>
+        <li>Flynn, J. R. (1987). Massive IQ gains in 14 nations: What IQ tests really measure. <em>Psychological Bulletin, 101</em>(2), 171–191.</li>
+        <li>Frederick, S. (2005). Cognitive reflection and decision making. <em>Journal of Economic Perspectives, 19</em>(4), 25–42.</li>
+        <li>Hausknecht, J. P., Halpert, J. A., Di Paolo, N. T., &amp; Moriarty Gerrard, M. O. (2007). Retesting in selection: A meta-analysis of coaching and practice effects for tests of cognitive ability. <em>Journal of Applied Psychology, 92</em>(2), 373–385.</li>
+        <li>Hu, S., Ma, Y., Liu, X., Wei, Y., &amp; Bai, S. (2021). Stratified rule-aware network for abstract visual reasoning. <em>Proceedings of the AAAI Conference on Artificial Intelligence, 35</em>(2), 1567–1574.</li>
+        <li>Jensen, A. R. (1998). <em>The g factor: The science of mental ability</em>. Praeger.</li>
+        <li>Kessels, R. P. C., van Zandvoort, M. J. E., Postma, A., Kappelle, L. J., &amp; de Haan, E. H. F. (2000). The Corsi block-tapping task: Standardization and normative data. <em>Applied Neuropsychology, 7</em>(4), 252–258.</li>
+        <li>McGrew, K. S. (2009). CHC theory and the human cognitive abilities project. <em>Intelligence, 37</em>(1), 1–10.</li>
+        <li>Miller, G. A. (1956). The magical number seven, plus or minus two. <em>Psychological Review, 63</em>(2), 81–97.</li>
+        <li>Salthouse, T. A. (2009). When does age-related cognitive decline begin? <em>Neurobiology of Aging, 30</em>(4), 507–514.</li>
+        <li>Shepard, R. N., &amp; Metzler, J. (1971). Mental rotation of three-dimensional objects. <em>Science, 171</em>(3972), 701–703.</li>
+        <li>Simon, H. A., &amp; Kotovsky, K. (1963). Human acquisition of concepts for sequential patterns. <em>Psychological Review, 70</em>(6), 534–546.</li>
+        <li>Spearman, C. (1904). "General intelligence," objectively determined and measured. <em>American Journal of Psychology, 15</em>(2), 201–292.</li>
+        <li>Thurstone, L. L. (1938). <em>Primary mental abilities</em>. University of Chicago Press.</li>
+        <li>van der Linden, W. J., &amp; Glas, C. A. W. (Eds.). (2010). <em>Elements of adaptive testing</em>. Springer.</li>
+        <li>Wason, P. C. (1968). Reasoning about a rule. <em>Quarterly Journal of Experimental Psychology, 20</em>(3), 273–281.</li>
+        <li>Wechsler, D. (2008). <em>Wechsler Adult Intelligence Scale – Fourth Edition (WAIS-IV)</em>. Pearson.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section class="screen" id="screen-history" hidden>
+    <div class="stack">
+      <p class="eyebrow">Guardado solo en este dispositivo</p>
+      <h2>Historial</h2>
+    </div>
+    <div id="history-list"></div>
+  </section>
+
+  <footer class="foot">Escala Schrodistein · Estimación orientativa, no sustituye a una evaluación psicológica profesional.</footer>
+</main>
+<!--APP-END-->
+<script src="js/core.js"></script>
+<script src="js/irt.js"></script>
+<script src="js/gen-matrices.js"></script>
+<script src="js/gen-series.js"></script>
+<script src="js/gen-rotation.js"></script>
+<script src="js/banks.js"></script>
+<script src="js/battery.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

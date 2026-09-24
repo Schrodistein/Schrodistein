@@ -1,0 +1,13 @@
+{
+  "name": "escala-schrodistein",
+  "version": "1.0.0",
+  "description": "Estimación del CI con una batería cognitiva adaptativa (CHC + TRI). PWA sin dependencias.",
+  "private": true,
+  "scripts": {
+    "start": "npx http-server -p 8080 -c-1 .",
+    "test": "node tests/run.js",
+    "e2e": "node scripts/e2e.js",
+    "build:single": "node scripts/build-single.js"
+  },
+  "license": "MIT"
+}

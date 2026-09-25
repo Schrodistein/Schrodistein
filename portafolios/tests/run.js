@@ -203,5 +203,102 @@ test('modelo de índice único: covarianza = ββᵀσ²m + diag(σ²ε)', () =>
   assert(near(m.Sigma[0][1], a[0].beta * a[1].beta * m.mktVol * m.mktVol, 1e-12));
 });
 
+/* Formatos reales de descarga (encabezados y estilo numérico tal como los exporta cada sitio). */
+const INVESTING_ES = '﻿"Fecha","Último","Apertura","Máximo","Mínimo","Vol.","% var."\n' +
+  '"01.03.2024","2.450,00","2.400,00","2.500,00","2.380,00","120,35M","2,08%"\n' +
+  '"01.02.2024","2.400,00","2.350,00","2.420,00","2.300,00","98,10M","-1,64%"\n' +
+  '"01.01.2024","2.440,00","2.300,00","2.460,00","2.290,00","110,00M","5,17%"\n' +
+  '"01.12.2023","2.320,00","2.250,00","2.330,00","2.240,00","90,00M","1,00%"\n';
+const INVESTING_EN = '"Date","Price","Open","High","Low","Vol.","Change %"\n' +
+  '"03/01/2024","1,321.50","1,300.00","1,330.00","1,290.00","","1.20%"\n' +
+  '"02/01/2024","1,305.80","1,280.00","1,310.00","1,270.00","","2.00%"\n' +
+  '"01/01/2024","1,280.20","1,250.00","1,290.00","1,240.00","","-0.50%"\n' +
+  '"12/01/2023","1,286.60","1,260.00","1,300.00","1,250.00","","3.00%"\n';
+const YAHOO = 'Date,Open,High,Low,Close,Adj Close,Volume\n' +
+  '2023-12-28,30000,30500,29900,30200,29000.5,1000\n2023-12-29,30200,30400,30100,30300,29100.5,900\n' +
+  '2024-01-31,31000,31500,30900,31200,30000.25,800\n2024-02-29,null,null,null,null,null,null\n' +
+  '2024-02-28,31500,31600,31000,31100,29900,700\n2024-03-28,32000,32500,31800,32400,31150,650\n';
+
+test('Investing.com en español: coma decimal y fechas día.mes.año', () => {
+  assert(PF.data.isSingleAsset(INVESTING_ES));
+  const s = PF.data.parseSeriesFile(INVESTING_ES, 'ECOPETROL Datos históricos.csv');
+  assert(s.name === 'ECOPETROL', s.name);
+  assert(s.column === 'Último');
+  assert(s.dates.join() === '2023-12-01,2024-01-01,2024-02-01,2024-03-01', s.dates.join());
+  assert(s.prices[0] === 2320 && s.prices[3] === 2450, s.prices.join());
+});
+
+test('Investing.com en inglés: separador de miles y fechas mes/día/año', () => {
+  const s = PF.data.parseSeriesFile(INVESTING_EN, 'MSCI COLCAP Historical Data.csv');
+  assert(s.name === 'MSCI COLCAP');
+  assert(s.dates[0] === '2023-12-01' && s.dates[3] === '2024-03-01', s.dates.join());
+  assert(s.prices[0] === 1286.6 && s.prices[3] === 1321.5);
+});
+
+test('Yahoo Finance: usa el cierre ajustado y omite filas null', () => {
+  const s = PF.data.parseSeriesFile(YAHOO, 'PFBCOLOM.CL.csv');
+  assert(s.name === 'PFBCOLOM' && s.column === 'Adj Close');
+  assert(s.prices.length === 5 && s.prices[0] === 29000.5);
+});
+
+test('unión de historiales: último cierre del mes y meses comunes', () => {
+  const a = PF.data.parseSeriesFile(INVESTING_ES, 'ECOPETROL.csv');
+  const b = PF.data.parseSeriesFile(INVESTING_EN, 'MSCI COLCAP.csv');
+  const c = PF.data.parseSeriesFile(YAHOO, 'PFBCOLOM.CL.csv');
+  const m = PF.data.mergeSeries([a, c, b], 'mensual');
+  assert(m.names.join('|') === 'ECOPETROL|PFBCOLOM|MSCI COLCAP');
+  assert(m.dates.length === 4, m.dates.join());
+  assert(m.values[1][0] === 29100.5, 'diciembre toma el último día: ' + m.values[1][0]);
+  assert(m.values[1][2] === 29900, 'febrero ignora la fila null');
+  assert(PF.data.guessMarket(m.names) === 2);
+  const again = PF.data.parseCSV(PF.data.toCSV(m));
+  assert(again.names.join('|') === m.names.join('|') && again.values[2][3] === 1321.5);
+});
+
+test('claves de periodo semanal, trimestral y anual', () => {
+  assert(PF.data.periodKey('2024-09-25', 'semanal') === '2024-09-23');
+  assert(PF.data.periodKey('2024-09-29', 'semanal') === '2024-09-23');
+  assert(PF.data.periodKey('2024-05-02', 'trimestral') === '2024-T2');
+  assert(PF.data.periodKey('2024-05-02', 'anual') === '2024');
+});
+
+
+test('BVC: títulos encima, nemotécnico, fechas de Excel y tramos de 6 meses', () => {
+  const rows1 = [
+    ['Bolsa de Valores de Colombia'], ['Histórico de precios'], [],
+    ['Nemotécnico', 'Fecha', 'Cantidad', 'Volumen', 'Precio de cierre'],
+    ['ECOPETROL', new Date(2024, 0, 31), 1000, 2400000, 2400],
+    ['ECOPETROL', 45352, 1000, 2450000, 2450], // número de serie de Excel: 2024-03-01
+    ['ECOPETROL', '28/02/2024', 1000, 2420000, '2.420,50'],
+  ];
+  const rows2 = [
+    ['Nemotécnico', 'Fecha', 'Cantidad', 'Volumen', 'Precio de cierre'],
+    ['ECOPETROL', '30/04/2024', 1, 1, 2500],
+    ['ECOPETROL', '31/05/2024', 1, 1, 2550],
+  ];
+  const a = PF.data.seriesFromRows(rows1, 'descarga (1).xlsx');
+  const b = PF.data.seriesFromRows(rows2, 'descarga (2).xlsx');
+  assert(a.length === 1 && a[0].name === 'ECOPETROL' && a[0].column === 'Precio de cierre');
+  assert(a[0].dates.join() === '2024-01-31,2024-02-28,2024-03-01', a[0].dates.join());
+  assert(a[0].prices[1] === 2420.5);
+  const c = PF.data.combineSeries(a.concat(b));
+  assert(c.length === 1 && c[0].parts === 2 && c[0].dates.length === 5);
+});
+
+test('BVC: un archivo con varios nemotécnicos se separa por activo', () => {
+  const text = 'Nemotécnico;Fecha;Cantidad;Volumen;Precio de cierre\n' +
+    'ISA;02/01/2024;10;100;18.000,00\nPFBCOLOM;02/01/2024;10;100;31.000,00\n' +
+    'ISA;03/01/2024;10;100;18.100,00\nPFBCOLOM;03/01/2024;10;100;31.500,00\n';
+  assert(PF.data.isSingleAsset(text));
+  const s = PF.data.parseSeriesText(text, 'x.csv');
+  assert(s.map((x) => x.name).join() === 'ISA,PFBCOLOM');
+  assert(s[1].prices[1] === 31500 && s[0].dates[1] === '2024-01-03');
+});
+
+test('una tabla con un activo por columna no se confunde con un historial', () => {
+  assert(!PF.data.isSingleAsset(PF.sample.csv()));
+});
+
+
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);
 if (failed) process.exit(1);

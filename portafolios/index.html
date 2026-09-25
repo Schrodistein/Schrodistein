@@ -37,17 +37,17 @@
   <section class="screen" id="screen-datos" hidden>
     <div class="head">
       <h1>Datos y supuestos</h1>
-      <p class="lede">Pega o sube un CSV con precios (o rendimientos) de tus activos y de un índice de mercado, uno por columna. La primera columna puede ser la fecha. Todo se calcula en tu navegador.</p>
+      <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV, o las de Investing.com o Yahoo Finance) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
     </div>
     <div class="grid-2">
-      <div class="panel">
+      <div class="panel drop" id="drop">
         <h2>Fuente</h2>
         <div class="row-btns">
           <button type="button" class="btn" id="btn-sample">Cargar ejemplo simulado</button>
-          <label class="btn btn-ghost file">Subir CSV<input type="file" id="file" accept=".csv,.txt,.tsv,text/csv"></label>
+          <label class="btn btn-ghost file">Subir archivos (Excel o CSV)<input type="file" id="file" multiple accept=".csv,.txt,.tsv,.xlsx,.xls,.ods,text/csv"></label>
         </div>
         <label class="field" for="csv">
-          <span>Datos (CSV; separador coma, punto y coma o tabulador)</span>
+          <span>Tabla de datos (también puedes arrastrar aquí los archivos)</span>
           <textarea id="csv" rows="10" spellcheck="false"></textarea>
         </label>
         <button type="button" class="btn btn-primary" id="btn-parse">Procesar datos</button>
@@ -75,11 +75,24 @@
           <label class="field" for="wmax"><span>Peso máximo por activo (%)</span>
             <input id="wmax" type="number" step="1" value="20" min="1" max="100" inputmode="decimal"></label>
           <label class="field" for="capital"><span>Capital a invertir</span>
-            <input id="capital" type="number" step="1000" value="100000" min="0" inputmode="decimal"></label>
+            <input id="capital" type="number" step="1000000" value="100000000" min="0" inputmode="decimal"></label>
+          <label class="field" for="currency"><span>Moneda</span>
+            <select id="currency"><option value="COP" selected>Peso colombiano (COP)</option><option value="USD">Dólar (USD)</option><option value="MXN">Peso mexicano (MXN)</option><option value="EUR">Euro (EUR)</option></select></label>
         </div>
         <p class="hint" id="div-hint"></p>
         <p class="hint">Un peso mínimo negativo permite ventas en corto. La mezcla con el CAPM reduce el error de estimación de las medias históricas, que es la principal debilidad práctica de Markowitz.</p>
       </div>
+    </div>
+    <div class="panel guide">
+      <h2>Datos reales de la Bolsa de Valores de Colombia</h2>
+      <p>La app lee directamente los históricos que descargas de la BVC: nemotécnico, fecha, cantidad, volumen y precio de cierre. La BVC entrega la descarga gratuita en tramos de hasta 6 meses y con hasta 5 años de antigüedad. La app une los tramos de cada acción.</p>
+      <ol>
+        <li>En <b>bvc.com.co</b>, entra a la ficha de cada acción (Ecopetrol, PF Bancolombia, ISA, Grupo Argos, Grupo Sura, Celsia…) y descarga su histórico en tramos de 6 meses hasta cubrir el periodo que quieras. Lo ideal son 3 a 5 años.</li>
+        <li>Descarga también el histórico del índice <b>MSCI COLCAP</b>, o el del ETF <b>ICOLCAP</b>. Será el portafolio de mercado de los cálculos de Sharpe, Treynor y Jensen.</li>
+        <li>Selecciona todos los archivos a la vez en <i>Subir archivos</i>, o arrástralos aquí. La app toma el último cierre de cada mes (o de la frecuencia que elijas) y usa solo los periodos que tienen todos los activos.</li>
+        <li>En <i>Supuestos</i>, escribe como tasa libre de riesgo el rendimiento actual de los TES de corto plazo.</li>
+      </ol>
+      <p class="hint">También sirven las descargas de Investing.com (en español o inglés) y de Yahoo Finance, donde las acciones de la BVC llevan el sufijo <code>.CL</code>, por ejemplo <code>ECOPETROL.CL</code>. El activo toma su nombre de la columna de nemotécnico o, si no la hay, del nombre del archivo. El índice se detecta si su nombre contiene «COLCAP», «índice» o «mercado». Para leer archivos de Excel la app descarga un lector la primera vez, así que necesita internet. Los CSV funcionan sin conexión.</p>
     </div>
   </section>
 

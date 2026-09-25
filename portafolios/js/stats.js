@@ -203,7 +203,212 @@
     return values.map((c) => (pct ? c.map((x) => x / 100) : c.slice()));
   }
 
-  const MARKET_RE = /(mercado|market|[íi]ndice|index|benchmark|ipc|s&p|sp ?500|spx|ibex|merval|bovespa|ibov|ipsa|colcap|msci|nasdaq|dow|acwi|^spy$)/i;
+  /* ---------- Historiales por activo (BVC, Investing.com, Yahoo Finance) ---------- */
+
+  const DATE_HDR = /^(fecha|date|time|fecha de cierre|fecha operaci[óo]n|fecha de operaci[óo]n)$/i;
+  const PRICE_HDRS = [
+    /^(adj\.? ?close|adjusted close|cierre ajustado|cierre aj\.?|precio de cierre ajustado)$/i,
+    /^(precio (de )?cierre|close|cierre|[úu]ltimo( precio)?|price|precio|last|valor( (del )?[íi]ndice)?|valor de cierre)$/i,
+  ];
+  const TICKER_HDR = /^(nemot[ée]cnico|nemo|ticker|s[íi]mbolo|symbol|especie|instrumento|emisor)$/i;
+  const clean = (h) => String(h == null ? '' : h).replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim();
+
+  /* Busca la fila de encabezados (puede haber títulos encima, como en los Excel de la BVC). */
+  function findHeader(rows) {
+    for (let r = 0; r < Math.min(rows.length, 25); r++) {
+      const h = rows[r].map(clean);
+      const di = h.findIndex((x) => DATE_HDR.test(x));
+      let pi = -1;
+      for (const re of PRICE_HDRS) {
+        pi = h.findIndex((x, i) => i !== di && re.test(x));
+        if (pi >= 0) break;
+      }
+      if (di >= 0 && pi >= 0) return { row: r, di, pi, ti: h.findIndex((x) => TICKER_HDR.test(x)), head: h };
+    }
+    return null;
+  }
+
+  function csvRows(text) {
+    const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
+    if (!lines.length) return [];
+    const sep = detectSep(lines.find((l) => DATE_HDR.test(clean(splitLine(l, detectSep(l))[0]))) || lines[0]);
+    return lines.map((l) => splitLine(l, sep));
+  }
+
+  /* ¿El texto es un historial por activo (columna de fecha + columna de precio)? */
+  function isSingleAsset(text) {
+    return !!findHeader(csvRows(text).slice(0, 25));
+  }
+
+  /* Decide si una columna usa coma decimal ("1.234,56") o punto ("1,234.56"). */
+  function columnDecimalComma(cells, sep) {
+    let comma = 0;
+    let dot = 0;
+    for (const c0 of cells) {
+      const c = c0.replace(/[\s$%]/g, '');
+      const lc = c.lastIndexOf(',');
+      const ld = c.lastIndexOf('.');
+      if (lc >= 0 && ld >= 0) (lc > ld ? comma++ : dot++);
+      else if (lc >= 0) (/,\d{3}$/.test(c) && sep === ',' ? dot++ : comma++);
+      else if (ld >= 0) (/\.\d{3}$/.test(c) ? comma++ : dot++);
+    }
+    return comma > dot;
+  }
+
+  /* Fechas: 2024-01-31, 31.01.2024, 31/01/2024, 01/31/2024, "Jan 31, 2024". */
+  const MONTHS = { jan: 1, ene: 1, feb: 2, mar: 3, apr: 4, abr: 4, may: 5, jun: 6, jul: 7, aug: 8, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dec: 12, dic: 12 };
+  function parseDates(cells, preferDayFirst) {
+    const parts = cells.map((c) => {
+      const t = c.trim();
+      let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      if (m) return { y: +m[1], a: +m[2], b: +m[3], iso: true };
+      m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+      if (m) return { y: +m[3] < 100 ? 2000 + +m[3] : +m[3], a: +m[1], b: +m[2] };
+      m = t.match(/^([A-Za-zé]{3})[a-zé]*\.? (\d{1,2}),? (\d{4})/);
+      if (m && MONTHS[m[1].toLowerCase()]) return { y: +m[3], a: MONTHS[m[1].toLowerCase()], b: +m[2], iso: true };
+      m = t.match(/^(\d{1,2}) ([A-Za-zé]{3})[a-zé]*\.? (\d{4})/);
+      if (m && MONTHS[m[2].toLowerCase()]) return { y: +m[3], a: MONTHS[m[2].toLowerCase()], b: +m[1], iso: true };
+      return null;
+    });
+    const plain = parts.filter((p) => p && !p.iso);
+    let dayFirst = preferDayFirst;
+    if (plain.some((p) => p.a > 12)) dayFirst = true;
+    else if (plain.some((p) => p.b > 12)) dayFirst = false;
+    return parts.map((p) => {
+      if (!p) return null;
+      const [mo, d] = p.iso ? [p.a, p.b] : dayFirst ? [p.b, p.a] : [p.a, p.b];
+      if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+      return p.y + '-' + String(mo).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    });
+  }
+
+  function nameFromFile(fileName) {
+    return String(fileName || 'Activo')
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/\s*(\(\d+\))$/, '')
+      .replace(/\s*[-_]?\s*(historical data|datos hist[óo]ricos|hist[óo]rico|history)$/i, '')
+      .replace(/\.(CL|BVC)$/i, '')
+      .replace(/[_]+/g, ' ')
+      .trim() || 'Activo';
+  }
+
+  /* Fecha de una celda de Excel: objeto Date o número de serie (días desde 1899-12-30). */
+  function cellDate(v) {
+    if (v instanceof Date && !isNaN(v)) {
+      // SheetJS crea la fecha en hora local; se redondea al día más cercano.
+      const t = new Date(v.getTime() + 12 * 36e5);
+      return t.getFullYear() + '-' + String(t.getMonth() + 1).padStart(2, '0') + '-' + String(t.getDate()).padStart(2, '0');
+    }
+    if (typeof v === 'number' && v > 20000 && v < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(v) * 864e5).toISOString().slice(0, 10);
+    return null;
+  }
+
+  /* Filas (texto, números o fechas) → historiales. Si hay columna de nemotécnico
+   * con varios valores, devuelve un historial por nemotécnico. */
+  function seriesFromRows(rows, fileName) {
+    const hd = findHeader(rows);
+    if (!hd) throw new Error(`En «${fileName}» no se encontró una columna de fecha y otra de precio de cierre.`);
+    const body = rows.slice(hd.row + 1).filter((r) => r && r.some((c) => clean(c) !== ''));
+    const strCells = body.map((r) => (typeof r[hd.pi] === 'number' ? '' : clean(r[hd.pi])));
+    const dc = columnDecimalComma(strCells.filter(Boolean), ',');
+    const spanish = hd.head.some((h) => /fecha|cierre|[úu]ltimo|apertura|precio/i.test(h));
+    const strDates = parseDates(body.map((r) => (cellDate(r[hd.di]) || clean(r[hd.di]))), spanish);
+    const groups = new Map();
+    body.forEach((r, k) => {
+      const raw = r[hd.pi];
+      const v = typeof raw === 'number' ? raw : parseNumber(clean(raw), dc);
+      const d = strDates[k];
+      if (!d || !Number.isFinite(v) || v <= 0) return;
+      const key = hd.ti >= 0 && clean(r[hd.ti]) ? clean(r[hd.ti]).toUpperCase() : '';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push([d, v]);
+    });
+    const out = [];
+    for (const [key, pts] of groups) {
+      const s = finishSeries(pts, key || nameFromFile(fileName), hd.head[hd.pi]);
+      if (s) out.push(s);
+    }
+    if (!out.length) throw new Error(`No se reconocieron fechas y precios en «${fileName}».`);
+    return out;
+  }
+
+  function finishSeries(pts, name, column) {
+    if (pts.length < 2) return null;
+    pts.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    const dedup = pts.filter((p, i) => i === pts.length - 1 || p[0] !== pts[i + 1][0]);
+    return { name, dates: dedup.map((p) => p[0]), prices: dedup.map((p) => p[1]), column };
+  }
+
+  /* Historial de un activo desde texto CSV (compatibilidad: devuelve el primero). */
+  function parseSeriesFile(text, fileName) {
+    return seriesFromRows(csvRows(text), fileName)[0];
+  }
+  function parseSeriesText(text, fileName) {
+    return seriesFromRows(csvRows(text), fileName);
+  }
+
+  /* Junta los tramos del mismo activo (la BVC descarga como máximo 6 meses por archivo). */
+  function combineSeries(list) {
+    const by = new Map();
+    for (const s of list) {
+      const k = s.name.toUpperCase();
+      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0 });
+      const g = by.get(k);
+      g.parts++;
+      s.dates.forEach((d, i) => g.pts.push([d, s.prices[i]]));
+    }
+    return [...by.values()].map((g) => Object.assign(finishSeries(g.pts, g.name, g.column), { parts: g.parts }));
+  }
+
+  /* Clave de periodo para agrupar precios diarios en la frecuencia elegida. */
+  function periodKey(iso, freq) {
+    const [y, m, d] = iso.split('-').map(Number);
+    if (freq === 'anual') return String(y);
+    if (freq === 'trimestral') return y + '-T' + Math.ceil(m / 3);
+    if (freq === 'mensual') return iso.slice(0, 7);
+    if (freq === 'semanal') {
+      const t = Date.UTC(y, m - 1, d);
+      const dow = (new Date(t).getUTCDay() + 6) % 7; // lunes = 0
+      return new Date(t - dow * 864e5).toISOString().slice(0, 10);
+    }
+    return iso;
+  }
+
+  /* Une varios historiales: último precio de cada periodo y solo los periodos
+   * que tienen todos los activos. Devuelve el mismo formato que parseCSV. */
+  function mergeSeries(list, freq) {
+    if (list.length < 2) throw new Error('Sube al menos dos archivos: tus acciones y el índice de mercado.');
+    const used = {};
+    const names = list.map((s) => {
+      let n = s.name;
+      used[n] = (used[n] || 0) + 1;
+      return used[n] > 1 ? n + ' (' + used[n] + ')' : n;
+    });
+    const maps = list.map((s) => {
+      const m = new Map();
+      s.dates.forEach((d, i) => m.set(periodKey(d, freq), [d, s.prices[i]]));
+      return m;
+    });
+    let keys = [...maps[0].keys()].filter((k) => maps.every((m) => m.has(k)));
+    keys.sort();
+    // El último periodo puede estar incompleto (mes en curso): se conserva, es el dato más reciente.
+    if (keys.length < 3) throw new Error('Los archivos casi no tienen periodos en común. Revisa que cubran las mismas fechas.');
+    const dates = keys.map((k) => maps.reduce((a, m) => (m.get(k)[0] > a ? m.get(k)[0] : a), ''));
+    const values = maps.map((m) => keys.map((k) => m.get(k)[1]));
+    const lost = list.map((s, i) => maps[i].size - keys.length);
+    return { names, dates, values, dropped: 0, lost, sep: ',', decimalComma: false };
+  }
+
+  /* De vuelta a CSV (para mostrar y guardar el resultado de la unión). */
+  function toCSV(p) {
+    const q = (s) => (/[",;\n]/.test(s) ? '"' + String(s).replace(/"/g, '""') + '"' : s);
+    const rows = [['Fecha'].concat(p.names).map(q).join(',')];
+    p.dates.forEach((d, t) => rows.push([d].concat(p.values.map((c) => +c[t].toPrecision(10))).join(',')));
+    return rows.join('\n');
+  }
+
+
+  const MARKET_RE = /(mercado|market|[íi]ndice|index|benchmark|colcap|coleqty|ipc|s&p|sp ?500|spx|ibex|merval|bovespa|ibov|ipsa|colcap|msci|nasdaq|dow|acwi|^spy$)/i;
   function guessMarket(names) {
     const i = names.findIndex((n) => MARKET_RE.test(n));
     return i >= 0 ? i : names.length - 1;
@@ -211,6 +416,6 @@
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf },
-    data: { parseCSV, parseNumber, toReturns, guessMarket },
+    data: { parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, combineSeries, mergeSeries, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

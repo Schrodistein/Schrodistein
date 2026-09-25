@@ -17,7 +17,12 @@
   const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'frontera', err: null };
 
   /* ---------- Utilidades ---------- */
-  const money = (x) => (Number.isFinite(x) ? new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 0 }).format(x) : '—');
+  const LOCALE = { COP: 'es-CO', USD: 'en-US', MXN: 'es-MX', EUR: 'es-ES' };
+  const money = (x) => {
+    if (!Number.isFinite(x)) return '—';
+    const cur = ($('currency') && $('currency').value) || 'COP';
+    return new Intl.NumberFormat(LOCALE[cur] || 'es-CO', { style: 'currency', currency: cur, currencyDisplay: 'symbol', maximumFractionDigits: 0 }).format(x);
+  };
   const val = (id) => {
     const v = parseFloat(String($(id).value).replace(',', '.'));
     return Number.isFinite(v) ? v : null;
@@ -59,7 +64,7 @@
       capital: val('capital') ?? 0,
     };
   }
-  const SETTING_IDS = ['kind', 'freq', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'tol'];
+  const SETTING_IDS = ['kind', 'freq', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'currency', 'tol'];
 
   function showBanner(msg, kind) {
     const b = $('banner');
@@ -85,7 +90,7 @@
     sel.innerHTML = p.names.map((n, i) => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
     const guess = PF.data.guessMarket(p.names);
     sel.selectedIndex = prev && p.names.includes(prev) ? p.names.indexOf(prev) : guess;
-    $('data-meta').textContent = `${p.names.length} columnas numéricas · ${p.dates.length} filas${p.dates.length ? ` (${p.dates[0]} a ${p.dates[p.dates.length - 1]})` : ''}${p.dropped ? ` · ${p.dropped} filas descartadas por celdas vacías o no numéricas` : ''}.`;
+    $('data-meta').textContent = `${p.names.length} columnas numéricas · ${p.dates.length} filas${p.dates.length ? ` (${p.dates[0]} a ${p.dates[p.dates.length - 1]})` : ''}${p.dropped ? ` · ${p.dropped} filas descartadas por celdas vacías o no numéricas` : ''}.${st.series && $('csv').value === st.mergedText ? ' ' + st.mergeNote : ''}`;
     store.set('csv', $('csv').value);
     compute();
   }
@@ -101,7 +106,10 @@
       const mi = s.market;
       const names = p.names.filter((_, i) => i !== mi);
       const n = names.length;
-      if (s.wmax * n < 1 - 1e-9) throw new Error(`Con ${n} activos el peso máximo debe ser al menos ${nf1(100 / n)} % para sumar 100 %.`);
+      if (s.wmax * n < 1 - 1e-9) {
+        warnings.push(`Con ${n} activos un peso máximo de ${nf1(s.wmax * 100)} % no alcanza para sumar 100 %; se usa ${nf1(100 / n)} %, que obliga a pesos iguales. Sube el peso máximo o agrega activos.`);
+        s.wmax = 1 / n;
+      }
       if (s.wmin * n > 1 + 1e-9) throw new Error(`Con ${n} activos el peso mínimo no puede pasar de ${nf1(100 / n)} %.`);
       if (s.wmin > s.wmax) throw new Error('El peso mínimo es mayor que el máximo.');
       const datos = { names, returns: R.filter((_, i) => i !== mi), market: R[mi], marketName: p.names[mi], dates: p.dates };
@@ -135,6 +143,100 @@
     const w = new Array(n).fill(Math.floor(1000 / n) / 1000);
     w[0] += 1 - w.reduce((a, b) => a + b, 0);
     return w.map((x) => Math.round(x * 1e6) / 1e6);
+  }
+
+  /* Archivos subidos: una tabla ya armada, o historiales por activo
+   * (BVC en Excel o CSV, Investing.com, Yahoo Finance). */
+  function readFile(f, asBuffer) {
+    return new Promise((ok, ko) => {
+      const r = new FileReader();
+      r.onload = () => ok(r.result);
+      r.onerror = () => ko(new Error(`No se pudo leer «${f.name}».`));
+      if (asBuffer) r.readAsArrayBuffer(f);
+      else r.readAsText(f);
+    });
+  }
+
+  // SheetJS solo se descarga cuando se sube un Excel.
+  const SHEETJS = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  let sheetjs = null;
+  function loadSheetJS() {
+    if (globalThis.XLSX) return Promise.resolve(globalThis.XLSX);
+    if (!sheetjs) {
+      sheetjs = new Promise((ok, ko) => {
+        const sc = document.createElement('script');
+        sc.src = SHEETJS;
+        sc.onload = () => ok(globalThis.XLSX);
+        sc.onerror = () => {
+          sheetjs = null;
+          ko(new Error('No se pudo cargar el lector de Excel (se necesita conexión a internet). También puedes guardar el archivo como CSV y subirlo.'));
+        };
+        document.head.appendChild(sc);
+      });
+    }
+    return sheetjs;
+  }
+  const isExcel = (f) => /\.(xlsx|xlsm|xls|ods)$/i.test(f.name);
+
+  async function seriesFromFile(f) {
+    if (isExcel(f)) {
+      const X = await loadSheetJS();
+      const wb = X.read(new Uint8Array(await readFile(f, true)), { type: 'array', cellDates: true });
+      const out = [];
+      let lastErr = null;
+      for (const name of wb.SheetNames) {
+        const rows = X.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
+        try {
+          out.push(...PF.data.seriesFromRows(rows, f.name));
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (!out.length) throw lastErr || new Error(`«${f.name}» no tiene hojas con fechas y precios.`);
+      return { series: out };
+    }
+    const text = await readFile(f, false);
+    if (PF.data.isSingleAsset(text)) return { series: PF.data.parseSeriesText(text, f.name) };
+    return { table: text };
+  }
+
+  async function loadFiles(fileList) {
+    const files = [...(fileList || [])];
+    if (!files.length) return;
+    try {
+      const parts = await Promise.all(files.map(seriesFromFile));
+      const tables = parts.filter((p) => p.table != null);
+      if (tables.length) {
+        if (files.length > 1) throw new Error('Mezclaste una tabla con varios activos por columna y archivos de un solo activo. Sube solo la tabla, o solo los historiales.');
+        st.series = null;
+        $('csv').value = tables[0].table;
+        st.userNames = null;
+        parse(false);
+        return;
+      }
+      st.series = PF.data.combineSeries(parts.flatMap((p) => p.series));
+      if (st.series.length === 1) throw new Error(`Solo se encontró el historial de ${st.series[0].name}. Selecciona a la vez los archivos de todas tus acciones y del índice de mercado (por ejemplo el COLCAP).`);
+      mergeLoaded(false);
+    } catch (e) {
+      showBanner(e.message);
+    }
+  }
+
+  function mergeLoaded(keepMarket) {
+    try {
+      const freq = $('freq').value;
+      const merged = PF.data.mergeSeries(st.series, freq);
+      const text = PF.data.toCSV(merged);
+      st.mergedText = text;
+      const lostMax = Math.max(...merged.lost);
+      st.mergeNote = `Se unieron ${st.series.length} activos (${st.series.map((x) => `${x.name}: «${x.column}»${x.parts > 1 ? `, ${x.parts} archivos` : ''}, ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}).${lostMax > 0 ? ` Se descartaron periodos que no estaban en todos los archivos (hasta ${lostMax} en uno).` : ''}`;
+      $('csv').value = text;
+      $('kind').value = 'prices';
+      st.userNames = null;
+      parse(keepMarket);
+    } catch (e) {
+      showBanner(e.message);
+    }
   }
 
   /* ---------- Render ---------- */
@@ -473,22 +575,35 @@
       parse(false);
     });
     $('file').addEventListener('change', (ev) => {
-      const f = ev.target.files && ev.target.files[0];
-      if (!f) return;
-      const r = new FileReader();
-      r.onload = () => {
-        $('csv').value = String(r.result);
-        st.userNames = null;
-        parse(false);
-      };
-      r.readAsText(f);
+      loadFiles(ev.target.files);
+      ev.target.value = '';
+    });
+    const drop = $('drop');
+    drop.addEventListener('dragover', (ev) => {
+      ev.preventDefault();
+      drop.classList.add('over');
+    });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (ev) => {
+      ev.preventDefault();
+      drop.classList.remove('over');
+      loadFiles(ev.dataTransfer && ev.dataTransfer.files);
     });
     $('csv').addEventListener('paste', () => setTimeout(() => {
       st.userNames = null;
       parse(false);
     }, 0));
     const recompute = debounce(compute, 250);
-    for (const id of ['kind', 'freq', 'market', 'mumodel', 'covmodel']) $(id).addEventListener('change', compute);
+    for (const id of ['kind', 'market', 'mumodel', 'covmodel']) $(id).addEventListener('change', compute);
+    $('freq').addEventListener('change', () => {
+      // Con historiales diarios subidos, se reagrupan a la nueva frecuencia.
+      if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
+      else compute();
+    });
+    $('currency').addEventListener('change', () => {
+      store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
+      if (st.model) render();
+    });
     for (const id of ['rf', 'em', 'wmin', 'wmax', 'capital']) $(id).addEventListener('input', recompute);
     $('tol').addEventListener('input', debounce(() => {
       if (!st.model) return;

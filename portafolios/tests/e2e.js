@@ -126,6 +126,41 @@ const shots = process.argv[3];
     if (shots) await page.screenshot({ path: `${shots}/bvc-datos.png`, fullPage: true });
     await page.close();
   }
+  // CSV guardados por Excel en español: Windows-1252, punto y coma, encabezados con tildes y
+  // unidades, un archivo sin extensión y otro que no es un historial (debe informarse, no bloquear).
+  {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'win-'));
+    const files = [];
+    ['CELSIA', 'GRUPOARGOS', 'NUTRESA', 'COLCAP'].forEach((n, k) => {
+      let p = 5000 + 1000 * k;
+      let seed = 11 * (k + 2);
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const lines = ['Bolsa de Valores de Colombia;;;;', 'Histórico de operaciones;;;;', 'Nemotécnico;Fecha Operación;Cantidad;Volumen ($);Precio de Cierre ($)'];
+      for (let m = 0; m < 40; m++) {
+        p *= 1 + (rnd() - 0.48) * 0.08;
+        const d = new Date(Date.UTC(2022, m + 1, 0));
+        const dd = String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear();
+        lines.push(`${n};${dd};100;${Math.round(p * 100)};${p.toFixed(2).replace('.', ',')}`);
+      }
+      const f = path.join(dir, k === 3 ? 'colcap-descarga' : n + '.csv');
+      fs.writeFileSync(f, Buffer.from(lines.join('\r\n'), 'latin1'));
+      files.push(f);
+    });
+    const junk = path.join(dir, 'notas.txt');
+    fs.writeFileSync(junk, 'Estas son mis notas\nsin datos de precios\n');
+    files.push(junk);
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    page.on('pageerror', (e) => errors.push('win1252: ' + e.message));
+    await page.goto(url + '#datos');
+    await page.setInputFiles('#file', files);
+    await page.waitForFunction(() => /Listo: 4 activos/.test(document.getElementById('upload-status').textContent), null, { timeout: 8000 }).catch(async () => errors.push('win1252: ' + (await page.textContent('#upload-status'))));
+    const st = await page.textContent('#upload-status');
+    if (!/notas\.txt/.test(st)) errors.push('win1252: no informa el archivo inválido: ' + st);
+    const market = await page.$eval('#market', (s) => s.value);
+    if (market !== 'COLCAP') errors.push('win1252: índice detectado ' + market);
+    if (shots) await page.screenshot({ path: `${shots}/win1252-datos.png`, fullPage: true });
+    await page.close();
+  }
   await browser.close();
   if (errors.length) {
     console.error(errors.join('\n'));

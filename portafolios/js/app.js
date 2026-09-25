@@ -147,14 +147,30 @@
 
   /* Archivos subidos: una tabla ya armada, o historiales por activo
    * (BVC en Excel o CSV, Investing.com, Yahoo Finance). */
-  function readFile(f, asBuffer) {
+  function status(msg, kind) {
+    const el = $('upload-status');
+    el.hidden = !msg;
+    el.className = 'status' + (kind ? ' ' + kind : '');
+    el.textContent = msg || '';
+  }
+
+  function readBuffer(f) {
+    if (f.arrayBuffer) return f.arrayBuffer();
     return new Promise((ok, ko) => {
       const r = new FileReader();
       r.onload = () => ok(r.result);
       r.onerror = () => ko(new Error(`No se pudo leer «${f.name}».`));
-      if (asBuffer) r.readAsArrayBuffer(f);
-      else r.readAsText(f);
+      r.readAsArrayBuffer(f);
     });
+  }
+
+  // UTF-8 si el archivo lo es; si no, Windows-1252 (Excel en español guarda así los CSV).
+  function decodeText(buf) {
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+    } catch (e) {
+      return new TextDecoder('windows-1252').decode(buf);
+    }
   }
 
   // SheetJS solo se descarga cuando se sube un Excel.
@@ -166,22 +182,44 @@
       sheetjs = new Promise((ok, ko) => {
         const sc = document.createElement('script');
         sc.src = SHEETJS;
-        sc.onload = () => ok(globalThis.XLSX);
+        sc.onload = () => (globalThis.XLSX ? ok(globalThis.XLSX) : ko(new Error('El lector de Excel no se inicializó.')));
         sc.onerror = () => {
           sheetjs = null;
-          ko(new Error('No se pudo cargar el lector de Excel (se necesita conexión a internet). También puedes guardar el archivo como CSV y subirlo.'));
+          ko(new Error('No se pudo cargar el lector de Excel (se necesita internet). Guarda el archivo como CSV desde Excel y súbelo de nuevo.'));
         };
         document.head.appendChild(sc);
       });
     }
     return sheetjs;
   }
-  const isExcel = (f) => /\.(xlsx|xlsm|xls|ods)$/i.test(f.name);
+
+  /* Tipo real del archivo por sus primeros bytes: el nombre puede engañar
+   * (hay sitios que exportan una tabla HTML con extensión .xls). */
+  function sniff(bytes, name) {
+    const b = bytes;
+    if (b[0] === 0x50 && b[1] === 0x4b) return 'excel'; // xlsx / ods (zip)
+    if (b[0] === 0xd0 && b[1] === 0xcf && b[2] === 0x11 && b[3] === 0xe0) return 'excel'; // xls clásico
+    if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return 'pdf';
+    const head = new TextDecoder('latin1').decode(b.slice(0, 600)).toLowerCase();
+    if (/<(html|table|\?xml|workbook)/.test(head)) return 'excel';
+    if (/\.(xlsx|xlsm|xls|ods)$/i.test(name) && b.slice(0, 64).some((x) => x === 0)) return 'excel';
+    return 'text';
+  }
 
   async function seriesFromFile(f) {
-    if (isExcel(f)) {
+    const buf = await readBuffer(f);
+    const bytes = new Uint8Array(buf);
+    if (!bytes.length) throw new Error(`«${f.name}» está vacío.`);
+    const kind = sniff(bytes, f.name);
+    if (kind === 'pdf') throw new Error(`«${f.name}» es un PDF. Descarga el histórico en Excel o CSV.`);
+    if (kind === 'excel') {
       const X = await loadSheetJS();
-      const wb = X.read(new Uint8Array(await readFile(f, true)), { type: 'array', cellDates: true });
+      let wb;
+      try {
+        wb = X.read(bytes, { type: 'array', cellDates: true });
+      } catch (e) {
+        throw new Error(`«${f.name}» no se pudo abrir como Excel (${e.message}).`);
+      }
       const out = [];
       let lastErr = null;
       for (const name of wb.SheetNames) {
@@ -195,31 +233,45 @@
       if (!out.length) throw lastErr || new Error(`«${f.name}» no tiene hojas con fechas y precios.`);
       return { series: out };
     }
-    const text = await readFile(f, false);
+    const text = decodeText(buf);
     if (PF.data.isSingleAsset(text)) return { series: PF.data.parseSeriesText(text, f.name) };
-    return { table: text };
+    return { table: text, name: f.name };
   }
 
   async function loadFiles(fileList) {
     const files = [...(fileList || [])];
     if (!files.length) return;
-    try {
-      const parts = await Promise.all(files.map(seriesFromFile));
-      const tables = parts.filter((p) => p.table != null);
-      if (tables.length) {
-        if (files.length > 1) throw new Error('Mezclaste una tabla con varios activos por columna y archivos de un solo activo. Sube solo la tabla, o solo los historiales.');
-        st.series = null;
-        $('csv').value = tables[0].table;
-        st.userNames = null;
-        parse(false);
-        return;
-      }
-      st.series = PF.data.combineSeries(parts.flatMap((p) => p.series));
-      if (st.series.length === 1) throw new Error(`Solo se encontró el historial de ${st.series[0].name}. Selecciona a la vez los archivos de todas tus acciones y del índice de mercado (por ejemplo el COLCAP).`);
-      mergeLoaded(false);
-    } catch (e) {
-      showBanner(e.message);
+    status(`Leyendo ${files.length === 1 ? 'el archivo' : files.length + ' archivos'}…`);
+    const results = await Promise.all(
+      files.map((f) => seriesFromFile(f).then((r) => r, (e) => ({ error: e.message || String(e), name: f.name })))
+    );
+    const errors = results.filter((r) => r.error);
+    const tables = results.filter((r) => r.table != null);
+    const series = results.filter((r) => r.series).flatMap((r) => r.series);
+    const errText = errors.map((e) => e.error).join(' ');
+    if (tables.length && !series.length && tables.length === 1) {
+      st.series = null;
+      $('csv').value = tables[0].table;
+      st.userNames = null;
+      parse(false);
+      status(errors.length ? `Se cargó la tabla de «${tables[0].name}». No se pudieron leer: ${errText}` : `Se cargó la tabla de «${tables[0].name}».`, errors.length ? 'warn' : 'ok');
+      return;
     }
+    if (tables.length) {
+      errors.push(...tables.map((t) => ({ error: `«${t.name}» no tiene columnas de fecha y precio de cierre; parece una tabla con un activo por columna, que debe subirse sola.` })));
+    }
+    const allErr = errors.map((e) => e.error).join(' ');
+    if (!series.length) {
+      status(allErr || 'No se encontraron datos en los archivos.', 'bad');
+      return;
+    }
+    const combined = PF.data.combineSeries(series);
+    if (combined.length < 2) {
+      status(`Solo se encontró el historial de ${combined[0].name}. Sube a la vez los archivos de todas tus acciones y del índice de mercado (por ejemplo el COLCAP).${allErr ? ' Además: ' + allErr : ''}`, 'bad');
+      return;
+    }
+    st.series = combined;
+    if (mergeLoaded(false)) status(`Listo: ${combined.length} activos cargados de ${files.length - errors.length} archivos.${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
   }
 
   function mergeLoaded(keepMarket) {
@@ -234,9 +286,30 @@
       $('kind').value = 'prices';
       st.userNames = null;
       parse(keepMarket);
+      return true;
     } catch (e) {
+      status(e.message, 'bad');
       showBanner(e.message);
+      return false;
     }
+  }
+
+  /* Texto pegado en la tabla que en realidad es un historial por activo (formato largo). */
+  function pastedSeries() {
+    const text = $('csv').value;
+    if (text === st.mergedText || !PF.data.isSingleAsset(text)) return false;
+    try {
+      const combined = PF.data.combineSeries(PF.data.parseSeriesText(text, 'Activo'));
+      if (combined.length < 2) {
+        status('El texto pegado tiene el historial de un solo activo. Pega una tabla con la columna de nemotécnico que incluya todas tus acciones y el índice.', 'bad');
+        return true;
+      }
+      st.series = combined;
+      if (mergeLoaded(false)) status(`Listo: ${combined.length} activos leídos del texto pegado.`, 'ok');
+    } catch (e) {
+      status(e.message, 'bad');
+    }
+    return true;
   }
 
   /* ---------- Render ---------- */
@@ -572,7 +645,7 @@
     });
     $('btn-parse').addEventListener('click', () => {
       st.userNames = null;
-      parse(false);
+      if (!pastedSeries()) parse(false);
     });
     $('file').addEventListener('change', (ev) => {
       loadFiles(ev.target.files);
@@ -591,7 +664,7 @@
     });
     $('csv').addEventListener('paste', () => setTimeout(() => {
       st.userNames = null;
-      parse(false);
+      if (!pastedSeries()) parse(false);
     }, 0));
     const recompute = debounce(compute, 250);
     for (const id of ['kind', 'market', 'mumodel', 'covmodel']) $(id).addEventListener('change', compute);

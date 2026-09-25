@@ -205,39 +205,63 @@
 
   /* ---------- Historiales por activo (BVC, Investing.com, Yahoo Finance) ---------- */
 
-  const DATE_HDR = /^(fecha|date|time|fecha de cierre|fecha operaci[óo]n|fecha de operaci[óo]n)$/i;
-  const PRICE_HDRS = [
-    /^(adj\.? ?close|adjusted close|cierre ajustado|cierre aj\.?|precio de cierre ajustado)$/i,
-    /^(precio (de )?cierre|close|cierre|[úu]ltimo( precio)?|price|precio|last|valor( (del )?[íi]ndice)?|valor de cierre)$/i,
+  /* Encabezados: se comparan sin tildes, mayúsculas ni signos, y por contenido
+   * («Precio de cierre ($)», «FECHA OPERACIÓN», «Último precio» también valen). */
+  const norm = (h) =>
+    String(h == null ? '' : h)
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9% ]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const isDateHdr = (h) => /(^| )(fecha|date|time|dia|periodo)( |$)/.test(norm(h));
+  const NOT_PRICE = /(%|variacion|var |cambio|change|volumen|volume|vol$|cantidad|monto|apertura|open|maximo|max|high|minimo|min|low|anterior|previo|prev|promedio|avg|numero|nro)/;
+  const PRICE_LEVELS = [
+    /(cierre ajustado|adj close|adjusted close|precio ajustado)/,
+    /(precio de cierre|precio cierre|cierre|close|ultimo|last)/,
+    /^(precio|price|valor)( |$)/,
   ];
-  const TICKER_HDR = /^(nemot[ée]cnico|nemo|ticker|s[íi]mbolo|symbol|especie|instrumento|emisor)$/i;
+  const isTickerHdr = (h) => /(nemotecnico|nemo|ticker|simbolo|symbol|especie|instrumento|emisor|accion)/.test(norm(h));
   const clean = (h) => String(h == null ? '' : h).replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim();
+
+  function priceColumn(h, skip) {
+    for (const re of PRICE_LEVELS) {
+      const i = h.findIndex((x, k) => !skip.includes(k) && re.test(norm(x)) && !NOT_PRICE.test(norm(x)) && !isDateHdr(x) && !isTickerHdr(x));
+      if (i >= 0) return i;
+    }
+    return -1;
+  }
 
   /* Busca la fila de encabezados (puede haber títulos encima, como en los Excel de la BVC). */
   function findHeader(rows) {
-    for (let r = 0; r < Math.min(rows.length, 25); r++) {
-      const h = rows[r].map(clean);
-      const di = h.findIndex((x) => DATE_HDR.test(x));
-      let pi = -1;
-      for (const re of PRICE_HDRS) {
-        pi = h.findIndex((x, i) => i !== di && re.test(x));
-        if (pi >= 0) break;
-      }
-      if (di >= 0 && pi >= 0) return { row: r, di, pi, ti: h.findIndex((x) => TICKER_HDR.test(x)), head: h };
+    for (let r = 0; r < Math.min(rows.length, 30); r++) {
+      const h = (rows[r] || []).map(clean);
+      const di = h.findIndex(isDateHdr);
+      if (di < 0) continue;
+      const ti = h.findIndex((x, k) => k !== di && isTickerHdr(x));
+      const pi = priceColumn(h, [di, ti]);
+      if (pi >= 0) return { row: r, di, pi, ti, head: h };
     }
     return null;
+  }
+
+  /* Primeras filas con contenido, para explicar un archivo que no se reconoce. */
+  function describeRows(rows) {
+    const first = rows.find((r) => r && r.filter((c) => clean(c) !== '').length >= 2);
+    return first ? first.map(clean).filter(Boolean).slice(0, 8).join(' | ') : '';
   }
 
   function csvRows(text) {
     const lines = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim() !== '');
     if (!lines.length) return [];
-    const sep = detectSep(lines.find((l) => DATE_HDR.test(clean(splitLine(l, detectSep(l))[0]))) || lines[0]);
+    const sep = detectSep(lines.find((l) => splitLine(l, detectSep(l)).some(isDateHdr)) || lines[0]);
     return lines.map((l) => splitLine(l, sep));
   }
 
   /* ¿El texto es un historial por activo (columna de fecha + columna de precio)? */
   function isSingleAsset(text) {
-    return !!findHeader(csvRows(text).slice(0, 25));
+    return !!findHeader(csvRows(text).slice(0, 30));
   }
 
   /* Decide si una columna usa coma decimal ("1.234,56") o punto ("1,234.56"). */
@@ -307,11 +331,14 @@
    * con varios valores, devuelve un historial por nemotécnico. */
   function seriesFromRows(rows, fileName) {
     const hd = findHeader(rows);
-    if (!hd) throw new Error(`En «${fileName}» no se encontró una columna de fecha y otra de precio de cierre.`);
+    if (!hd) {
+      const seen = describeRows(rows);
+      throw new Error(`En «${fileName}» no se encontró una columna de fecha y otra de precio de cierre.${seen ? ` Encabezados leídos: ${seen}.` : ' El archivo parece vacío.'}`);
+    }
     const body = rows.slice(hd.row + 1).filter((r) => r && r.some((c) => clean(c) !== ''));
     const strCells = body.map((r) => (typeof r[hd.pi] === 'number' ? '' : clean(r[hd.pi])));
     const dc = columnDecimalComma(strCells.filter(Boolean), ',');
-    const spanish = hd.head.some((h) => /fecha|cierre|[úu]ltimo|apertura|precio/i.test(h));
+    const spanish = hd.head.some((h) => /fecha|cierre|ultimo|apertura|precio/.test(norm(h)));
     const strDates = parseDates(body.map((r) => (cellDate(r[hd.di]) || clean(r[hd.di]))), spanish);
     const groups = new Map();
     body.forEach((r, k) => {

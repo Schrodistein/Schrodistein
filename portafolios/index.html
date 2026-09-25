@@ -44,8 +44,9 @@
         <h2>Fuente</h2>
         <div class="row-btns">
           <button type="button" class="btn" id="btn-sample">Cargar ejemplo simulado</button>
-          <label class="btn btn-ghost file">Subir archivos (Excel o CSV)<input type="file" id="file" multiple accept=".csv,.txt,.tsv,.xlsx,.xls,.ods,text/csv"></label>
+          <label class="btn btn-primary file" for="file">Subir archivos (Excel o CSV)<input type="file" id="file" multiple></label>
         </div>
+        <p class="status" id="upload-status" role="status" hidden></p>
         <label class="field" for="csv">
           <span>Tabla de datos (también puedes arrastrar aquí los archivos)</span>
           <textarea id="csv" rows="10" spellcheck="false"></textarea>

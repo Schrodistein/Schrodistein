@@ -169,6 +169,10 @@ input[type='number'] { font-family: var(--font-mono); font-variant-numeric: tabu
 .btn-primary:hover { filter: brightness(1.08); border-color: var(--accent); }
 .btn-ghost { background: none; }
 .file { position: relative; overflow: hidden; }
+.status { font-size: 0.9rem; border-radius: 6px; padding: 8px 12px; background: var(--sunk); border: 1px solid var(--line); color: var(--ink-2); }
+.status.ok { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+.status.warn { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+.status.bad { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
 .drop.over { border-color: var(--accent); background: var(--accent-soft); }
 .guide ol { margin: 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 80ch; }
 .guide p { max-width: 80ch; }
@@ -286,3 +290,4 @@ table.data th.sortable:hover { color: var(--ink); }
   .screen:not([hidden]) { animation: rise 0.25s ease-out; }
   @keyframes rise { from { transform: translateY(4px); } to { transform: none; } }
 }
+.file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }

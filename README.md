@@ -13,6 +13,10 @@ npm run build:single   # genera dist/escala-schrodistein.html (un solo archivo)
 
 Para instalarla en el móvil, publica la carpeta en cualquier hosting estático con HTTPS (GitHub Pages, Netlify…), ábrela en el navegador y elige «Añadir a pantalla de inicio».
 
+## Frontera Eficiente (portafolios)
+
+La carpeta [`portafolios/`](portafolios/README.md) contiene otra app independiente para construir y confirmar portafolios eficientes (Markowitz, Sharpe, Treynor, Jensen). Ábrela con `portafolios/index.html`. `npm test` también ejecuta sus pruebas, y `npm run build:portafolios` genera `dist/frontera-eficiente.html`.
+
 ## Qué mide
 
 Cinco índices del modelo CHC, los mismos que informan las escalas Wechsler actuales:

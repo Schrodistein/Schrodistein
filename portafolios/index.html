@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Frontera Eficiente</title>
+<meta name="description" content="Construye y confirma portafolios eficientes con la teoría de Markowitz, Sharpe, Treynor y Jensen.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<!--APP-START-->
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" class="brand-bg"/><path d="M6 25 C8 14 14 9 26 7" class="brand-curve"/><line x1="6" y1="19" x2="26" y2="6" class="brand-cml"/><circle cx="18.5" cy="10.2" r="2.6" class="brand-dot"/></svg>
+      <span>Frontera Eficiente</span>
+    </div>
+    <nav class="tabs" aria-label="Secciones">
+      <button type="button" data-go="datos" id="tab-datos">Datos</button>
+      <button type="button" data-go="activos" id="tab-activos">Activos</button>
+      <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
+      <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
+      <button type="button" data-go="teoria" id="tab-teoria">Teoría</button>
+    </nav>
+  </div>
+</header>
+
+<div class="summary" id="summary" aria-live="polite"></div>
+
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- DATOS -->
+  <section class="screen" id="screen-datos" hidden>
+    <div class="head">
+      <h1>Datos y supuestos</h1>
+      <p class="lede">Pega o sube un CSV con precios (o rendimientos) de tus activos y de un índice de mercado, uno por columna. La primera columna puede ser la fecha. Todo se calcula en tu navegador.</p>
+    </div>
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Fuente</h2>
+        <div class="row-btns">
+          <button type="button" class="btn" id="btn-sample">Cargar ejemplo simulado</button>
+          <label class="btn btn-ghost file">Subir CSV<input type="file" id="file" accept=".csv,.txt,.tsv,text/csv"></label>
+        </div>
+        <label class="field" for="csv">
+          <span>Datos (CSV; separador coma, punto y coma o tabulador)</span>
+          <textarea id="csv" rows="10" spellcheck="false"></textarea>
+        </label>
+        <button type="button" class="btn btn-primary" id="btn-parse">Procesar datos</button>
+        <p class="meta" id="data-meta"></p>
+      </div>
+      <div class="panel">
+        <h2>Supuestos</h2>
+        <div class="form">
+          <label class="field" for="kind"><span>Los datos son</span>
+            <select id="kind"><option value="prices">Precios</option><option value="returns">Rendimientos por periodo</option></select></label>
+          <label class="field" for="freq"><span>Frecuencia</span>
+            <select id="freq"><option value="diaria">Diaria (252 al año)</option><option value="semanal">Semanal (52)</option><option value="mensual" selected>Mensual (12)</option><option value="trimestral">Trimestral (4)</option><option value="anual">Anual (1)</option></select></label>
+          <label class="field" for="market"><span>Índice de mercado (portafolio de mercado)</span>
+            <select id="market"></select></label>
+          <label class="field" for="rf"><span>Tasa libre de riesgo anual (%)</span>
+            <input id="rf" type="number" step="0.05" value="4" inputmode="decimal"></label>
+          <label class="field" for="em"><span>Rendimiento esperado del mercado anual (%)</span>
+            <input id="em" type="number" step="0.1" placeholder="histórico" inputmode="decimal"></label>
+          <label class="field" for="mumodel"><span>Rendimiento esperado de cada activo</span>
+            <select id="mumodel"><option value="mix" selected>Mezcla 50 % histórico + 50 % CAPM</option><option value="hist">Histórico (media aritmética)</option><option value="capm">CAPM: rf + β (E[Rm] − rf)</option></select></label>
+          <label class="field" for="covmodel"><span>Riesgo (covarianzas)</span>
+            <select id="covmodel"><option value="sample">Covarianza muestral (Markowitz)</option><option value="index">Modelo de índice único (Sharpe)</option></select></label>
+          <label class="field" for="wmin"><span>Peso mínimo por activo (%)</span>
+            <input id="wmin" type="number" step="1" value="0" inputmode="decimal"></label>
+          <label class="field" for="wmax"><span>Peso máximo por activo (%)</span>
+            <input id="wmax" type="number" step="1" value="20" min="1" max="100" inputmode="decimal"></label>
+          <label class="field" for="capital"><span>Capital a invertir</span>
+            <input id="capital" type="number" step="1000" value="100000" min="0" inputmode="decimal"></label>
+        </div>
+        <p class="hint" id="div-hint"></p>
+        <p class="hint">Un peso mínimo negativo permite ventas en corto. La mezcla con el CAPM reduce el error de estimación de las medias históricas, que es la principal debilidad práctica de Markowitz.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACTIVOS -->
+  <section class="screen" id="screen-activos" hidden>
+    <div class="head">
+      <h1>Activos individuales</h1>
+      <p class="lede">Rendimiento esperado, riesgo total y sistemático, y las tres medidas clásicas de desempeño ajustado por riesgo.</p>
+    </div>
+    <div class="panel">
+      <div class="table-scroll"><table class="data" id="assets-table"></table></div>
+      <p class="hint">α de Jensen = E(R) − [rf + β(E[Rm] − rf)]. La t y el valor p son de la regresión histórica del exceso de rendimiento sobre el del mercado; |t| ≥ 2 suele considerarse significativo.</p>
+    </div>
+    <div class="grid-2">
+      <figure class="panel chart">
+        <figcaption><h2>Línea del mercado de valores (SML)</h2><p>Arriba de la línea: α de Jensen positivo, el activo rinde más de lo que su β justifica.</p></figcaption>
+        <div class="chart-box" id="chart-sml"></div>
+      </figure>
+      <figure class="panel chart">
+        <figcaption><h2>Correlaciones</h2><p>Cuanto menor la correlación entre activos, mayor el beneficio de diversificar.</p></figcaption>
+        <div class="chart-box" id="chart-corr"></div>
+      </figure>
+    </div>
+  </section>
+
+  <!-- PORTAFOLIO -->
+  <section class="screen" id="screen-frontera">
+    <div class="head">
+      <h1>Portafolio eficiente</h1>
+      <p class="lede" id="front-lede">Frontera eficiente de Markowitz con tus límites de peso, línea del mercado de capitales y los portafolios de referencia.</p>
+    </div>
+    <figure class="panel chart">
+      <figcaption><h2>Frontera eficiente y línea del mercado de capitales</h2><p>Riesgo (σ anual) contra rendimiento esperado anual. Pasa el cursor sobre los puntos para ver los detalles.</p></figcaption>
+      <div class="chart-box" id="chart-front"></div>
+      <div class="legend" id="legend-front"></div>
+    </figure>
+
+    <div class="pick" role="tablist" aria-label="Portafolio" id="pick"></div>
+
+    <div class="panel port" id="port"></div>
+
+    <div class="panel">
+      <h2>Comparación de portafolios</h2>
+      <div class="table-scroll"><table class="data" id="compare-table"></table></div>
+    </div>
+
+    <div class="panel" id="tb"></div>
+  </section>
+
+  <!-- CONFIRMAR -->
+  <section class="screen" id="screen-confirmar" hidden>
+    <div class="head">
+      <h1>Confirmar un portafolio</h1>
+      <p class="lede">Escribe los pesos de tu portafolio. Se compara con la frontera eficiente: si otro portafolio da más rendimiento con el mismo riesgo, el tuyo no es eficiente.</p>
+    </div>
+    <div class="grid-confirm">
+      <div class="panel">
+        <h2>Tus pesos (%)</h2>
+        <div class="row-btns">
+          <button type="button" class="btn btn-ghost" id="w-rec">Copiar recomendado</button>
+          <button type="button" class="btn btn-ghost" id="w-eq">Pesos iguales</button>
+          <button type="button" class="btn btn-ghost" id="w-norm">Ajustar a 100 %</button>
+        </div>
+        <div class="weights" id="weights"></div>
+        <p class="sum" id="w-sum"></p>
+        <label class="field" for="tol"><span>Tolerancia para «eficiente» (puntos porcentuales de rendimiento anual)</span>
+          <input id="tol" type="number" step="0.05" min="0" value="0.1" inputmode="decimal"></label>
+      </div>
+      <div class="confirm-out">
+        <div class="panel verdict" id="verdict"></div>
+        <figure class="panel chart">
+          <figcaption><h2>Tu portafolio frente a la frontera</h2></figcaption>
+          <div class="chart-box" id="chart-confirm"></div>
+          <div class="legend" id="legend-confirm"></div>
+        </figure>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Lista de verificación</h2>
+      <ul class="checks" id="checks"></ul>
+    </div>
+    <div class="panel">
+      <h2>Tu portafolio y sus alternativas eficientes</h2>
+      <div class="table-scroll"><table class="data" id="confirm-table"></table></div>
+    </div>
+  </section>
+
+  <!-- TEORÍA -->
+  <section class="screen prose" id="screen-teoria" hidden>
+    <div class="head"><h1>La teoría detrás de cada número</h1></div>
+    <div class="panel">
+      <h2>Markowitz (1952): media y varianza</h2>
+      <p>El rendimiento esperado de un portafolio es el promedio ponderado de los rendimientos esperados, <code>E(Rp) = Σ wᵢ E(Rᵢ)</code>, pero su riesgo no es el promedio de los riesgos: <code>σp² = Σᵢ Σⱼ wᵢ wⱼ σᵢⱼ</code>. Como las correlaciones son menores que 1, combinar activos reduce el riesgo sin sacrificar todo el rendimiento. Un portafolio es <strong>eficiente</strong> si ningún otro da más rendimiento con el mismo riesgo. El conjunto de portafolios eficientes es la <strong>frontera eficiente</strong>, que la app calcula resolviendo exactamente <code>min ½ w'Σw − t·μ'w</code> sujeto a <code>Σw = 1</code> y a los límites de peso, para t de 0 (mínima varianza) a infinito (máximo rendimiento).</p>
+    </div>
+    <div class="panel">
+      <h2>Sharpe (1963, 1964, 1966): índice único, CAPM y razón de Sharpe</h2>
+      <p>El <strong>modelo de índice único</strong> explica cada rendimiento como <code>Rᵢ = αᵢ + βᵢ Rm + εᵢ</code>, de modo que <code>σᵢⱼ = βᵢ βⱼ σm²</code>. Reduce el número de parámetros a estimar y suele dar covarianzas más estables. Con una tasa libre de riesgo, el mejor portafolio riesgoso es el <strong>tangente</strong>, el que maximiza la <strong>razón de Sharpe</strong> <code>(E(Rp) − rf) / σp</code>; la recta que lo une con rf es la <strong>línea del mercado de capitales</strong>. En equilibrio (CAPM), <code>E(Rᵢ) = rf + βᵢ (E(Rm) − rf)</code>: la línea del mercado de valores.</p>
+    </div>
+    <div class="panel">
+      <h2>Treynor (1965) y Treynor-Black (1973)</h2>
+      <p>La <strong>razón de Treynor</strong> <code>(E(Rp) − rf) / βp</code> mide la prima por unidad de riesgo sistemático, el único que el mercado paga en un portafolio bien diversificado. El índice tiene β = 1, así que su razón de Treynor es la prima del mercado. El <strong>modelo de Treynor-Black</strong> combina el índice con un portafolio activo cuyos pesos son proporcionales a <code>αᵢ / σ²(εᵢ)</code>; mejora la razón de Sharpe según <code>Sp² = Sm² + Σ (αᵢ / σ(εᵢ))²</code>.</p>
+    </div>
+    <div class="panel">
+      <h2>Jensen (1968): alfa</h2>
+      <p>El <strong>alfa de Jensen</strong> es el rendimiento por encima del que exige el CAPM dado el β: <code>αp = E(Rp) − [rf + βp (E(Rm) − rf)]</code>. Se estima como la ordenada de la regresión del exceso de rendimiento del portafolio sobre el del mercado; la t indica si es distinguible de cero.</p>
+    </div>
+    <div class="panel">
+      <h2>Diversificación</h2>
+      <p>Para diversificar lo más posible la app usa tres herramientas. Un <strong>peso máximo por activo</strong>: con un tope de 20 % el portafolio necesita al menos cinco activos. El <strong>número efectivo de activos</strong> <code>1 / Σ wᵢ²</code>: vale N con pesos iguales y 1 si todo está en un activo. La <strong>razón de diversificación</strong> <code>Σ wᵢ σᵢ / σp</code> (Choueifaty y Coignard, 2008): cuánto riesgo se elimina al combinar. El portafolio de <strong>máxima diversificación</strong> maximiza esa razón, y el de <strong>paridad de riesgo</strong> reparte el riesgo en partes iguales.</p>
+    </div>
+    <div class="panel">
+      <h2>Límites de este análisis</h2>
+      <p>Todo parte de datos históricos. Las medias estimadas tienen mucho error, por lo que la app muestra un intervalo de confianza del 95 % del rendimiento esperado. Además, los portafolios optimizados dentro de la muestra suelen parecer mejores de lo que rinden después. Por eso la opción predeterminada mezcla la media histórica con el CAPM y limita el peso de cada activo. Los rendimientos pasados no garantizan los futuros, y esta herramienta es educativa: no constituye asesoría de inversión.</p>
+    </div>
+  </section>
+</main>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+<!--APP-END-->
+<script src="js/stats.js"></script>
+<script src="js/optim.js"></script>
+<script src="js/model.js"></script>
+<script src="js/sample.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

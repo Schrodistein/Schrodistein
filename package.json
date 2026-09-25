@@ -5,9 +5,11 @@
   "private": true,
   "scripts": {
     "start": "npx http-server -p 8080 -c-1 .",
-    "test": "node tests/run.js",
+    "test": "node tests/run.js && node portafolios/tests/run.js",
     "e2e": "node scripts/e2e.js",
-    "build:single": "node scripts/build-single.js"
+    "build:single": "node scripts/build-single.js",
+    "e2e:portafolios": "node portafolios/tests/e2e.js",
+    "build:portafolios": "node scripts/build-portafolios.js"
   },
   "license": "MIT"
 }

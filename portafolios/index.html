@@ -23,6 +23,8 @@
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
       <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
+      <button type="button" data-go="mercado" id="tab-mercado" class="desktop-only" hidden>Mercado</button>
+      <button type="button" data-go="noticias" id="tab-noticias" class="desktop-only" hidden>Noticias</button>
       <button type="button" data-go="teoria" id="tab-teoria">Teoría</button>
     </nav>
   </div>
@@ -206,6 +208,63 @@
     </div>
   </section>
 
+  <!-- MERCADO (solo en la app de escritorio) -->
+  <section class="screen" id="screen-mercado" hidden>
+    <div class="head">
+      <h1>Mercado BVC</h1>
+      <p class="lede" id="mk-lede">Cierres diarios de tus activos y noticias, actualizados solos mientras la app está abierta o en la bandeja del sistema.</p>
+    </div>
+    <div class="panel">
+      <div class="mk-bar">
+        <button type="button" class="btn btn-primary" id="mk-update">Actualizar ahora</button>
+        <button type="button" class="btn" id="mk-bvc">Abrir la BVC y descargar</button>
+        <button type="button" class="btn" id="mk-import">Importar archivos de la BVC</button>
+        <button type="button" class="btn" id="mk-use">Usar estos datos en el análisis</button>
+      </div>
+      <p class="status" id="mk-status" role="status" hidden></p>
+      <p class="meta" id="mk-meta"></p>
+    </div>
+    <div class="panel">
+      <h2>Activos que sigues</h2>
+      <div class="table-scroll"><table class="data" id="mk-table"></table></div>
+      <div class="mk-add">
+        <label class="field" for="mk-new-name"><span>Nemotécnico</span><input id="mk-new-name" placeholder="p. ej. NUTRESA" autocomplete="off"></label>
+        <label class="field" for="mk-new-yahoo"><span>Símbolo automático</span><input id="mk-new-yahoo" placeholder="p. ej. NUTRESA.CL" autocomplete="off"></label>
+        <label class="field" for="mk-new-news"><span>Búsqueda de noticias</span><input id="mk-new-news" placeholder="p. ej. Nutresa acción" autocomplete="off"></label>
+        <button type="button" class="btn" id="mk-add">Agregar activo</button>
+      </div>
+      <p class="hint">La descarga de la BVC es la fuente principal: sus cierres tienen prioridad. Como la BVC no ofrece una conexión abierta para aplicaciones, la actualización automática diaria toma los cierres de Yahoo Finance con el símbolo de la columna «Símbolo automático» (las acciones de la BVC llevan el sufijo .CL). Si un símbolo falla, corrígelo o déjalo vacío y usa solo las descargas de la BVC.</p>
+    </div>
+    <div class="panel">
+      <h2>Actualización automática</h2>
+      <div class="mk-settings">
+        <label class="check"><input type="checkbox" id="set-auto"> Actualizar sola cada <select id="set-interval"><option value="1">hora</option><option value="3">3 horas</option><option value="6">6 horas</option><option value="12">12 horas</option><option value="24">24 horas</option></select></label>
+        <label class="check"><input type="checkbox" id="set-yahoo"> Traer cierres diarios de la fuente automática</label>
+        <label class="check"><input type="checkbox" id="set-news"> Traer noticias</label>
+        <label class="check"><input type="checkbox" id="set-notify"> Avisarme de cierres y noticias nuevas</label>
+        <label class="check"><input type="checkbox" id="set-background"> Al cerrar la ventana, seguir en la bandeja del sistema</label>
+        <label class="check"><input type="checkbox" id="set-login"> Abrir al iniciar sesión (Windows y macOS)</label>
+        <label class="check"><input type="checkbox" id="set-reload"> Recalcular el análisis con cada actualización</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- NOTICIAS (solo en la app de escritorio) -->
+  <section class="screen" id="screen-noticias" hidden>
+    <div class="head">
+      <h1>Noticias</h1>
+      <p class="lede">Noticias recientes de los activos que sigues y de la Bolsa de Valores de Colombia, de Google News en español para Colombia. Se abren en tu navegador.</p>
+    </div>
+    <div class="panel">
+      <div class="nw-filter">
+        <label class="field" for="nw-asset"><span>Activo</span><select id="nw-asset"></select></label>
+        <label class="field" for="nw-q"><span>Buscar</span><input id="nw-q" type="search" placeholder="Palabra en el titular"></label>
+      </div>
+      <p class="meta" id="nw-meta"></p>
+      <ol class="news" id="nw-list"></ol>
+    </div>
+  </section>
+
   <!-- TEORÍA -->
   <section class="screen prose" id="screen-teoria" hidden>
     <div class="head"><h1>La teoría detrás de cada número</h1></div>
@@ -244,5 +303,6 @@
 <script src="js/sample.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
+<script src="js/desktop.js"></script>
 </body>
 </html>

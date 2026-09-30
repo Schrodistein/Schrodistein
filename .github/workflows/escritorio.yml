@@ -1,0 +1,83 @@
+name: App de escritorio
+
+on:
+  push:
+    branches: [claude/efficient-portfolio-confirmation-app-vjruny]
+    paths:
+      - 'escritorio/**'
+      - 'portafolios/**'
+      - '.github/workflows/escritorio.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: escritorio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: escritorio/package-lock.json
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Pruebas
+        run: npm test
+      - name: Pruebas del motor de portafolios
+        run: node ../portafolios/tests/run.js
+      - name: Compilar instaladores
+        run: node scripts/prepare.js && npx electron-builder --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontera-eficiente-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            escritorio/dist/*.exe
+            escritorio/dist/*.dmg
+            escritorio/dist/*.AppImage
+            escritorio/dist/*.deb
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: echo "version=$(node -p "require('./escritorio/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        with:
+          path: instaladores
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: escritorio-v${{ steps.v.outputs.version }}
+          name: Frontera Eficiente ${{ steps.v.outputs.version }} (escritorio)
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: instaladores/*
+          body: |
+            Aplicación de escritorio de Frontera Eficiente: portafolios eficientes con datos diarios y noticias de la Bolsa de Valores de Colombia.
+
+            | Sistema | Archivo |
+            | --- | --- |
+            | Windows 10/11 (64 bits) | `Frontera-Eficiente-${{ steps.v.outputs.version }}-win-x64.exe` |
+            | macOS con chip Apple (M1 o posterior) | `…-mac-arm64.dmg` |
+            | macOS con Intel | `…-mac-x64.dmg` |
+            | Linux | `…-linux-x86_64.AppImage` o `…-linux-amd64.deb` |
+
+            Los instaladores no están firmados con un certificado de desarrollador:
+            - Windows muestra «Windows protegió su PC»: pulsa «Más información» y luego «Ejecutar de todas formas».
+            - macOS bloquea la primera apertura: en Finder, clic derecho sobre la app → «Abrir» → «Abrir».
+            - Linux (AppImage): dale permiso de ejecución (`chmod +x`) y ábrelo.

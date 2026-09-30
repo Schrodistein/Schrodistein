@@ -933,6 +933,24 @@
     go(st.screen);
   }
 
+  /* Punto de entrada para la app de escritorio (js/desktop.js): carga historiales
+   * ya descargados como si se hubieran subido archivos. */
+  globalThis.PFApp = {
+    loadSeries(list, origin) {
+      const combined = PF.data.combineSeries(list);
+      if (combined.length < 2) {
+        status('Se necesitan al menos dos activos con datos para el análisis.', 'bad');
+        return false;
+      }
+      st.series = combined;
+      const plan = suggestSettings(combined);
+      const ok = mergeLoaded(false);
+      if (ok) status(`Listo: ${combined.length} activos cargados ${origin || ''}. ${plan}`.trim(), 'ok');
+      return ok;
+    },
+    go,
+  };
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 })();

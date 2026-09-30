@@ -17,6 +17,10 @@ Para instalarla en el móvil, publica la carpeta en cualquier hosting estático 
 
 La carpeta [`portafolios/`](portafolios/README.md) contiene otra app independiente para construir y confirmar portafolios eficientes (Markowitz, Sharpe, Treynor, Jensen). Ábrela con `portafolios/index.html`. `npm test` también ejecuta sus pruebas, y `npm run build:portafolios` genera `dist/frontera-eficiente.html`.
 
+## Frontera Eficiente para escritorio
+
+La carpeta [`escritorio/`](escritorio/README.md) empaqueta la app de portafolios como aplicación instalable (Windows, macOS, Linux) con Electron. Se actualiza sola con los cierres diarios de los activos de la BVC y sus noticias. Los instaladores se publican en la Release `escritorio-v<versión>`.
+
 ## Qué mide
 
 Cinco índices del modelo CHC, los mismos que informan las escalas Wechsler actuales:

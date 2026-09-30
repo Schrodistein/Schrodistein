@@ -1,0 +1,91 @@
+{
+  "name": "frontera-eficiente",
+  "productName": "Frontera Eficiente",
+  "version": "1.0.0",
+  "description": "Portafolios eficientes con datos diarios y noticias de la Bolsa de Valores de Colombia (Markowitz, Sharpe, Treynor, Jensen).",
+  "main": "main.js",
+  "private": true,
+  "author": {
+    "name": "Schrodistein",
+    "email": "frontera-eficiente@users.noreply.github.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/schrodistein/schrodistein",
+  "scripts": {
+    "prepare-ui": "node scripts/prepare.js",
+    "start": "node scripts/prepare.js && electron .",
+    "test": "node scripts/prepare.js && node tests/run.js",
+    "e2e": "node scripts/prepare.js && node tests/e2e.js",
+    "icons": "node scripts/icons.js",
+    "dist": "node scripts/prepare.js && electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "co.schrodistein.fronteraeficiente",
+    "productName": "Frontera Eficiente",
+    "artifactName": "Frontera-Eficiente-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**",
+      "portafolios/**",
+      "build/icon.png",
+      "build/tray.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Frontera Eficiente",
+      "language": "3082"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance",
+      "identity": null
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Office",
+      "maintainer": "Schrodistein <frontera-eficiente@users.noreply.github.com>"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "schrodistein",
+        "repo": "schrodistein",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "desktopName": "frontera-eficiente.desktop"
+}

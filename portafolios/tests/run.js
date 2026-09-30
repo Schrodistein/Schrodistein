@@ -62,7 +62,8 @@ test('CSV con punto y coma, coma decimal y columna de fechas', () => {
   const d = PF.data.parseCSV('Fecha;A;B;IPC\n2024-01;10,5;20;100\n2024-02;11,0;19,5;101,5\n2024-03;;1;1\n');
   assert(d.names.join('|') === 'A|B|IPC', d.names.join('|'));
   assert(d.values[0][1] === 11 && d.values[2][1] === 101.5);
-  assert(d.dropped === 1 && d.dates[0] === '2024-01');
+  // La fila con un hueco se conserva (NaN); el modelo decide cómo usarla
+  assert(d.dropped === 0 && d.dates[0] === '2024-01' && Number.isNaN(d.values[0][2]));
   assert(PF.data.guessMarket(d.names) === 2);
 });
 
@@ -297,6 +298,106 @@ test('BVC: un archivo con varios nemotécnicos se separa por activo', () => {
 
 test('una tabla con un activo por columna no se confunde con un historial', () => {
   assert(!PF.data.isSingleAsset(PF.sample.csv()));
+});
+
+
+test('BVC real: CSV con punto y coma, miles con coma, días sin negociación y festivos vacíos', () => {
+  const text = '﻿Fecha;Nemotécnico;Precio cierre;Precio máximo;Precio promedio ponderado;Precio mínimo;Variación absoluta;Variación porcentual;Cantidad;Volumen\r\n' +
+    '2025-05-12;CIBEST;50,000.00;;;;;;;\r\n' +
+    '2025-05-19;CIBEST;52,500.00;52,500.00;52,060.75;51,320.00;1,200.00;2.34;54,946.00;2,860,529,780.00\r\n' +
+    '2025-05-20;CIBEST;52,620.00;55,000.00;53,025.04;52,620.00;120.00;0.23;69,642.00;3,692,769,540.00\r\n' +
+    '2025-05-21;CIBEST;;;;;;;;\r\n' +
+    '2025-05-22;CIBEST;51,580.00;52,000.00;51,403.46;51,060.00;-320.00;-0.6;10.00;100.00\r\n';
+  const r = PF.data.readText(text, 'e1f2a3b4-CIBEST_20260908_051648.csv');
+  const s = r.series[0];
+  assert(r.layout === 'largo' && s.name === 'CIBEST' && s.column === 'Precio cierre');
+  assert(s.dates.join() === '2025-05-19,2025-05-20,2025-05-22', s.dates.join());
+  assert(s.prices[0] === 52500 && s.noTrade === 1);
+});
+
+test('BVC real: índice con «Valor hoy» y el nombre del archivo sin sufijos', () => {
+  const text = '﻿Fecha;Valor hoy;Valor ayer;Variación absoluta;Variación porcentual;Variación 12 meses;Variación año\n' +
+    '2024/09/16;1,317.98;1,311.68;6.30;0.48%;19.81;10.27\n2024/09/17;1,313.35;1,317.98;-4.63;-0.35%;18.88;9.88\n';
+  const a = PF.data.readText(text, 'MSCI_COLCAP_20260915_3.5.csv').series[0];
+  const b = PF.data.readText(text, 'MSCI_COLCAP_20260915.csv').series[0];
+  assert(a.name === 'MSCI COLCAP' && b.name === 'MSCI COLCAP', a.name);
+  assert(a.column === 'Valor hoy' && a.prices[0] === 1317.98 && a.dates[0] === '2024-09-16');
+  assert(PF.data.isMarketName(a.name));
+});
+
+test('tabla ancha: dos filas de encabezado, columna ITEM, huecos y fechas descendentes', () => {
+  const rows = [
+    ['ITEM', 'FECHA', 'MSCI COLCAP', 'PRECIO MAXIMO', ''],
+    ['', '', '', 'ECOPETROL', 'CIBEST'],
+    [1, new Date(2026, 7, 21), 2459.23, 2715, 91840],
+    [2, new Date(2026, 7, 20), 2444.32, 2780, 88640],
+    [3, new Date(2026, 7, 19), 2453.87, 2775, 88720],
+    [4, new Date(2026, 7, 18), '', 2770, ''],
+    ['', 'RENDIMIENTO ESPERADO', 0.1, 0.2, 0.3],
+  ];
+  const r = PF.data.readRows(rows, 'libro.xlsx');
+  assert(r.layout === 'ancho' && !r.returnsLike);
+  assert(r.series.map((x) => x.name).join() === 'MSCI COLCAP,ECOPETROL,CIBEST', r.series.map((x) => x.name).join());
+  const e = r.series[1];
+  assert(e.dates.join() === '2026-08-18,2026-08-19,2026-08-20,2026-08-21' && e.prices[0] === 2770);
+  const ret = PF.data.readRows([['FECHA', 'A', 'B'], ['2024-01-02', 0.01, -0.02], ['2024-01-03', 0.02, 0.01], ['2024-01-04', -0.01, 0]], 'r.csv');
+  assert(ret.returnsLike, 'una hoja de rendimientos se reconoce como tal');
+});
+
+test('unión con historias de distinta longitud: huecos NaN, promedio o último del periodo', () => {
+  const a = { name: 'A', dates: ['2024-01-10', '2024-01-31', '2024-02-15', '2024-02-28', '2024-03-29'], prices: [10, 12, 13, 15, 16] };
+  const b = { name: 'B', dates: ['2024-02-01', '2024-02-29', '2024-03-28'], prices: [100, 110, 120] };
+  const c = { name: 'C', dates: ['2024-01-31', '2024-02-29', '2024-03-29'], prices: [5, 6, 7] };
+  const last = PF.data.mergeSeries([a, b, c], 'mensual', { agg: 'last' });
+  assert(last.dates.length === 3 && last.common === 2, JSON.stringify(last));
+  assert(Number.isNaN(last.values[1][0]) && last.values[0][1] === 15);
+  const avg = PF.data.mergeSeries([a, b, c], 'mensual', { agg: 'avg' });
+  assert(avg.values[0][0] === 11 && avg.values[0][1] === 14 && avg.values[1][1] === 105);
+  const csv = PF.data.toCSV(last);
+  const back = PF.data.parseCSV(csv);
+  assert(back.dates.length === 3 && Number.isNaN(back.values[1][0]), csv);
+});
+
+test('detección de una serie corrida en el tiempo', () => {
+  const R = rng(21);
+  const dates = [];
+  const d = new Date(Date.UTC(2024, 0, 1));
+  while (dates.length < 300) {
+    if (d.getUTCDay() % 6) dates.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  const f = dates.map(() => (R() - 0.5) * 0.04);
+  const mk = (name, lag, noise) => {
+    let p = 100;
+    const prices = dates.map((_, t) => (p *= Math.exp((f[t - lag] ?? 0) + (R() - 0.5) * noise)));
+    return { name, dates, prices };
+  };
+  const list = [mk('A', 0, 0.01), mk('B', 0, 0.01), mk('C', 0, 0.01), mk('D', 7, 0.01)];
+  const lags = PF.data.detectLags(list);
+  assert(lags.length === 1 && lags[0].name === 'D' && Math.abs(lags[0].lag) === 7, JSON.stringify(lags));
+});
+
+test('correlación por pares corregida a una matriz válida', () => {
+  const C = [[1, 0.9, -0.9], [0.9, 1, 0.9], [-0.9, 0.9, 1]];
+  const { R, fixed } = PF.stats.nearestCorr(C);
+  assert(fixed && R.every((r, i) => near(r[i], 1, 1e-9)));
+  assert(Math.min(...PF.stats.eigSym(R).values) > -1e-9);
+});
+
+test('modelo con toda la historia de cada activo frente a solo periodos comunes', () => {
+  const d = PF.data.parseCSV(PF.sample.csv());
+  const R = PF.data.toReturns(d.values, 'prices', true);
+  const mi = PF.data.guessMarket(d.names);
+  // El primer activo pierde sus primeros 30 meses
+  const rets = R.filter((_, i) => i !== mi).map((r, i) => (i === 0 ? r.map((x, t) => (t < 30 ? NaN : x)) : r));
+  const datos = { names: d.names.filter((_, i) => i !== mi), returns: rets, market: R[mi], marketName: d.names[mi], dates: d.dates };
+  const all = PF.model.build(datos, { freq: 'mensual', rf: 0.04, muModel: 'hist', covModel: 'sample', history: 'all' });
+  const com = PF.model.build(datos, { freq: 'mensual', rf: 0.04, muModel: 'hist', covModel: 'sample', history: 'common' });
+  assert(all.info.counts[1] === 60 && all.info.counts[0] === 30 && com.T === 30);
+  assert(near(all.assets[1].histRet, PF.stats.mean(R.filter((_, i) => i !== mi)[1]) * 12, 1e-12), 'usa los 60 meses del segundo activo');
+  assert(Math.min(...PF.stats.eigSym(all.Sigma).values) > 0);
+  const P = PF.model.portfolios(all, 0, 0.3);
+  assert(P.tangency && near(sumOf(P.tangency.w), 1, 1e-8));
 });
 
 

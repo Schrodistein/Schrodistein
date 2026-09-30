@@ -100,6 +100,58 @@
     };
   }
 
+  /* Valores y vectores propios de una matriz simétrica (método de Jacobi). */
+  function eigSym(A0) {
+    const n = A0.length;
+    const A = A0.map((r) => r.slice());
+    const V = A.map((_, i) => A.map((__, j) => (i === j ? 1 : 0)));
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0;
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] * A[i][j];
+      if (off < 1e-22) break;
+      for (let p = 0; p < n; p++) {
+        for (let q = p + 1; q < n; q++) {
+          if (Math.abs(A[p][q]) < 1e-300) continue;
+          const th = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+          const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+          const c = 1 / Math.sqrt(t * t + 1);
+          const sn = t * c;
+          for (let k = 0; k < n; k++) {
+            const akp = A[k][p];
+            const akq = A[k][q];
+            A[k][p] = c * akp - sn * akq;
+            A[k][q] = sn * akp + c * akq;
+          }
+          for (let k = 0; k < n; k++) {
+            const apk = A[p][k];
+            const aqk = A[q][k];
+            A[p][k] = c * apk - sn * aqk;
+            A[q][k] = sn * apk + c * aqk;
+          }
+          for (let k = 0; k < n; k++) {
+            const vkp = V[k][p];
+            const vkq = V[k][q];
+            V[k][p] = c * vkp - sn * vkq;
+            V[k][q] = sn * vkp + c * vkq;
+          }
+        }
+      }
+    }
+    return { values: A.map((r, i) => r[i]), vectors: V };
+  }
+
+  /* Matriz de correlación válida (semidefinida positiva) más cercana: se recortan
+   * los valores propios negativos que aparecen al estimar cada par con fechas distintas. */
+  function nearestCorr(R) {
+    const n = R.length;
+    const { values, vectors } = eigSym(R);
+    if (Math.min(...values) > 1e-10) return { R, fixed: false };
+    const lam = values.map((v) => Math.max(v, 1e-8));
+    const B = R.map((_, i) => R.map((__, j) => vectors[i].reduce((s, v, k) => s + v * lam[k] * vectors[j][k], 0)));
+    const d = B.map((r, i) => Math.sqrt(r[i]));
+    return { R: B.map((r, i) => r.map((x, j) => (i === j ? 1 : x / (d[i] * d[j])))), fixed: true };
+  }
+
   /* Valor p bilateral aproximado de un estadístico t (normal para gl ≥ 30,
    * corrección de Cornish-Fisher de primer orden por debajo). */
   function pValue(t, df) {
@@ -175,9 +227,11 @@
     const dates = [];
     const values = cols.map(() => []);
     let dropped = 0;
+    // Se conservan las filas con huecos (activos que no cotizaron ese día, historias
+    // de distinta longitud); el modelo decide cómo usarlas. Se descartan las vacías.
     for (const r of raw) {
       const v = cols.map((i) => parseNumber(r[i], decimalComma));
-      if (v.some((x) => !Number.isFinite(x))) {
+      if (v.filter((x) => Number.isFinite(x)).length < Math.min(2, cols.length)) {
         dropped++;
         continue;
       }
@@ -187,14 +241,18 @@
     return { names, dates, values, dropped, sep, decimalComma };
   }
 
-  /* Rendimientos simples por periodo a partir de precios, o validación de
-   * rendimientos ya calculados (en decimales o en %). */
-  function toReturns(values, kind) {
+  /* Rendimientos por periodo a partir de precios (simples o logarítmicos, ln(Pt/Pt−1)),
+   * o validación de rendimientos ya calculados (en decimales o en %). Un hueco en los
+   * precios deja NaN en los dos rendimientos que lo tocan. */
+  function toReturns(values, kind, logRet) {
     if (kind === 'prices') {
       return values.map((p) => {
         if (p.some((x) => x <= 0)) throw new Error('Hay precios menores o iguales a cero; revisa los datos o elige «Rendimientos».');
         const r = [];
-        for (let t = 1; t < p.length; t++) r.push(p[t] / p[t - 1] - 1);
+        for (let t = 1; t < p.length; t++) {
+          const ok = Number.isFinite(p[t]) && Number.isFinite(p[t - 1]);
+          r.push(ok ? (logRet ? Math.log(p[t] / p[t - 1]) : p[t] / p[t - 1] - 1) : NaN);
+        }
         return r;
       });
     }
@@ -283,8 +341,10 @@
   const MONTHS = { jan: 1, ene: 1, feb: 2, mar: 3, apr: 4, abr: 4, may: 5, jun: 6, jul: 7, aug: 8, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dec: 12, dic: 12 };
   function parseDates(cells, preferDayFirst) {
     const parts = cells.map((c) => {
-      const t = c.trim();
-      let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      const t = String(c).trim();
+      let m = t.match(/^(\d{4})[-/.](\d{1,2})$/);
+      if (m) return { y: +m[1], a: +m[2], b: 1, iso: true };
+      m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
       if (m) return { y: +m[1], a: +m[2], b: +m[3], iso: true };
       m = t.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
       if (m) return { y: +m[3] < 100 ? 2000 + +m[3] : +m[3], a: +m[1], b: +m[2] };
@@ -311,6 +371,8 @@
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/\s*(\(\d+\))$/, '')
       .replace(/\s*[-_]?\s*(historical data|datos hist[óo]ricos|hist[óo]rico|history)$/i, '')
+      .replace(/^[0-9a-f]{8}-/i, '') // prefijo de algunos gestores de descargas
+      .replace(/[ _-]\d{8}([ _-]\d{4,6})?([ _-]\d+(\.\d+)?)?$/, '') // sufijo de la BVC: _20260915_2, _20260908_051610
       .replace(/\.(CL|BVC)$/i, '')
       .replace(/[_]+/g, ' ')
       .trim() || 'Activo';
@@ -340,8 +402,19 @@
     const dc = columnDecimalComma(strCells.filter(Boolean), ',');
     const spanish = hd.head.some((h) => /fecha|cierre|ultimo|apertura|precio/.test(norm(h)));
     const strDates = parseDates(body.map((r) => (cellDate(r[hd.di]) || clean(r[hd.di]))), spanish);
+    // Días sin negociación: la BVC repite un precio de referencia con cantidad vacía.
+    // Si el archivo trae cantidad o volumen y casi siempre tiene valor, esos días se omiten.
+    const qi = hd.head.findIndex((h, i) => i !== hd.pi && /^(cantidad|volumen|volume|vol)( |$)/.test(norm(h)));
+    const qty = (r) => (typeof r[qi] === 'number' ? r[qi] : parseNumber(clean(r[qi]), false));
+    const withQty = qi >= 0 ? body.filter((r) => qty(r) > 0).length : 0;
+    const skipNoTrade = qi >= 0 && withQty >= 0.5 * body.length;
+    let noTrade = 0;
     const groups = new Map();
     body.forEach((r, k) => {
+      if (skipNoTrade && !(qty(r) > 0) && clean(r[hd.pi]) !== '') {
+        noTrade++;
+        return;
+      }
       const raw = r[hd.pi];
       const v = typeof raw === 'number' ? raw : parseNumber(clean(raw), dc);
       const d = strDates[k];
@@ -353,15 +426,100 @@
     const out = [];
     for (const [key, pts] of groups) {
       const s = finishSeries(pts, key || nameFromFile(fileName), hd.head[hd.pi]);
-      if (s) out.push(s);
+      if (s) out.push(Object.assign(s, { noTrade, rank: 2 }));
     }
     if (!out.length) throw new Error(`No se reconocieron fechas y precios en «${fileName}».`);
     return out;
   }
 
+  /* Tabla ancha con columna de fecha: un activo por columna, con huecos permitidos
+   * y encabezados en una o varias filas (p. ej. «PRECIO MAXIMO» encima de los
+   * nemotécnicos). Se ignoran columnas de numeración como «ITEM». */
+  const INDEX_HDR = /^(item|items|n|no|nro|numero|#|consecutivo|id|fila)$/;
+  function wideSeriesFromRows(rows, fileName) {
+    let hr = -1;
+    let di = -1;
+    for (let r = 0; r < Math.min(rows.length, 30) && hr < 0; r++) {
+      const h = (rows[r] || []).map(clean);
+      const k = h.findIndex(isDateHdr);
+      if (k >= 0) {
+        hr = r;
+        di = k;
+      }
+    }
+    if (hr < 0) return null;
+    // Primera fila de datos: la primera con una fecha reconocible en la columna de fecha
+    const isDateCell = (v) => !!(cellDate(v) || parseDates([clean(v)], true)[0]);
+    let start = hr + 1;
+    while (start < rows.length && start < hr + 6 && !isDateCell((rows[start] || [])[di])) start++;
+    if (start >= rows.length || !isDateCell((rows[start] || [])[di])) return null;
+    const body = [];
+    for (let r = start; r < rows.length; r++) {
+      const row = rows[r] || [];
+      if (!isDateCell(row[di])) continue; // filas de resumen debajo de los datos
+      body.push(row);
+    }
+    if (body.length < 3) return null;
+    const spanish = true;
+    const strDates = parseDates(body.map((r) => cellDate(r[di]) || clean(r[di])), spanish);
+    const width = Math.max(...rows.slice(hr, start).concat(body.slice(0, 50)).map((r) => (r || []).length));
+    const out = [];
+    let allVals = [];
+    for (let c = 0; c < width; c++) {
+      if (c === di) continue;
+      let name = '';
+      for (let r = hr; r < start; r++) {
+        const t = clean((rows[r] || [])[c]);
+        if (t && !Number.isFinite(parseNumber(t, false))) name = t;
+      }
+      if (!name || INDEX_HDR.test(norm(name))) continue;
+      const cells = body.map((r) => r[c]);
+      const strCells = cells.filter((v) => typeof v !== 'number').map(clean).filter(Boolean);
+      const dc = columnDecimalComma(strCells, ',');
+      const pts = [];
+      cells.forEach((v, k) => {
+        const x = typeof v === 'number' ? v : parseNumber(clean(v), dc);
+        if (strDates[k] && Number.isFinite(x)) pts.push([strDates[k], x]);
+      });
+      if (pts.length < 3) continue;
+      // Numeración 1, 2, 3… sin encabezado reconocible
+      if (pts.every((p, k) => k === 0 || Math.abs(Math.abs(p[1] - pts[k - 1][1]) - 1) < 1e-9)) continue;
+      allVals = allVals.concat(pts.map((p) => p[1]));
+      const sr = finishSeries(pts, name, 'columna ' + name);
+      if (sr) out.push(Object.assign(sr, { rank: 1 }));
+    }
+    if (!out.length) return null;
+    const sorted = allVals.map(Math.abs).sort((a, b) => a - b);
+    const returnsLike = allVals.some((v) => v < 0) || sorted[Math.floor(sorted.length / 2)] < 1.5;
+    return { series: out, returnsLike };
+  }
+
+  /* Lee una hoja o un CSV en cualquier formato reconocido:
+   * formato largo (fecha + precio de cierre, con o sin nemotécnico) o tabla ancha. */
+  function readRows(rows, fileName) {
+    if (findHeader(rows)) return { series: seriesFromRows(rows, fileName), layout: 'largo', returnsLike: false };
+    const w = wideSeriesFromRows(rows, fileName);
+    if (w) return { series: w.series, layout: 'ancho', returnsLike: w.returnsLike };
+    const seen = describeRows(rows);
+    throw new Error(`En «${fileName}» no se encontró una columna de fecha con precios.${seen ? ` Encabezados leídos: ${seen}.` : ' El archivo parece vacío.'}`);
+  }
+  function readText(text, fileName) {
+    return readRows(csvRows(text), fileName);
+  }
+  /* ¿El texto tiene una columna de fecha reconocible (formato largo o ancho)? */
+  function hasDates(text) {
+    try {
+      readText(text, 'texto');
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   function finishSeries(pts, name, column) {
     if (pts.length < 2) return null;
-    pts.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    // Misma fecha repetida: gana la fuente más confiable (rango mayor), luego la última leída
+    pts.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : (a[2] || 0) - (b[2] || 0)));
     const dedup = pts.filter((p, i) => i === pts.length - 1 || p[0] !== pts[i + 1][0]);
     return { name, dates: dedup.map((p) => p[0]), prices: dedup.map((p) => p[1]), column };
   }
@@ -379,12 +537,13 @@
     const by = new Map();
     for (const s of list) {
       const k = s.name.toUpperCase();
-      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0 });
+      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0, noTrade: 0 });
       const g = by.get(k);
       g.parts++;
-      s.dates.forEach((d, i) => g.pts.push([d, s.prices[i]]));
+      g.noTrade += s.noTrade || 0;
+      s.dates.forEach((d, i) => g.pts.push([d, s.prices[i], s.rank || 0]));
     }
-    return [...by.values()].map((g) => Object.assign(finishSeries(g.pts, g.name, g.column), { parts: g.parts }));
+    return [...by.values()].map((g) => Object.assign(finishSeries(g.pts, g.name, g.column), { parts: g.parts, noTrade: g.noTrade }));
   }
 
   /* Clave de periodo para agrupar precios diarios en la frecuencia elegida. */
@@ -401,48 +560,133 @@
     return iso;
   }
 
-  /* Une varios historiales: último precio de cada periodo y solo los periodos
-   * que tienen todos los activos. Devuelve el mismo formato que parseCSV. */
-  function mergeSeries(list, freq) {
-    if (list.length < 2) throw new Error('Sube al menos dos archivos: tus acciones y el índice de mercado.');
+  /* Une varios historiales en una tabla por periodo.
+   *   agg 'last': último precio del periodo;  'avg': promedio de los precios del periodo,
+   *   que suaviza fechas que no coinciden entre activos (como la hoja guía del curso).
+   * Se conservan todos los periodos con al menos dos activos; los huecos quedan en NaN.
+   * En datos diarios se quitan los días en que casi ningún activo cambió de precio
+   * (festivos en que la plataforma repite el cierre anterior). */
+  function mergeSeries(list, freq, opts) {
+    const o = Object.assign({ agg: 'last' }, opts);
+    if (list.length < 2) throw new Error('Se necesitan al menos dos activos: tus acciones y el índice de mercado.');
     const used = {};
     const names = list.map((s) => {
-      let n = s.name;
+      const n = s.name;
       used[n] = (used[n] || 0) + 1;
       return used[n] > 1 ? n + ' (' + used[n] + ')' : n;
     });
     const maps = list.map((s) => {
+      const g = new Map();
+      s.dates.forEach((d, i) => {
+        const k = periodKey(d, freq);
+        if (!g.has(k)) g.set(k, { last: d, v: [] });
+        const e = g.get(k);
+        if (d >= e.last) e.last = d;
+        e.v.push([d, s.prices[i]]);
+      });
       const m = new Map();
-      s.dates.forEach((d, i) => m.set(periodKey(d, freq), [d, s.prices[i]]));
+      for (const [k, e] of g) {
+        e.v.sort((a, b) => (a[0] < b[0] ? -1 : 1));
+        const val = o.agg === 'avg' ? e.v.reduce((q, x) => q + x[1], 0) / e.v.length : e.v[e.v.length - 1][1];
+        m.set(k, [e.last, val]);
+      }
       return m;
     });
-    let keys = [...maps[0].keys()].filter((k) => maps.every((m) => m.has(k)));
-    keys.sort();
-    // El último periodo puede estar incompleto (mes en curso): se conserva, es el dato más reciente.
-    if (keys.length < 3) throw new Error('Los archivos casi no tienen periodos en común. Revisa que cubran las mismas fechas.');
-    const dates = keys.map((k) => maps.reduce((a, m) => (m.get(k)[0] > a ? m.get(k)[0] : a), ''));
-    const values = maps.map((m) => keys.map((k) => m.get(k)[1]));
-    const lost = list.map((s, i) => maps[i].size - keys.length);
-    return { names, dates, values, dropped: 0, lost, sep: ',', decimalComma: false };
+    const all = new Set();
+    maps.forEach((m) => m.forEach((_, k) => all.add(k)));
+    let keys = [...all].filter((k) => maps.filter((m) => m.has(k)).length >= 2).sort();
+    let holidays = [];
+    if (freq === 'diaria' && list.length >= 4) {
+      const keep = [];
+      keys.forEach((k, i) => {
+        if (i === 0) return keep.push(k);
+        const prev = keep[keep.length - 1];
+        const both = maps.filter((m) => m.has(k) && m.has(prev));
+        const changed = both.filter((m) => m.get(k)[1] !== m.get(prev)[1]).length;
+        if (both.length >= 4 && changed <= 1) holidays.push(k);
+        else keep.push(k);
+      });
+      keys = keep;
+    }
+    if (keys.length < 3) throw new Error('Los activos casi no tienen periodos en común. Revisa que cubran las mismas fechas.');
+    const dates = keys.map((k) => maps.reduce((a, m) => (m.has(k) && m.get(k)[0] > a ? m.get(k)[0] : a), ''));
+    const values = maps.map((m) => keys.map((k) => (m.has(k) ? m.get(k)[1] : NaN)));
+    const coverage = values.map((c) => c.filter(Number.isFinite).length);
+    const common = keys.filter((k, t) => values.every((c) => Number.isFinite(c[t]))).length;
+    return { names, dates, values, dropped: 0, coverage, common, holidays, sep: ',', decimalComma: false };
+  }
+
+  /* Detecta series corridas en el tiempo respecto a las demás (pasa cuando se pegan
+   * columnas de descargas distintas junto a una sola columna de fechas). Compara los
+   * rendimientos diarios de cada serie con el promedio de las otras en desfases de
+   * −25 a 25 filas. Devuelve las series cuyo mejor desfase es claramente distinto de 0. */
+  function detectLags(list) {
+    if (list.length < 3) return [];
+    const dates = [...new Set(list.flatMap((s) => s.dates))].sort();
+    if (dates.length < 60) return [];
+    const gaps = dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(dates[i])) / 864e5).sort((a, b) => a - b);
+    if (gaps[Math.floor(gaps.length / 2)] > 4) return []; // solo datos diarios
+    const idx = new Map(dates.map((d, i) => [d, i]));
+    const R = list.map((s) => {
+      const r = new Array(dates.length).fill(NaN);
+      for (let i = 1; i < s.dates.length; i++) {
+        const a = idx.get(s.dates[i - 1]);
+        const b = idx.get(s.dates[i]);
+        if (b - a <= 5 && s.prices[i - 1] > 0 && s.prices[i] > 0) r[b] = Math.log(s.prices[i] / s.prices[i - 1]);
+      }
+      return r;
+    });
+    const corrAt = (x, y, lag) => {
+      const a = [];
+      const b = [];
+      for (let t = 0; t < x.length; t++) {
+        const u = t + lag;
+        if (u < 0 || u >= y.length || !Number.isFinite(x[t]) || !Number.isFinite(y[u])) continue;
+        a.push(x[t]);
+        b.push(y[u]);
+      }
+      if (a.length < 40) return NaN;
+      return covariance(a, b) / Math.sqrt(variance(a) * variance(b));
+    };
+    const out = [];
+    list.forEach((s, k) => {
+      const cons = dates.map((_, t) => {
+        const v = R.filter((_, j) => j !== k).map((r) => r[t]).filter(Number.isFinite);
+        return v.length >= 2 ? v.reduce((q, x) => q + x, 0) / v.length : NaN;
+      });
+      let best = 0;
+      let bestC = -Infinity;
+      for (let lag = -25; lag <= 25; lag++) {
+        const c = corrAt(R[k], cons, lag);
+        if (c > bestC) {
+          bestC = c;
+          best = lag;
+        }
+      }
+      const c0 = corrAt(R[k], cons, 0);
+      if (Math.abs(best) >= 2 && bestC >= 0.15 && bestC - c0 >= 0.1) out.push({ name: s.name, lag: best, corr: bestC, corr0: c0 });
+    });
+    return out;
   }
 
   /* De vuelta a CSV (para mostrar y guardar el resultado de la unión). */
   function toCSV(p) {
     const q = (s) => (/[",;\n]/.test(s) ? '"' + String(s).replace(/"/g, '""') + '"' : s);
     const rows = [['Fecha'].concat(p.names).map(q).join(',')];
-    p.dates.forEach((d, t) => rows.push([d].concat(p.values.map((c) => +c[t].toPrecision(10))).join(',')));
+    p.dates.forEach((d, t) => rows.push([d].concat(p.values.map((c) => (Number.isFinite(c[t]) ? +c[t].toPrecision(10) : ''))).join(',')));
     return rows.join('\n');
   }
 
 
   const MARKET_RE = /(mercado|market|[íi]ndice|index|benchmark|colcap|coleqty|ipc|s&p|sp ?500|spx|ibex|merval|bovespa|ibov|ipsa|colcap|msci|nasdaq|dow|acwi|^spy$)/i;
+  const isMarketName = (n) => MARKET_RE.test(n);
   function guessMarket(names) {
     const i = names.findIndex((n) => MARKET_RE.test(n));
     return i >= 0 ? i : names.length - 1;
   }
 
   Object.assign(PF, {
-    stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf },
-    data: { parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, combineSeries, mergeSeries, toCSV, periodKey },
+    stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
+    data: { isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

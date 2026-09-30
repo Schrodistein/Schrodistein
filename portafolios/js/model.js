@@ -9,29 +9,58 @@
   const S = PF.stats;
   const O = PF.optim;
 
-  const FREQ = { diaria: 252, semanal: 52, mensual: 12, trimestral: 4, anual: 1 };
+  const FREQ = { diaria: 242, semanal: 52, mensual: 12, trimestral: 4, anual: 1 };
 
-  /* datos: { names, returns (por activo, por periodo), market (serie), marketName, dates }
-   * ajustes: { freq, rf (anual, decimal), muModel: 'hist'|'capm'|'mix', covModel: 'sample'|'index', marketReturn (anual|null) } */
+  /* datos: { names, returns (por activo, por periodo; NaN = sin dato), market (serie), marketName, dates }
+   * ajustes: { freq, rf (anual, decimal), muModel: 'hist'|'capm'|'mix', covModel: 'sample'|'index',
+   *            marketReturn (anual|null), history: 'all'|'common' }
+   * history 'common': solo los periodos en que todos los activos y el índice tienen dato.
+   * history 'all': cada media y varianza usa toda la historia de su activo; cada covarianza,
+   *   los periodos que comparten los dos activos (correlación por pares), y la matriz
+   *   resultante se corrige para que sea válida. Aprovecha activos que empezaron a cotizar
+   *   después (p. ej. CIBEST en 2025) sin recortar la historia de los demás. */
   function build(datos, ajustes) {
     const f = FREQ[ajustes.freq] || 12;
     const rf = ajustes.rf;
     const rfp = rf / f;
     const n = datos.names.length;
-    const T = datos.market.length;
     if (n < 2) throw new Error('Se necesitan al menos dos activos además del índice de mercado.');
-    if (T < 6) throw new Error('Hay muy pocos periodos de datos (mínimo 6; recomendable 36 o más).');
+    const fin = Number.isFinite;
+    const Tall = datos.market.length;
+    const commonIdx = [];
+    for (let t = 0; t < Tall; t++) if (fin(datos.market[t]) && datos.returns.every((r) => fin(r[t]))) commonIdx.push(t);
+    const pick = (arr) => commonIdx.map((t) => arr[t]);
+    const returnsC = datos.returns.map(pick);
+    const marketC = pick(datos.market);
+    const pairwise = ajustes.history === 'all';
+    const Tc = commonIdx.length;
+    if (!pairwise && Tc < 6) throw new Error(`Solo hay ${Tc} periodos en que todos los activos tienen dato (mínimo 6). Elige «Toda la historia de cada activo» o quita el activo con menos historia.`);
 
-    const rm = datos.market;
-    const xm = rm.map((r) => r - rfp);
-    const mktHist = S.mean(rm) * f;
-    const mktVol = Math.sqrt(S.variance(rm) * f);
-    const Em = ajustes.marketReturn != null && Number.isFinite(ajustes.marketReturn) ? ajustes.marketReturn : mktHist;
+    const both = (x, y) => {
+      const a = [];
+      const b = [];
+      for (let t = 0; t < x.length; t++) if (fin(x[t]) && fin(y[t])) {
+        a.push(x[t]);
+        b.push(y[t]);
+      }
+      return [a, b];
+    };
+    const rm = pairwise ? datos.market : marketC;
+    const R = pairwise ? datos.returns : returnsC;
+    const rmOwn = rm.filter(fin);
+    if (rmOwn.length < 6) throw new Error('El índice de mercado tiene muy pocos periodos con dato (mínimo 6).');
+    const mktHist = S.mean(rmOwn) * f;
+    const mktVol = Math.sqrt(S.variance(rmOwn) * f);
+    const Em = ajustes.marketReturn != null && fin(ajustes.marketReturn) ? ajustes.marketReturn : mktHist;
 
-    const assets = datos.returns.map((r, i) => {
-      const reg = S.regress(r.map((x) => x - rfp), xm);
-      const histRet = S.mean(r) * f;
-      const vol = Math.sqrt(S.variance(r) * f);
+    const counts = R.map((r) => r.filter(fin).length);
+    const assets = R.map((r, i) => {
+      const own = r.filter(fin);
+      const [y, x] = both(r, rm);
+      if (own.length < 6 || y.length < 6) throw new Error(`«${datos.names[i]}» tiene muy pocos periodos con dato junto al índice (${y.length}; mínimo 6).`);
+      const reg = S.regress(y.map((v) => v - rfp), x.map((v) => v - rfp));
+      const histRet = S.mean(own) * f;
+      const vol = Math.sqrt(S.variance(own) * f);
       return {
         name: datos.names[i],
         histRet,
@@ -39,10 +68,11 @@
         beta: reg.beta,
         alphaHist: reg.alpha * f,
         tAlpha: reg.tAlpha,
-        pAlpha: S.pValue(reg.tAlpha, T - 2),
+        pAlpha: S.pValue(reg.tAlpha, y.length - 2),
         r2: reg.r2,
         residVar: reg.residVar * f,
         capmRet: rf + reg.beta * (Em - rf),
+        periods: own.length,
       };
     });
 
@@ -50,11 +80,29 @@
       ajustes.muModel === 'capm' ? a.capmRet : ajustes.muModel === 'mix' ? 0.5 * (a.histRet + a.capmRet) : a.histRet
     );
     let Sigma;
+    let psdFixed = false;
+    let minOverlap = Tc;
     if (ajustes.covModel === 'index') {
       const vm = mktVol * mktVol;
       Sigma = assets.map((a, i) => assets.map((b, j) => a.beta * b.beta * vm + (i === j ? a.residVar : 0)));
+    } else if (!pairwise) {
+      Sigma = S.covMatrix(returnsC).map((row) => row.map((x) => x * f));
     } else {
-      Sigma = S.covMatrix(datos.returns).map((row) => row.map((x) => x * f));
+      const sd = assets.map((a) => a.histVol);
+      const C = assets.map(() => new Array(n).fill(0));
+      minOverlap = Infinity;
+      for (let i = 0; i < n; i++) {
+        C[i][i] = 1;
+        for (let j = 0; j < i; j++) {
+          const [a, b] = both(R[i], R[j]);
+          minOverlap = Math.min(minOverlap, a.length);
+          const c = a.length >= 6 ? S.covariance(a, b) / Math.sqrt(S.variance(a) * S.variance(b)) : 0;
+          C[i][j] = C[j][i] = fin(c) ? c : 0;
+        }
+      }
+      const fixed = S.nearestCorr(C);
+      psdFixed = fixed.fixed;
+      Sigma = fixed.R.map((row, i) => row.map((c, j) => c * sd[i] * sd[j]));
     }
     const vol = Sigma.map((r, i) => Math.sqrt(r[i]));
     assets.forEach((a, i) => {
@@ -64,16 +112,20 @@
       a.treynor = Math.abs(a.beta) > 1e-9 ? (mu[i] - rf) / a.beta : NaN;
       a.jensen = mu[i] - (rf + a.beta * (Em - rf));
     });
+    const sortedCounts = counts.slice().sort((a, b) => a - b);
+    const Teff = pairwise ? sortedCounts[Math.floor(n / 2)] : Tc;
 
     return {
       names: datos.names,
       marketName: datos.marketName,
       dates: datos.dates,
-      returns: datos.returns,
-      market: rm,
+      // Serie histórica del portafolio: solo periodos con todos los activos
+      returns: returnsC,
+      market: marketC,
       f,
-      T,
-      years: T / f,
+      T: Tc,
+      Teff,
+      years: Teff / f,
       rf,
       rfp,
       mu,
@@ -86,7 +138,8 @@
       mktVol,
       mktSharpe: (Em - rf) / mktVol,
       settings: ajustes,
-      singular: T <= n,
+      singular: !pairwise && ajustes.covModel !== 'index' && Tc <= n,
+      info: { pairwise, common: Tc, counts, marketCount: rmOwn.length, minOverlap, psdFixed, total: Tall },
     };
   }
 
@@ -106,8 +159,9 @@
     const riskContrib = w.map((x, i) => (vol > 0 ? (x * Sw[i]) / (vol * vol) : 0));
     // Serie histórica (rebalanceo cada periodo) y regresión de Jensen ex post
     const series = m.market.map((_, t) => w.reduce((s, x, i) => s + x * m.returns[i][t], 0));
-    const reg = S.regress(series.map((r) => r - m.rfp), m.market.map((r) => r - m.rfp));
-    const histRet = S.mean(series) * m.f;
+    const enough = series.length >= 6;
+    const reg = enough ? S.regress(series.map((r) => r - m.rfp), m.market.map((r) => r - m.rfp)) : { alpha: NaN, tAlpha: NaN, r2: NaN };
+    const histRet = enough ? S.mean(series) * m.f : NaN;
     // Error típico de la media anual estimada con T periodos
     const seRet = vol / Math.sqrt(m.years);
     return {

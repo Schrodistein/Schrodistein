@@ -62,9 +62,12 @@
       wmin: (val('wmin') ?? 0) / 100,
       wmax: (val('wmax') ?? 100) / 100,
       capital: val('capital') ?? 0,
+      retType: $('rettype').value,
+      agg: $('agg').value,
+      history: $('history').value,
     };
   }
-  const SETTING_IDS = ['kind', 'freq', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'currency', 'tol'];
+  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'currency', 'tol'];
 
   function showBanner(msg, kind) {
     const b = $('banner');
@@ -102,7 +105,7 @@
     const p = st.parsed;
     const warnings = [];
     try {
-      const R = PF.data.toReturns(p.values, s.kind);
+      const R = PF.data.toReturns(p.values, s.kind, s.retType === 'log');
       const mi = s.market;
       const names = p.names.filter((_, i) => i !== mi);
       const n = names.length;
@@ -110,12 +113,22 @@
         warnings.push(`Con ${n} activos un peso máximo de ${nf1(s.wmax * 100)} % no alcanza para sumar 100 %; se usa ${nf1(100 / n)} %, que obliga a pesos iguales. Sube el peso máximo o agrega activos.`);
         s.wmax = 1 / n;
       }
+      else if (s.wmax * n < 1 + 1e-6 && s.wmin <= 0) {
+        warnings.push(`Con ${n} activos y un peso máximo de ${nf1(s.wmax * 100)} %, todos los portafolios quedan en pesos iguales (1/N) y la frontera se reduce a un punto. Sube el peso máximo en Datos (por ejemplo a ${nf1(Math.min(100, Math.ceil((150 / n) / 5) * 5))} %) o agrega más acciones.`);
+      }
       if (s.wmin * n > 1 + 1e-9) throw new Error(`Con ${n} activos el peso mínimo no puede pasar de ${nf1(100 / n)} %.`);
       if (s.wmin > s.wmax) throw new Error('El peso mínimo es mayor que el máximo.');
       const datos = { names, returns: R.filter((_, i) => i !== mi), market: R[mi], marketName: p.names[mi], dates: p.dates };
-      const m = PF.model.build(datos, { freq: s.freq, rf: s.rf, muModel: s.muModel, covModel: s.covModel, marketReturn: s.marketReturn });
-      if (m.singular && s.covModel === 'sample') warnings.push('Hay menos periodos que activos: la covarianza muestral es singular. Elige el modelo de índice único de Sharpe.');
-      else if (m.T < 36) warnings.push(`Solo hay ${m.T} periodos. Con menos de 36 las estimaciones son muy inestables.`);
+      const m = PF.model.build(datos, { freq: s.freq, rf: s.rf, muModel: s.muModel, covModel: s.covModel, marketReturn: s.marketReturn, history: s.history });
+      if (!PF.data.isMarketName(p.names[mi])) warnings.push(`No se encontró un índice de mercado (COLCAP o ICOLCAP) entre los datos; se está usando «${p.names[mi]}» como mercado, así que las β, Treynor y Jensen no son las del mercado. Sube también el histórico del índice MSCI COLCAP o del ETF ICOLCAP, o elige el índice en «Índice de mercado».`);
+      if (st.lagNote && st.series && $('csv').value === st.mergedText) warnings.push(st.lagNote);
+      const inf = m.info;
+      if (m.singular) warnings.push('Hay menos periodos comunes que activos: la covarianza muestral es singular. Elige «Toda la historia de cada activo» o el modelo de índice único de Sharpe.');
+      else if (inf.pairwise) {
+        const short = names.map((nm, i) => [nm, inf.counts[i]]).filter((x) => x[1] < 0.8 * Math.max(...inf.counts));
+        if (short.length) warnings.push(`Historias de distinta longitud: ${short.map((x) => `${x[0]} (${x[1]} periodos)`).join(', ')} frente a ${Math.max(...inf.counts)} del activo más largo. Cada activo usa toda su historia y cada correlación, las fechas que comparten los dos.${inf.psdFixed ? ' La matriz de correlación se ajustó para que fuera válida.' : ''}`);
+        if (m.Teff < 36) warnings.push(`La mayoría de los activos tiene ${m.Teff} periodos; con menos de 36 las estimaciones son inestables.`);
+      } else if (m.T < 36) warnings.push(`Solo hay ${m.T} periodos en que todos los activos tienen dato. Con menos de 36 las estimaciones son muy inestables.`);
       const P = PF.model.portfolios(m, s.wmin, s.wmax);
       warnings.push(...P.warnings);
       st.model = m;
@@ -138,6 +151,7 @@
       renderEmpty();
     }
   }
+  const nf2 = (x) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
   const nf1 = (x) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(x);
   function equalRounded(n) {
     const w = new Array(n).fill(Math.floor(1000 / n) / 1000);
@@ -220,21 +234,30 @@
       } catch (e) {
         throw new Error(`«${f.name}» no se pudo abrir como Excel (${e.message}).`);
       }
-      const out = [];
+      const prices = [];
+      const rets = [];
       let lastErr = null;
       for (const name of wb.SheetNames) {
         const rows = X.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: '' });
         try {
-          out.push(...PF.data.seriesFromRows(rows, f.name));
+          const r = PF.data.readRows(rows, f.name);
+          (r.returnsLike ? rets : prices).push(...r.series);
         } catch (e) {
           lastErr = e;
         }
       }
-      if (!out.length) throw lastErr || new Error(`«${f.name}» no tiene hojas con fechas y precios.`);
-      return { series: out };
+      // Un libro con hojas de precios y de rendimientos: se usan los precios
+      if (prices.length) return { series: prices };
+      if (rets.length) throw new Error(`«${f.name}» solo tiene rendimientos, no precios. Sube la hoja de precios o los CSV que descarga la BVC.`);
+      throw lastErr || new Error(`«${f.name}» no tiene hojas con fechas y precios.`);
     }
     const text = decodeText(buf);
-    if (PF.data.isSingleAsset(text)) return { series: PF.data.parseSeriesText(text, f.name) };
+    try {
+      const r = PF.data.readText(text, f.name);
+      if (!r.returnsLike) return { series: r.series };
+    } catch (e) {
+      /* sin columna de fecha: se trata como tabla */
+    }
     return { table: text, name: f.name };
   }
 
@@ -271,17 +294,44 @@
       return;
     }
     st.series = combined;
-    if (mergeLoaded(false)) status(`Listo: ${combined.length} activos cargados de ${files.length - errors.length} archivos.${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
+    const plan = suggestSettings(combined);
+    if (mergeLoaded(false)) status(`Listo: ${combined.length} activos cargados de ${files.length - errors.length} archivos. ${plan}${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
+  }
+
+  /* Frecuencia y agregación sugeridas para historiales recién cargados.
+   * Diarios bien fechados: semanal con último cierre (más observaciones que mensual y menos
+   * sesgo por acciones que no negocian todos los días). Si hay series desfasadas: mensual
+   * con promedio del periodo, que amortigua el desfase. */
+  function suggestSettings(list) {
+    const dates = [...new Set(list.flatMap((x) => x.dates))].sort();
+    const gaps = dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(dates[i])) / 864e5).sort((a, b) => a - b);
+    const daily = gaps.length && gaps[Math.floor(gaps.length / 2)] <= 4;
+    if (!daily) return '';
+    if (PF.data.detectLags(list).length) {
+      $('freq').value = 'mensual';
+      $('agg').value = 'avg';
+      return 'Se detectaron series desfasadas: se usa frecuencia mensual con el promedio de cada mes.';
+    }
+    $('freq').value = 'semanal';
+    $('agg').value = 'last';
+    return 'Datos diarios: se usa frecuencia semanal con el último cierre de cada semana. Puedes cambiarla en Supuestos (la diaria usa 242 días hábiles al año).';
   }
 
   function mergeLoaded(keepMarket) {
     try {
       const freq = $('freq').value;
-      const merged = PF.data.mergeSeries(st.series, freq);
+      const merged = PF.data.mergeSeries(st.series, freq, { agg: $('agg').value });
       const text = PF.data.toCSV(merged);
       st.mergedText = text;
-      const lostMax = Math.max(...merged.lost);
-      st.mergeNote = `Se unieron ${st.series.length} activos (${st.series.map((x) => `${x.name}: «${x.column}»${x.parts > 1 ? `, ${x.parts} archivos` : ''}, ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}).${lostMax > 0 ? ` Se descartaron periodos que no estaban en todos los archivos (hasta ${lostMax} en uno).` : ''}`;
+      const lags = PF.data.detectLags(st.series);
+      st.lagNote = lags.length
+        ? `Posible desfase de fechas: ${lags.map((l) => `${l.name} se parece más a las demás series corrida ${Math.abs(l.lag)} días ${l.lag < 0 ? 'hacia atrás' : 'hacia adelante'} (correlación ${nf2(l.corr)} frente a ${nf2(l.corr0)} en su fecha)`).join('; ')}. Suele pasar cuando se pegan columnas junto a una sola columna de fechas. Revisa esos datos o usa frecuencia mensual con promedio del periodo, que reduce el efecto.`
+        : '';
+      const noTrade = st.series.reduce((q, x) => q + (x.noTrade || 0), 0);
+      st.mergeNote = `Se unieron ${st.series.length} activos (${st.series.map((x) => `${x.name}: «${x.column}»${x.parts > 1 ? `, ${x.parts} archivos` : ''}, ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}).` +
+        ` ${merged.dates.length} periodos; ${merged.common} con todos los activos.` +
+        (merged.holidays.length ? ` Se quitaron ${merged.holidays.length} días en que casi ningún precio cambió (festivos).` : '') +
+        (noTrade ? ` Se omitieron ${noTrade} días sin negociación (precio de referencia sin cantidad negociada).` : '');
       $('csv').value = text;
       $('kind').value = 'prices';
       st.userNames = null;
@@ -299,7 +349,7 @@
     const text = $('csv').value;
     if (text === st.mergedText || !PF.data.isSingleAsset(text)) return false;
     try {
-      const combined = PF.data.combineSeries(PF.data.parseSeriesText(text, 'Activo'));
+      const combined = PF.data.combineSeries(PF.data.readText(text, 'Activo').series);
       if (combined.length < 2) {
         status('El texto pegado tiene el historial de un solo activo. Pega una tabla con la columna de nemotécnico que incluya todas tus acciones y el índice.', 'bad');
         return true;
@@ -408,7 +458,7 @@
         ${tile('VaR 95 % anual', pct(e.var95), 'pérdida que se supera 1 año de cada 20')}
       </div>
       <div class="port-body">
-        <div style="display:grid;gap:8px;min-width:0">
+        <div style="display:grid;gap:8px;min-width:0;align-content:start">
           <h2>Composición</h2>
           <div class="legend"><span><i class="sq" style="background:var(--s1)"></i>Peso</span><span><i class="sq" style="background:var(--s2)"></i>Contribución al riesgo</span></div>
           <div class="chart-box" id="chart-weights"></div>
@@ -668,6 +718,10 @@
     }, 0));
     const recompute = debounce(compute, 250);
     for (const id of ['kind', 'market', 'mumodel', 'covmodel']) $(id).addEventListener('change', compute);
+    $('agg').addEventListener('change', () => {
+      if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
+    });
+    for (const id of ['rettype', 'history']) $(id).addEventListener('change', compute);
     $('freq').addEventListener('change', () => {
       // Con historiales diarios subidos, se reagrupan a la nueva frecuencia.
       if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);

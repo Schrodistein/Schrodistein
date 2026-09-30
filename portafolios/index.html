@@ -60,7 +60,13 @@
           <label class="field" for="kind"><span>Los datos son</span>
             <select id="kind"><option value="prices">Precios</option><option value="returns">Rendimientos por periodo</option></select></label>
           <label class="field" for="freq"><span>Frecuencia</span>
-            <select id="freq"><option value="diaria">Diaria (252 al año)</option><option value="semanal">Semanal (52)</option><option value="mensual" selected>Mensual (12)</option><option value="trimestral">Trimestral (4)</option><option value="anual">Anual (1)</option></select></label>
+            <select id="freq"><option value="diaria">Diaria (242 días hábiles al año)</option><option value="semanal">Semanal (52)</option><option value="mensual" selected>Mensual (12)</option><option value="trimestral">Trimestral (4)</option><option value="anual">Anual (1)</option></select></label>
+          <label class="field" for="agg"><span>Precio de cada periodo</span>
+            <select id="agg"><option value="last" selected>Último cierre del periodo</option><option value="avg">Promedio del periodo (fechas desfasadas)</option></select></label>
+          <label class="field" for="rettype"><span>Rendimientos</span>
+            <select id="rettype"><option value="log" selected>Logarítmicos: ln(Pt / Pt−1)</option><option value="simple">Simples: Pt / Pt−1 − 1</option></select></label>
+          <label class="field" for="history"><span>Activos con fechas distintas</span>
+            <select id="history"><option value="all" selected>Toda la historia de cada activo</option><option value="common">Solo periodos comunes a todos</option></select></label>
           <label class="field" for="market"><span>Índice de mercado (portafolio de mercado)</span>
             <select id="market"></select></label>
           <label class="field" for="rf"><span>Tasa libre de riesgo anual (%)</span>

@@ -68,12 +68,14 @@ const shots = process.argv[3];
     if (market !== 'MSCI COLCAP') errors.push('archivos: índice detectado ' + market);
     const rows = await page.$$eval('#assets-table tbody tr', (r) => r.length);
     if (rows !== 5) errors.push('archivos: filas de activos ' + rows);
+    // Datos diarios bien fechados: la app sugiere frecuencia semanal
+    const freq = await page.$eval('#freq', (x) => x.value);
+    const weeks = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
+    if (freq !== 'semanal' || weeks < 250) errors.push(`archivos: frecuencia ${freq}, semanas unidas ${weeks}`);
+    await page.selectOption('#freq', 'mensual');
+    await page.waitForTimeout(300);
     const periods = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
     if (periods !== 60) errors.push('archivos: meses unidos ' + periods);
-    await page.selectOption('#freq', 'semanal');
-    await page.waitForTimeout(300);
-    const weeks = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (weeks < 250) errors.push('archivos: semanas unidas ' + weeks);
     if (shots) await page.screenshot({ path: `${shots}/archivos-datos.png`, fullPage: true });
     await page.close();
   }
@@ -121,6 +123,8 @@ const shots = process.argv[3];
     if (!/ECOPETROL: «Precio de cierre», 6 archivos/.test(meta)) errors.push('bvc: tramos no unidos: ' + meta);
     const market = await page.$eval('#market', (s) => s.value);
     if (market !== 'COLCAP') errors.push('bvc: índice detectado ' + market);
+    await page.selectOption('#freq', 'mensual');
+    await page.waitForTimeout(300);
     const months = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
     if (months !== 36) errors.push('bvc: meses unidos ' + months);
     if (shots) await page.screenshot({ path: `${shots}/bvc-datos.png`, fullPage: true });

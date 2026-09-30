@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -413,6 +413,60 @@ test('precio de compra: cierre del día, o el último cierre anterior', () => {
   assert(PF.data.priceOn(dates, prices, '2026-01-01').error);
   assert(PF.data.priceOn(dates, prices, '').error);
   assert(PF.data.priceOn(['2024-01', '2024-02'], [5, 6], '2024-02-15').price === 6);
+});
+
+
+test('plan de compra: acciones enteras, nunca pasa del presupuesto, descarta lo que no alcanza', () => {
+  const items = [{ name: 'A', w: 0.5, price: 2715 }, { name: 'B', w: 0.3, price: 48400 }, { name: 'C', w: 0.2, price: 91840 }];
+  const p = PF.plan.integerPlan(items, 1e6, 15000);
+  assert(p.k === 3 && p.buyFees === 45000 && p.sellFees === 45000);
+  assert(p.rows.every((r) => Number.isInteger(r.shares) && r.shares > 0));
+  assert(p.invested + p.buyFees + p.cash === 1e6 && p.cash >= 0 && p.cash < 48400, 'sobrante ' + p.cash);
+  const small = PF.plan.integerPlan(items, 100000, 15000);
+  assert(small.k === 1 && small.rows[0].name === 'A', 'con $100.000 solo alcanza para A: ' + JSON.stringify(small.rows));
+  const none = PF.plan.integerPlan(items, 10000, 15000);
+  assert(!none.rows.length && none.error);
+});
+
+test('plan recomendado: con poco presupuesto las comisiones llevan a menos activos', () => {
+  const m = sampleModel();
+  const P = PF.model.portfolios(m, 0, 0.3);
+  const prices = m.names.map((_, i) => [3000, 20000, 9000, 1500, 60000, 4000, 25000, 12000, 100, 180000][i]);
+  const big = PF.plan.recommend(m, P.tangency.w, prices, 5e8, 15000, { hi: 0.3 });
+  const small = PF.plan.recommend(m, P.tangency.w, prices, 1.5e6, 15000, { hi: 0.3 });
+  assert(big.best.plan.k >= small.best.plan.k && small.best.plan.k < big.full.plan.k, `${big.best.plan.k} vs ${small.best.plan.k}`);
+  const ev = small.best.ev;
+  const pl = small.best.plan;
+  assert(near(ev.netRet, (pl.invested * ev.e.ret - pl.buyFees - pl.sellFees) / pl.budget, 1e-12));
+  assert(near(ev.breakEven, (pl.buyFees + pl.sellFees) / pl.invested, 1e-12));
+  assert(small.tries.every((t) => !t.ev || t.ev.netSharpe <= small.best.ev.netSharpe + 1e-12), 'elige el mejor Sharpe neto');
+});
+
+test('xlsx: ZIP válido con CRC32 correcto y las partes de Office Open', () => {
+  assert(PF.xlsx.crc32(new TextEncoder().encode('123456789')) === 0xcbf43926);
+  assert(PF.xlsx.colName(0) === 'A' && PF.xlsx.colName(25) === 'Z' && PF.xlsx.colName(26) === 'AA' && PF.xlsx.colName(701) === 'ZZ');
+  const bytes = PF.xlsx.build([{ name: 'Hoja', rows: [['texto & <signos>', 1.5, { f: 'B1*2', v: 3, s: 'num4' }, { f: 'IF(1>2,1,"")', v: '' }]], freeze: { row: 1 } }]);
+  assert(bytes[0] === 0x50 && bytes[1] === 0x4b);
+  const txt = new TextDecoder('latin1').decode(bytes);
+  for (const part of ['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet1.xml']) assert(txt.includes(part), part);
+  assert(txt.includes('<f>B1*2</f><v>3</v>') && txt.includes('texto &amp; &lt;signos&gt;') && txt.includes('fullCalcOnLoad'));
+});
+
+test('libro de cálculos: hojas, fórmulas y resultados iguales a los de la app', () => {
+  const m = sampleModel({ muModel: 'mix' });
+  const P = PF.model.portfolios(m, 0, 0.3);
+  const table = PF.data.parseCSV(PF.sample.csv());
+  const rep = PF.report.build({ m, P, table, marketIdx: PF.data.guessMarket(table.names), s: { freq: 'mensual', retType: 'simple', agg: 'last', history: 'all', muModel: 'mix', covModel: 'sample', wmin: 0, wmax: 0.3 } });
+  const names = rep.sheets.map((x) => x.name).join();
+  assert(names === 'Resumen,Precios,Rendimientos,Estadisticas,Desviaciones,Covarianza,Correlacion,Portafolios,Frontera,Formulas', names);
+  const cells = (sheet) => rep.sheets.find((x) => x.name === sheet).rows.flat().filter((c) => c && c.f);
+  assert(cells('Estadisticas').some((c) => /^SLOPE\(Rendimientos!\$C\$3:\$C\$62,Rendimientos!\$B\$3:\$B\$62\)$/.test(c.f)), 'beta con PENDIENTE');
+  assert(cells('Covarianza').some((c) => /CORREL|Correlacion!/.test(c.f)));
+  const port = rep.sheets.find((x) => x.name === 'Portafolios').rows;
+  const eRow = port.find((r) => r && r[0] === 'Rendimiento esperado E(Rp)');
+  assert(eRow && near(eRow[1].v, P.tangency.ret, 1e-12) && /^SUMPRODUCT/.test(eRow[1].f));
+  const bytes = rep.bytes();
+  assert(bytes.length > 50000 && bytes[0] === 0x50);
 });
 
 

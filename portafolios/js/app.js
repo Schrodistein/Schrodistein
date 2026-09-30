@@ -62,12 +62,13 @@
       wmin: (val('wmin') ?? 0) / 100,
       wmax: (val('wmax') ?? 100) / 100,
       capital: val('capital') ?? 0,
+      fee: Math.max(0, val('fee') ?? 0),
       retType: $('rettype').value,
       agg: $('agg').value,
       history: $('history').value,
     };
   }
-  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'currency', 'tol'];
+  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'fee', 'currency', 'tol'];
 
   function showBanner(msg, kind) {
     const b = $('banner');
@@ -304,6 +305,18 @@
    * sesgo por acciones que no negocian todos los días). Si hay series desfasadas: mensual
    * con promedio del periodo, que amortigua el desfase. */
   function suggestSettings(list) {
+    const capNote = suggestCap(list.length - 1);
+    return (suggestFreq(list) + ' ' + capNote).trim();
+  }
+  /* Peso máximo que deja optimizar: con n activos, al menos 1,5 / n (redondeado a 5 %). */
+  function suggestCap(n) {
+    const wmax = (val('wmax') ?? 100) / 100;
+    if (n < 2 || n * wmax >= 1.5) return '';
+    const cap = Math.min(100, Math.ceil(150 / n / 5) * 5);
+    $('wmax').value = cap;
+    return `Con ${n} activos el peso máximo por activo pasa a ${cap} % para que el portafolio se pueda optimizar sin dejar de diversificar.`;
+  }
+  function suggestFreq(list) {
     const dates = [...new Set(list.flatMap((x) => x.dates))].sort();
     const gaps = dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(dates[i])) / 864e5).sort((a, b) => a - b);
     const daily = gaps.length && gaps[Math.floor(gaps.length / 2)] <= 4;
@@ -383,6 +396,7 @@
     renderTB();
     if (st.mode === 'acciones') computeBuys();
     renderConfirm();
+    renderPlan();
     renderCharts();
   }
 
@@ -553,7 +567,7 @@
     if (!$('buy-date').value) {
       const sers = st.userNames.map(priceSeries).filter((x) => x.dates.length);
       const last = sers.map((x) => x.dates.at(-1)).sort()[0];
-      if (last && /^\d{4}-\d{2}-\d{2}$/.test(last)) $('buy-date').value = last;
+      if (last && /^\d{4}-\d{2}(-\d{2})?$/.test(last)) $('buy-date').value = last.length === 7 ? last + '-01' : last;
     }
     $('buys').innerHTML = st.userNames
       .map((n, i) => {
@@ -582,6 +596,9 @@
     });
     const total = rows.reduce((q, r) => q + r.amount, 0);
     const value = rows.reduce((q, r) => q + r.value, 0);
+    const fee = st.s ? st.s.fee : 0;
+    const nBuys = rows.filter((r) => r.ok && r.qty > 0).length;
+    const buyFees = nBuys * fee;
     st.buyTotal = total;
     rows.forEach((r) => {
       const el = $('bn-' + r.i);
@@ -593,7 +610,7 @@
           ? r.hit.error
           : `Cierre del ${r.hit.date}${r.hit.exact ? '' : r.hit.after ? ' (último dato disponible)' : ' (ese día no hubo negociación)'}: ${money(r.hit.price)} × ${r.qty} = ${money(r.amount)}`;
     });
-    $('buy-sum').textContent = total > 0 ? `Total invertido: ${money(total)}` : '';
+    $('buy-sum').textContent = total > 0 ? `Total invertido: ${money(total)}${buyFees ? ` + comisiones ${money(buyFees)} = ${money(total + buyFees)}` : ''}` : '';
     const has = rows.filter((r) => r.ok);
     $('buy-detail').hidden = !has.length;
     if (has.length) {
@@ -601,12 +618,17 @@
       $('buy-table').innerHTML =
         '<thead><tr><th>Activo</th><th class="n">Acciones</th><th>Fecha de compra</th><th>Cierre usado</th><th class="n">Precio de compra</th><th class="n">Invertido</th><th class="n">Peso</th><th>Último cierre</th><th class="n">Precio</th><th class="n">Valor hoy</th><th class="n">Ganancia</th></tr></thead><tbody>' +
         has.map((r) => `<tr><td>${esc(r.n)}</td><td class="n">${r.qty.toLocaleString('es-CO')}</td><td>${esc(r.date)}</td><td>${esc(r.hit.date)}${r.hit.exact ? '' : ' *'}</td><td class="n">${money(r.hit.price)}</td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.amount / total)}</td><td>${esc(r.lastD)}</td><td class="n">${money(r.lastP)}</td><td class="n">${money(r.value)}</td><td class="n ${r.value >= r.amount ? 'pos' : 'neg'}">${pctc(r.value / r.amount - 1)}</td></tr>`).join('') +
-        `<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(total)}</td><td class="n">${pct(1)}</td><td></td><td></td><td class="n">${money(value)}</td><td class="n ${value >= total ? 'pos' : 'neg'}">${pctc(value / total - 1)}</td></tr></tbody>`;
+        `<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(total)}</td><td class="n">${pct(1)}</td><td></td><td></td><td class="n">${money(value)}</td><td class="n ${value >= total ? 'pos' : 'neg'}">${pctc(value / total - 1)}</td></tr>` +
+        (fee
+          ? `<tr><td colspan="5">Comisiones de compra (${nBuys} × ${money(fee)})</td><td class="n">${money(buyFees)}</td><td colspan="3"></td><td class="n">Si vendes hoy: −${money(buyFees)}</td><td></td></tr>` +
+            `<tr class="hl"><td colspan="5"><b>Costo total con comisiones</b></td><td class="n"><b>${money(total + buyFees)}</b></td><td colspan="3"><b>Neto si vendes hoy (menos comisiones de compra y venta)</b></td><td class="n"><b>${money(value - buyFees)}</b></td><td class="n ${value - buyFees >= total + buyFees ? 'pos' : 'neg'}"><b>${pctc((value - buyFees) / (total + buyFees) - 1)}</b></td></tr>`
+          : '') +
+        '</tbody>';
       const notes = [];
       if (has.some((r) => !r.hit.exact && !r.hit.after)) notes.push('* Ese día no hubo negociación del activo; se usó el último cierre anterior.');
       if (has.some((r) => r.hit.after)) notes.push('Alguna fecha es posterior al último dato cargado; se usó el último cierre disponible.');
       if (has.some((r) => !priceSeries(r.n).daily)) notes.push('Los precios salen de la tabla agrupada por periodo; para el cierre exacto de un día, carga los CSV diarios de la BVC.');
-      notes.push('La ganancia no incluye dividendos ni comisiones. Los pesos del portafolio salen del monto invertido en cada activo.');
+      notes.push(`La ganancia por activo no incluye dividendos ni comisiones; la fila «Neto si vendes hoy» descuenta ${fee ? `${money(fee)} por cada compra y cada venta` : 'las comisiones (hoy en $0; cámbialas en Datos)'}. Los pesos del portafolio salen del monto invertido en cada activo.`);
       $('buy-notes').textContent = notes.join(' ');
     }
     if (total > 0) st.userW = rows.map((r) => r.amount / total);
@@ -630,6 +652,176 @@
     }
     renderConfirm();
     renderCharts();
+  }
+
+  /* ---------- Plan de compra ---------- */
+  function lastPrices() {
+    return st.model.names.map((n) => {
+      const s = priceSeries(n);
+      return { price: s.prices.at(-1), date: s.dates.at(-1) };
+    });
+  }
+
+  function renderPlan() {
+    const m = st.model;
+    if (!m) return;
+    if (document.activeElement !== $('plan-budget')) $('plan-budget').value = st.s.capital;
+    if (document.activeElement !== $('plan-fee')) $('plan-fee').value = st.s.fee;
+    const key = $('plan-base').value;
+    const base = st.P[key] || rec();
+    const lp = lastPrices();
+    const res = PF.plan.recommend(m, base.w, lp.map((x) => x.price), st.s.capital, st.s.fee, { optimizeK: $('plan-optk').checked && key === 'tangency', hi: st.s.wmax });
+    const best = res.best;
+    const plan = best.plan;
+    st.plan = null;
+    if (!plan.rows.length) {
+      $('plan-out').innerHTML = `<h2>Sin plan</h2><p>${esc(plan.error || 'El presupuesto no alcanza para comprar acciones con estas comisiones.')}</p>`;
+      $('plan-alt').innerHTML = '';
+      return;
+    }
+    plan.rows.forEach((r) => (r.date = lp[m.names.indexOf(r.name)].date));
+    const ev = best.ev;
+    st.plan = { plan, ev, label: best.label };
+    const names = plan.rows.map((r) => r.name);
+    const changed = best !== res.full && res.full.plan.k !== plan.k;
+    const fullNote = changed && res.full.ev
+      ? `<p class="hint">Con ${money(plan.budget)} y ${money(plan.fee)} por operación conviene comprar ${plan.k} ${plan.k === 1 ? 'activo' : 'activos'} en lugar de ${res.full.plan.k}: la razón de Sharpe neta sube de ${num(res.full.ev.netSharpe)} a ${num(ev.netSharpe)}. Desmarca la casilla de arriba para ver el plan con todos los activos.</p>`
+      : '';
+    const dates = [...new Set(plan.rows.map((r) => r.date))];
+    $('plan-out').innerHTML = `
+      <p class="plan-lead">Compra <b>${plan.rows.map((r) => `${r.shares.toLocaleString('es-CO')} ${esc(r.name)}`).join(', ')}</b>, por ${money(plan.invested)} más ${money(plan.buyFees)} de comisiones.</p>
+      <div class="tiles">
+        ${tile('Invertido en acciones', money(plan.invested), `${plan.k} ${plan.k === 1 ? 'activo' : 'activos'}`)}
+        ${tile('Comisiones de compra', money(plan.buyFees), `${plan.k} × ${money(plan.fee)}`)}
+        ${tile('Comisiones de venta (futuras)', money(plan.sellFees), 'al vender todo')}
+        ${tile('Efectivo sin invertir', money(plan.cash), 'no alcanza para otra acción')}
+        ${tile('Rendimiento esperado del portafolio', pct(ev.e.ret), 'anual, antes de comisiones')}
+        ${tile('Rendimiento neto sobre el presupuesto', pct(ev.netRet), 'descontando compra y venta')}
+        ${tile('Ganancia esperada neta', money(ev.netGain), 'en un año')}
+        ${tile('Mínimo para cubrir comisiones', pct(ev.breakEven), 'de rendimiento sobre lo invertido')}
+      </div>
+      <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso objetivo</th><th class="n">Último cierre</th><th>Fecha</th><th class="n">Acciones</th><th class="n">Monto</th><th class="n">Peso real</th><th class="n">Comisión de compra</th></tr></thead><tbody>
+        ${plan.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${pct(r.w)}</td><td class="n">${money(r.price)}</td><td>${esc(r.date || '')}</td><td class="n"><b>${r.shares.toLocaleString('es-CO')}</b></td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.realW)}</td><td class="n">${money(plan.fee)}</td></tr>`).join('')}
+        <tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(plan.invested)}</td><td class="n">${pct(1)}</td><td class="n">${money(plan.buyFees)}</td></tr>
+      </tbody></table></div>
+      ${fullNote}
+      <p class="hint">Precios: último cierre de los datos cargados (${esc(dates.join(', '))}); el precio al comprar será distinto. El portafolio se calcula solo con los ${m.names.length} activos cargados (${esc(m.names.join(', '))}) y ${esc(m.marketName)} como índice de referencia. ${names.length < m.names.length ? `Quedan fuera: ${esc(m.names.filter((n) => !names.includes(n)).join(', '))}.` : ''}</p>
+      <div class="row-btns"><button type="button" class="btn btn-primary" id="plan-register">Registrar esta compra en Confirmar</button></div>`;
+    const tries = res.tries.filter((t) => t.ev);
+    $('plan-alt-box').hidden = tries.length < 2;
+    $('plan-alt').innerHTML =
+      '<thead><tr><th>Alternativa</th><th class="n">Activos</th><th>Composición</th><th class="n">Invertido</th><th class="n">Comisiones (compra + venta)</th><th class="n">E(R) bruto</th><th class="n">Rendimiento neto</th><th class="n">Sharpe neto</th></tr></thead><tbody>' +
+      tries
+        .map((t) => `<tr${t === best ? ' class="hl"' : ''}><td>${esc(t.label)}${t === best ? ' (elegida)' : ''}</td><td class="n">${t.plan.k}</td><td>${esc(t.plan.rows.map((r) => `${r.name} ${pct(r.realW, 0)}`).join(', '))}</td><td class="n">${money(t.plan.invested)}</td><td class="n">${money(t.plan.buyFees + t.plan.sellFees)}</td><td class="n">${pct(t.ev.e.ret)}</td><td class="n">${pct(t.ev.netRet)}</td><td class="n">${num(t.ev.netSharpe)}</td></tr>`)
+        .join('') +
+      '</tbody>';
+  }
+
+  function registerPlan() {
+    if (!st.plan) return;
+    st.buys = {};
+    // Datos mensuales («AAAA-MM»): el campo de fecha necesita un día; se usa el 1.
+    const day = (d) => (/^\d{4}-\d{2}$/.test(d || '') ? d + '-01' : d);
+    for (const r of st.plan.plan.rows) st.buys[r.name] = { qty: String(r.shares), date: day(r.date) };
+    store.set('buys', st.buys);
+    renderBuyInputs();
+    setMode('acciones');
+    go('confirmar');
+  }
+
+  /* ---------- Descargas ---------- */
+  function download(data, name, mime) {
+    const blob = new Blob([data], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      a.remove();
+    }, 2000);
+  }
+  function dlStatus(msg, kind) {
+    const el = $('dl-status');
+    el.hidden = !msg;
+    el.className = 'status' + (kind ? ' ' + kind : '');
+    el.textContent = msg || '';
+  }
+  const stamp = () => new Date().toISOString().slice(0, 10);
+  const csvNum = (x) => (Number.isFinite(x) ? String(+x.toPrecision(12)).replace('.', ',') : '');
+  const csvTxt = (x) => (/[;"\n]/.test(String(x)) ? '"' + String(x).replace(/"/g, '""') + '"' : String(x));
+  function csv(rows) {
+    return '﻿' + rows.map((r) => r.map((c) => (typeof c === 'number' ? csvNum(c) : csvTxt(c == null ? '' : c))).join(';')).join('\r\n');
+  }
+
+  function reportContext() {
+    const m = st.model;
+    const extra = [];
+    if (st.conf && st.userW && st.userW.some((x) => x > 0)) {
+      const sum = st.userW.reduce((a, b) => a + b, 0);
+      extra.push({ label: st.mode === 'acciones' ? 'Tu portafolio (acciones compradas)' : 'Tu portafolio (pesos escritos)', w: st.userW.map((x) => x / sum) });
+    }
+    if (st.plan) extra.push({ label: `Plan de compra (${st.plan.plan.k} activos, pesos reales)`, w: st.plan.ev.w });
+    return { m, P: st.P, table: st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
+  }
+
+  function doDownload(kind) {
+    if (!st.model) return dlStatus('Primero carga datos en la sección Datos.', 'bad');
+    const m = st.model;
+    try {
+      if (kind === 'xlsx') {
+        if (st.s.kind !== 'prices') return dlStatus('El libro de Excel necesita precios; en Datos, los datos cargados son rendimientos.', 'bad');
+        const rep = PF.report.build(reportContext());
+        download(rep.bytes(), `frontera-eficiente-calculos-${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        return dlStatus(`Libro generado con ${rep.sheets.length} hojas: ${rep.sheets.map((x) => x.name).join(', ')}.`, 'ok');
+      }
+      let rows;
+      let name;
+      if (kind === 'cov') {
+        rows = [['Covarianza anual'].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.Sigma[i])));
+        name = 'matriz-covarianzas';
+      } else if (kind === 'corr') {
+        rows = [['Correlación'].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.corr[i])));
+        name = 'matriz-correlacion';
+      } else if (kind === 'ret') {
+        const p = st.parsed;
+        const R = PF.data.toReturns(p.values, st.s.kind, st.s.retType === 'log');
+        rows = [['Fecha'].concat(p.names)].concat(p.dates.slice(st.s.kind === 'prices' ? 1 : 0).map((d, t) => [d].concat(R.map((r) => r[t]))));
+        name = 'rendimientos';
+      } else if (kind === 'stats') {
+        rows = [['Activo', 'Periodos', 'E(R) usado', 'R histórico', 'R CAPM', 'σ', 'β', 'R²', 'Alfa histórico', 't (alfa)', 'Alfa de Jensen', 'Sharpe', 'Treynor', 'Varianza residual']].concat(
+          m.assets.map((a) => [a.name, a.periods, a.expRet, a.histRet, a.capmRet, a.vol, a.beta, a.r2, a.alphaHist, a.tAlpha, a.jensen, a.sharpe, a.treynor, a.residVar]),
+          [[m.marketName + ' (mercado)', m.info.marketCount, m.Em, m.mktHist, m.Em, m.mktVol, 1, 1, 0, '', 0, m.mktSharpe, m.Em - m.rf, 0]]
+        );
+        name = 'estadisticas';
+      } else if (kind === 'ports') {
+        const list = PORTS.filter((p) => st.P[p.key]).map((p) => [p.label, st.P[p.key]]);
+        const ctx = reportContext();
+        for (const x of ctx.extra) list.push([x.label, PF.model.evaluate(m, x.w)]);
+        rows = [['Portafolio', 'E(R)', 'σ', 'β', 'Sharpe', 'Treynor', 'Alfa de Jensen', 'M²', 'N efectivo', 'Razón de diversificación'].concat(m.names)].concat(list.map(([l, e]) => [l, e.ret, e.vol, e.beta, e.sharpe, e.treynor, e.jensen, e.m2, e.effN, e.divRatio].concat(e.w)));
+        name = 'portafolios';
+      } else if (kind === 'plan') {
+        if (!st.plan) return dlStatus('No hay plan de compra: revisa la sección Comprar.', 'bad');
+        const pl = st.plan.plan;
+        rows = [['Activo', 'Peso objetivo', 'Precio', 'Fecha del precio', 'Acciones', 'Monto', 'Peso real', 'Comisión de compra']].concat(pl.rows.map((r) => [r.name, r.w, r.price, r.date || '', r.shares, r.amount, r.realW, pl.fee]), [
+          [],
+          ['Presupuesto', pl.budget],
+          ['Invertido', pl.invested],
+          ['Comisiones de compra', pl.buyFees],
+          ['Comisiones de venta', pl.sellFees],
+          ['Efectivo sin invertir', pl.cash],
+          ['Rendimiento esperado', st.plan.ev.e.ret],
+          ['Rendimiento neto sobre el presupuesto', st.plan.ev.netRet],
+        ]);
+        name = 'plan-de-compra';
+      }
+      download(csv(rows), `${name}-${stamp()}.csv`, 'text/csv;charset=utf-8');
+      dlStatus(`Descargado ${name}.csv.`, 'ok');
+    } catch (e) {
+      dlStatus('No se pudo generar el archivo: ' + e.message, 'bad');
+    }
   }
 
   function renderConfirm() {
@@ -843,7 +1035,7 @@
       store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
       if (st.model) render();
     });
-    for (const id of ['rf', 'em', 'wmin', 'wmax', 'capital']) $(id).addEventListener('input', recompute);
+    for (const id of ['rf', 'em', 'wmin', 'wmax', 'capital', 'fee']) $(id).addEventListener('input', recompute);
     $('tol').addEventListener('input', debounce(() => {
       if (!st.model) return;
       store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
@@ -876,6 +1068,19 @@
       renderConfirm();
       renderCharts();
     }, 300));
+    const planSync = debounce(() => {
+      const b = val('plan-budget');
+      const f = val('plan-fee');
+      if (b != null) $('capital').value = b;
+      if (f != null) $('fee').value = f;
+      compute();
+    }, 350);
+    $('plan-budget').addEventListener('input', planSync);
+    $('plan-fee').addEventListener('input', planSync);
+    $('plan-base').addEventListener('change', renderPlan);
+    $('plan-optk').addEventListener('change', renderPlan);
+    $('plan-out').addEventListener('click', (ev) => ev.target.closest('#plan-register') && registerPlan());
+    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan']) $('dl-' + k).addEventListener('click', () => doDownload(k));
     $('mode-pesos').addEventListener('click', () => setMode('pesos'));
     $('mode-acciones').addEventListener('click', () => setMode('acciones'));
     const buysChanged = debounce(() => {

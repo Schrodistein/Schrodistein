@@ -156,7 +156,10 @@ function openBvc() {
 }
 
 function handleDownloads() {
-  session.defaultSession.on('will-download', (e, item) => {
+  session.defaultSession.on('will-download', (e, item, wc) => {
+    // Solo se importan las descargas de la ventana de la BVC; las demás (el libro de
+    // Excel o los CSV que genera la app) se guardan donde elija el usuario.
+    if (!bvcWin || bvcWin.isDestroyed() || wc !== bvcWin.webContents) return;
     const dir = path.join(app.getPath('userData'), 'descargas');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, `${Date.now()}-${item.getFilename()}`);
@@ -207,7 +210,7 @@ function applyLogin() {
 
 function registerIpc() {
   ipcMain.handle('datos:resumen', () => store.summary());
-  ipcMain.handle('datos:series', () => store.series());
+  ipcMain.handle('datos:series', (e, source) => store.series(source === 'todos' ? 'todos' : 'cargados'));
   ipcMain.handle('datos:noticias', () => store.data.news);
   ipcMain.handle('datos:actualizar', () => runUpdate('manual'));
   ipcMain.handle('datos:importar', async () => {

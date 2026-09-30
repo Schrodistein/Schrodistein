@@ -10,7 +10,7 @@ const shots = process.argv[3];
   const browser = await chromium.launch();
   const errors = [];
   for (const [label, viewport, scheme] of [['movil', { width: 390, height: 844 }, 'light'], ['escritorio', { width: 1280, height: 900 }, 'dark']]) {
-    const page = await browser.newPage({ viewport, colorScheme: scheme });
+    const page = await browser.newPage({ viewport, colorScheme: scheme, acceptDownloads: true });
     page.on('pageerror', (e) => errors.push(label + ': ' + e.message));
     page.on('console', (m) => m.type() === 'error' && !/fonts|Failed to load resource/.test(m.text()) && errors.push(label + ': ' + m.text()));
     await page.goto(url);
@@ -31,6 +31,30 @@ const shots = process.argv[3];
     if (!/No eficiente/.test(v1)) errors.push(`${label}: 1/N debería ser no eficiente (${v1})`);
     if (!/^Eficiente/.test(v2.trim())) errors.push(`${label}: el recomendado debería ser eficiente (${v2})`);
     if (shots) await page.screenshot({ path: `${shots}/${label}-confirmar-rec.png`, fullPage: true });
+    // Plan de compra con comisiones
+    await page.click('#tab-comprar');
+    await page.waitForSelector('#plan-out .plan-lead');
+    const lead = await page.textContent('#plan-out .plan-lead');
+    if (!/^Compra \d/.test(lead.trim())) errors.push(`${label}: plan sin acciones (${lead})`);
+    const tiles = await page.textContent('#plan-out .tiles');
+    if (!/Comisiones de compra/.test(tiles) || !/15\.000/.test(tiles)) errors.push(`${label}: plan sin comisiones de $15.000`);
+    await page.fill('#plan-budget', '300000');
+    await page.waitForTimeout(900);
+    const k = await page.$$eval('#plan-out table tbody tr', (r) => r.length - 1);
+    if (k < 1 || k > 4) errors.push(`${label}: con $300.000 el plan debería tener pocos activos (${k})`);
+    if (shots) await page.screenshot({ path: `${shots}/${label}-comprar.png`, fullPage: true });
+    await page.click('#plan-register');
+    await page.waitForTimeout(500);
+    if (!/Comisiones de compra/.test(await page.textContent('#buy-table'))) errors.push(`${label}: Confirmar sin comisiones`);
+    // Descargas
+    await page.click('#tab-descargas');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dl-xlsx')]);
+    const file = await dl.path();
+    const head = fs.readFileSync(file).subarray(0, 2).toString('latin1');
+    if (head !== 'PK' || !/\.xlsx$/.test(dl.suggestedFilename())) errors.push(`${label}: descarga de Excel inválida`);
+    const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#dl-cov')]);
+    if (!/matriz-covarianzas/.test(dl2.suggestedFilename())) errors.push(`${label}: CSV de covarianzas`);
+    if (shots) await page.screenshot({ path: `${shots}/${label}-descargas.png`, fullPage: true });
     await page.evaluate(() => localStorage.clear());
     await page.close();
   }

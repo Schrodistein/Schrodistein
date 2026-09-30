@@ -99,8 +99,9 @@ test('actualización: precios y noticias con respuestas grabadas; símbolo inexi
   assert(nw.fresh.length === 3, 'noticias nuevas: ' + nw.fresh.length);
   const again = await updater.updateNews(st, f);
   assert(again.fresh.length === 0, 'no se repiten');
-  const series = st.series();
+  const series = st.series('todos');
   assert(series.length === 5 && series.every((s) => s.dates.length >= 3));
+  assert(st.series('cargados').length === 0, 'sin descargas de la BVC no hay datos «cargados»');
   // segunda vez: solo el último mes
   let asked = '';
   await updater.updatePrices(st, async (url) => {
@@ -117,6 +118,8 @@ test('importación de un CSV de la BVC', () => {
   assert(r.errors.length === 1 && /news\.xml/.test(r.errors[0]));
   const h = st.history('ECOPETROL');
   assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((s) => s === 'bvc'));
+  st.mergePrices('ECOPETROL', ['2026-08-19'], [2800], 'yahoo');
+  assert(st.series('cargados')[0].dates.length === 3 && st.series('todos')[0].dates.length === 4, 'solo cargados excluye la fuente automática');
   const x = updater.importFiles(st, ['/no/existe/libro.xlsx'], null);
   assert(/sección Datos/.test(x.errors[0]), x.errors[0]);
 });

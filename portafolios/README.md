@@ -15,7 +15,9 @@ Aplicación web para construir y **confirmar portafolios eficientes** con la teo
 2. **Activos**: rendimiento esperado, σ, β, α de Jensen con su t y valor p, razón de Sharpe, razón de Treynor y R². Incluye la línea del mercado de valores y la matriz de correlaciones.
 3. **Portafolio**: frontera eficiente, línea del mercado de capitales y cinco portafolios: el **recomendado** (máxima razón de Sharpe dentro de los límites de peso), mínima varianza, máxima diversificación, paridad de riesgo y 1/N. Para cada uno muestra el rendimiento esperado con su IC 95 %, la σ, las razones de Sharpe y Treynor, el α de Jensen, la β, el M², el número efectivo de activos, la razón de diversificación, el VaR y los montos a invertir. También calcula el modelo de Treynor-Black.
 4. **Confirmar**: escribes tus pesos, o las acciones que compraste de cada activo y la fecha de compra, y la app dice si el portafolio es eficiente. Con acciones y fecha, busca el cierre de ese día en los datos cargados (si no hubo negociación, el último cierre anterior), calcula lo invertido, los pesos reales, el valor al último cierre y la ganancia. Lo compara con el portafolio eficiente de igual riesgo y con el de igual rendimiento, y revisa una lista de criterios: Markowitz, Sharpe, Treynor, Jensen y diversificación.
-5. **Teoría**: fórmulas y referencias.
+5. **Comprar**: cuántas acciones enteras comprar de cada activo con tu presupuesto, a partir del portafolio eficiente calculado solo con los datos cargados. Incluye la comisión por operación (trii ≈ $15.000 por cada compra y cada venta): calcula lo invertido, las comisiones, el efectivo sobrante y el rendimiento neto. Con presupuestos pequeños prueba quedarse con menos activos y elige la alternativa con mejor razón de Sharpe neta. El plan se puede registrar en Confirmar.
+6. **Descargas**: libro de Excel con todos los cálculos hechos con fórmulas (Precios, Rendimientos, Estadisticas, Desviaciones, Covarianza, Correlacion, Portafolios, Frontera, Plan_compra y una guía de fórmulas) y matrices sueltas en CSV. Las fórmulas del libro se verificaron recalculándolo con LibreOffice: dan los mismos resultados que la app.
+7. **Teoría**: fórmulas y referencias.
 
 ## Supuestos configurables
 
@@ -33,6 +35,9 @@ js/stats.js    estadística, regresión, lectura de CSV
 js/optim.js    programa cuadrático, frontera, tangente, paridad de riesgo
 js/model.js    modelo de mercado, medidas, confirmación, Treynor-Black
 js/sample.js   datos de ejemplo simulados
+js/plan.js     plan de compra con acciones enteras y comisiones
+js/xlsx.js     escritor de libros de Excel sin dependencias
+js/report.js   libro de cálculos con fórmulas
 js/charts.js   gráficos SVG
 js/app.js      interfaz
 tests/run.js   pruebas del motor (node portafolios/tests/run.js)

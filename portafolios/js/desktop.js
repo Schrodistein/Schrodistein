@@ -113,15 +113,26 @@
   }
 
   /* ---------- Datos → análisis ---------- */
+  /* El análisis usa solo los datos cargados de la BVC (descargas e importaciones),
+   * salvo que se elija incluir la fuente automática o que aún no haya descargas. */
   async function useInAnalysis(silent) {
-    const series = await api.series();
+    const want = $('mk-source').value === 'todos' ? 'todos' : 'cargados';
+    let series = await api.series(want);
+    let note = want === 'cargados' ? 'con los datos cargados de la BVC' : 'con los datos cargados y los de la fuente automática';
+    if (series.length < 2 && want === 'cargados') {
+      const all = await api.series('todos');
+      if (all.length >= 2) {
+        series = all;
+        note = 'con los datos de la fuente automática, porque aún no hay suficientes descargas de la BVC';
+      }
+    }
     if (series.length < 2) {
-      if (!silent) status('Faltan datos: se necesitan al menos dos activos con cierres. Actualiza, abre la BVC o importa archivos.', 'bad');
+      if (!silent) status('Faltan datos: se necesitan al menos dos activos con cierres. Abre la BVC, importa archivos o actualiza.', 'bad');
       return false;
     }
-    const ok = globalThis.PFApp && globalThis.PFApp.loadSeries(series, 'desde los datos guardados de la BVC');
+    const ok = globalThis.PFApp && globalThis.PFApp.loadSeries(series, note);
     fromDesktop = !!ok;
-    if (ok && !silent) status(`El análisis usa ahora ${series.length} activos con los datos guardados.`, 'ok');
+    if (ok && !silent) status(`El análisis usa ahora ${series.length} series ${note}: ${series.map((x) => x.name).join(', ')}.`, 'ok');
     return ok;
   }
 
@@ -172,6 +183,11 @@
     $('mk-import').addEventListener('click', async () => {
       const r = await api.importar();
       if (r === null) status('');
+    });
+    $('mk-source').value = prefs().source === 'todos' ? 'todos' : 'cargados';
+    $('mk-source').addEventListener('change', () => {
+      setPref('source', $('mk-source').value);
+      if (fromDesktop) useInAnalysis(false);
     });
     $('mk-use').addEventListener('click', async () => {
       if (await useInAnalysis(false)) globalThis.PFApp.go('frontera');

@@ -22,9 +22,11 @@
       <button type="button" data-go="datos" id="tab-datos">Datos</button>
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
       <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
+      <button type="button" data-go="comprar" id="tab-comprar">Comprar</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
       <button type="button" data-go="mercado" id="tab-mercado" class="desktop-only" hidden>Mercado</button>
       <button type="button" data-go="noticias" id="tab-noticias" class="desktop-only" hidden>Noticias</button>
+      <button type="button" data-go="descargas" id="tab-descargas">Descargas</button>
       <button type="button" data-go="teoria" id="tab-teoria">Teoría</button>
     </nav>
   </div>
@@ -85,6 +87,8 @@
             <input id="wmax" type="number" step="1" value="20" min="1" max="100" inputmode="decimal"></label>
           <label class="field" for="capital"><span>Capital a invertir</span>
             <input id="capital" type="number" step="1000000" value="100000000" min="0" inputmode="decimal"></label>
+          <label class="field" for="fee"><span>Comisión por operación, compra o venta (trii ≈ $15.000)</span>
+            <input id="fee" type="number" step="1000" value="15000" min="0" inputmode="decimal"></label>
           <label class="field" for="currency"><span>Moneda</span>
             <select id="currency"><option value="COP" selected>Peso colombiano (COP)</option><option value="USD">Dólar (USD)</option><option value="MXN">Peso mexicano (MXN)</option><option value="EUR">Euro (EUR)</option></select></label>
         </div>
@@ -149,6 +153,31 @@
     </div>
 
     <div class="panel" id="tb"></div>
+  </section>
+
+  <!-- COMPRAR -->
+  <section class="screen" id="screen-comprar" hidden>
+    <div class="head">
+      <h1>Plan de compra</h1>
+      <p class="lede">Cuántas acciones comprar de cada activo con tu presupuesto, según el portafolio eficiente calculado solo con los datos cargados. Incluye la comisión por cada compra y cada venta.</p>
+    </div>
+    <div class="panel">
+      <div class="form">
+        <label class="field" for="plan-budget"><span>Presupuesto</span>
+          <input id="plan-budget" type="number" step="100000" min="0" inputmode="decimal"></label>
+        <label class="field" for="plan-fee"><span>Comisión por operación (compra o venta)</span>
+          <input id="plan-fee" type="number" step="1000" min="0" inputmode="decimal"></label>
+        <label class="field" for="plan-base"><span>Portafolio</span>
+          <select id="plan-base"><option value="tangency">Recomendado (máxima razón de Sharpe)</option><option value="minVar">Mínima varianza</option><option value="maxDiv">Máxima diversificación</option><option value="riskParity">Paridad de riesgo</option><option value="equal">Pesos iguales</option></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="plan-optk" checked> Ajustar el número de activos para que las comisiones no se coman el rendimiento</label>
+    </div>
+    <div class="panel" id="plan-out"></div>
+    <div class="panel" id="plan-alt-box">
+      <h2>Alternativas según el número de activos</h2>
+      <p class="hint">La comisión es un costo fijo por activo: con presupuestos pequeños, tener menos activos puede dar más rendimiento neto. Cada alternativa conserva los activos de mayor peso y recalcula el portafolio de máxima razón de Sharpe con ellos.</p>
+      <div class="table-scroll"><table class="data" id="plan-alt"></table></div>
+    </div>
   </section>
 
   <!-- CONFIRMAR -->
@@ -221,6 +250,8 @@
         <button type="button" class="btn" id="mk-import">Importar archivos de la BVC</button>
         <button type="button" class="btn" id="mk-use">Usar estos datos en el análisis</button>
       </div>
+      <label class="field mk-src" for="mk-source"><span>Datos para el análisis y la recomendación</span>
+        <select id="mk-source"><option value="cargados">Solo los que cargué de la BVC (descargas e importaciones)</option><option value="todos">Los cargados más los de la fuente automática</option></select></label>
       <p class="status" id="mk-status" role="status" hidden></p>
       <p class="meta" id="mk-meta"></p>
     </div>
@@ -265,6 +296,40 @@
     </div>
   </section>
 
+  <!-- DESCARGAS -->
+  <section class="screen" id="screen-descargas" hidden>
+    <div class="head">
+      <h1>Descargas</h1>
+      <p class="lede">Todos los cálculos del análisis actual, para revisarlos o entregarlos. Se generan con los datos y supuestos que tienes cargados en este momento.</p>
+    </div>
+    <div class="panel">
+      <h2>Libro de Excel con el desarrollo de cada fórmula</h2>
+      <p>Cada cálculo es una fórmula de Excel que remite a sus celdas de origen, así que puedes seguir cómo se llega a cada número y cambiar un dato para ver el efecto.</p>
+      <ul class="dl-list">
+        <li><b>Precios</b> y <b>Rendimientos</b>: rₜ = LN(Pₜ / Pₜ₋₁) para cada activo y para el índice de referencia.</li>
+        <li><b>Estadisticas</b>: observaciones, media, varianza, desviación, volatilidad anual, β, R², α, varianza residual, CAPM, E(R), Sharpe, Treynor y Jensen.</li>
+        <li><b>Desviaciones</b>: (r − media), (r − media)² y los productos cruzados de cada par, con sus sumas, la varianza y la covarianza.</li>
+        <li><b>Covarianza</b> y <b>Correlacion</b>: las matrices anual y por periodo.</li>
+        <li><b>Portafolios</b>: para cada portafolio, los pesos, (Σw)ᵢ, σp² = wᵀΣw, σp, βp, Sharpe, Treynor, Jensen, M², N efectivo y la contribución al riesgo.</li>
+        <li><b>Frontera</b>, <b>Plan_compra</b> (acciones, comisiones y rendimiento neto) y <b>Formulas</b> (guía de cada fórmula con un ejemplo).</li>
+      </ul>
+      <button type="button" class="btn btn-primary" id="dl-xlsx">Descargar libro de Excel (.xlsx)</button>
+    </div>
+    <div class="panel">
+      <h2>Matrices sueltas en CSV</h2>
+      <p class="hint">Separadas por punto y coma y con coma decimal, para abrirlas directamente en Excel en español.</p>
+      <div class="row-btns">
+        <button type="button" class="btn" id="dl-cov">Matriz de covarianzas</button>
+        <button type="button" class="btn" id="dl-corr">Matriz de correlación</button>
+        <button type="button" class="btn" id="dl-ret">Rendimientos</button>
+        <button type="button" class="btn" id="dl-stats">Estadísticas por activo</button>
+        <button type="button" class="btn" id="dl-ports">Pesos de los portafolios</button>
+        <button type="button" class="btn" id="dl-plan">Plan de compra</button>
+      </div>
+    </div>
+    <p class="status" id="dl-status" role="status" hidden></p>
+  </section>
+
   <!-- TEORÍA -->
   <section class="screen prose" id="screen-teoria" hidden>
     <div class="head"><h1>La teoría detrás de cada número</h1></div>
@@ -301,6 +366,9 @@
 <script src="js/optim.js"></script>
 <script src="js/model.js"></script>
 <script src="js/sample.js"></script>
+<script src="js/plan.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/report.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
 <script src="js/desktop.js"></script>

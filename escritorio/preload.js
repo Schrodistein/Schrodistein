@@ -4,7 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bvc', {
   resumen: () => ipcRenderer.invoke('datos:resumen'),
-  series: () => ipcRenderer.invoke('datos:series'),
+  series: (source) => ipcRenderer.invoke('datos:series', source),
   noticias: () => ipcRenderer.invoke('datos:noticias'),
   actualizar: () => ipcRenderer.invoke('datos:actualizar'),
   importar: () => ipcRenderer.invoke('datos:importar'),

@@ -106,12 +106,17 @@ class Store {
     return { dates, prices: dates.map((d) => book[d][0]), sources: dates.map((d) => book[d][1]) };
   }
 
-  /* Series para el análisis (formato de PF.data): solo activos activos con datos. */
-  series() {
+  /* Series para el análisis (formato de PF.data): solo activos activos con datos.
+   * source 'cargados': solo los precios descargados o importados de la BVC;
+   * 'todos': también los de la fuente automática. */
+  series(source) {
+    const onlyLoaded = source !== 'todos';
     return this.data.assets
       .filter((a) => a.enabled)
       .map((a) => {
-        const h = this.history(a.name);
+        const full = this.history(a.name);
+        const keep = full.sources.map((s) => !onlyLoaded || s === 'bvc');
+        const h = { dates: full.dates.filter((_, i) => keep[i]), prices: full.prices.filter((_, i) => keep[i]), sources: full.sources.filter((_, i) => keep[i]) };
         const bvc = h.sources.filter((s) => s === 'bvc').length;
         return { name: a.name, dates: h.dates, prices: h.prices, column: bvc === h.dates.length ? 'BVC' : bvc ? 'BVC + automática' : 'automática', rank: 2, parts: 1 };
       })

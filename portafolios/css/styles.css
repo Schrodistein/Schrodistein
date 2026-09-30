@@ -320,3 +320,9 @@ table.data .err-line { display: block; color: var(--bad); white-space: normal; m
 .news a:hover { color: var(--accent); text-decoration: underline; }
 .news .nm { font-size: 0.82rem; color: var(--ink-2); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
 .news .chip { font-size: 0.75rem; padding: 0 6px; border-radius: 4px; background: var(--sunk); border: 1px solid var(--line); }
+
+/* Plan de compra y descargas */
+.dl-list { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; max-width: 90ch; }
+.plan-lead { font-size: 1.02rem; }
+.plan-lead b { font-weight: 600; }
+.mk-src { max-width: 520px; }

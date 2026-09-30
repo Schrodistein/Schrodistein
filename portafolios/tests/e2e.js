@@ -14,6 +14,24 @@ const shots = process.argv[3];
     page.on('pageerror', (e) => errors.push(label + ': ' + e.message));
     page.on('console', (m) => m.type() === 'error' && !/fonts|Failed to load resource/.test(m.text()) && errors.push(label + ': ' + m.text()));
     await page.goto(url);
+    // Pantalla inicial: la terminal, en modo oscuro y con Times New Roman
+    await page.waitForSelector('#tc-price svg');
+    if ((await page.getAttribute('html', 'data-theme')) !== 'dark') errors.push(label + ': el modo oscuro no es el predeterminado');
+    if (!/Times New Roman/.test(await page.evaluate(() => getComputedStyle(document.body).fontFamily))) errors.push(label + ': la letra no es Times New Roman');
+    if (await page.isHidden('#tape')) errors.push(label + ': sin cinta de cotizaciones');
+    for (const id of ['tc-ret', 'tc-hist', 'tc-cum', 'tc-roll', 'tc-corr']) if (!(await page.$(`#${id} svg`))) errors.push(`${label}: falta el gráfico ${id}`);
+    await page.click('#tw-table tr[data-asset="Banca"]');
+    if (!/Banca/.test(await page.textContent('#th'))) errors.push(label + ': la lista de seguimiento no cambia de activo');
+    // Apariencia: modo claro y fondo personalizado
+    await page.click('#ap-btn');
+    await page.click('[data-mode="light"]');
+    await page.click('#ap-sw-light .sw:nth-child(3)');
+    const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    if ((await page.getAttribute('html', 'data-theme')) !== 'light' || bg !== 'rgb(244, 240, 230)') errors.push(`${label}: el tema no cambió (${bg})`);
+    await page.click('[data-mode="dark"]');
+    await page.click('#ap-btn');
+    if (shots) await page.screenshot({ path: `${shots}/${label}-terminal.png`, fullPage: true });
+    await page.click('#tab-frontera');
     await page.waitForSelector('#chart-front svg');
     if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) errors.push(label + ': desbordamiento horizontal en Portafolio');
     if (shots) await page.screenshot({ path: `${shots}/${label}-portafolio.png`, fullPage: true });

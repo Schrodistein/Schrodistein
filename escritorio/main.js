@@ -225,6 +225,24 @@ function registerIpc() {
     broadcast({ imported: res });
     return res;
   });
+  ipcMain.handle('datos:exportar', async () => {
+    const r = await dialog.showSaveDialog(win, {
+      title: 'Exportar mis datos',
+      defaultPath: `frontera-eficiente-datos-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'Respaldo de Frontera Eficiente', extensions: ['json'] }],
+    });
+    if (r.canceled || !r.filePath) return null;
+    fs.writeFileSync(r.filePath, JSON.stringify(store.exportData()));
+    return { file: r.filePath, assets: store.data.assets.length };
+  });
+  ipcMain.handle('datos:importar-respaldo', async () => {
+    const r = await dialog.showOpenDialog(win, { title: 'Importar datos de otro equipo', properties: ['openFile'], filters: [{ name: 'Respaldo de Frontera Eficiente', extensions: ['json'] }] });
+    if (r.canceled || !r.filePaths.length) return null;
+    const res = store.importData(JSON.parse(fs.readFileSync(r.filePaths[0], 'utf8')));
+    store.save();
+    broadcast({ restored: res });
+    return res;
+  });
   ipcMain.handle('bvc:abrir', () => {
     openBvc();
     return true;

@@ -1,7 +1,7 @@
 {
   "name": "frontera-eficiente",
   "productName": "Frontera Eficiente",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Portafolios eficientes con datos diarios y noticias de la Bolsa de Valores de Colombia (Markowitz, Sharpe, Treynor, Jensen).",
   "main": "main.js",
   "private": true,
@@ -47,6 +47,12 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -55,7 +61,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "shortcutName": "Frontera Eficiente",
-      "language": "3082"
+      "language": "3082",
+      "artifactName": "Frontera-Eficiente-${version}-win-x64-instalador.${ext}"
     },
     "mac": {
       "target": [
@@ -85,7 +92,10 @@
         "repo": "schrodistein",
         "releaseType": "release"
       }
-    ]
+    ],
+    "portable": {
+      "artifactName": "Frontera-Eficiente-${version}-win-x64-portable.${ext}"
+    }
   },
   "desktopName": "frontera-eficiente.desktop"
 }

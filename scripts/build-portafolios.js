@@ -6,7 +6,8 @@ const path = require('path');
 const root = path.join(__dirname, '..', 'portafolios');
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const title = html.match(/<title>[\s\S]*?<\/title>/)[0];
-const fonts = html.match(/<link rel="stylesheet" href="https:\/\/fonts[^>]+>/)[0];
+const fontsLink = html.match(/<link rel="stylesheet" href="https:\/\/fonts[^>]+>/);
+const fonts = fontsLink ? fontsLink[0] : '';
 const body = html.split('<!--APP-START-->')[1].split('<!--APP-END-->')[0];
 const scripts = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map((m) =>
   fs.readFileSync(path.join(root, m[1]), 'utf8').replace(/<\/script/gi, '<\\/script')

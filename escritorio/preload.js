@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld('bvc', {
   noticias: () => ipcRenderer.invoke('datos:noticias'),
   actualizar: () => ipcRenderer.invoke('datos:actualizar'),
   importar: () => ipcRenderer.invoke('datos:importar'),
+  exportarDatos: () => ipcRenderer.invoke('datos:exportar'),
+  importarRespaldo: () => ipcRenderer.invoke('datos:importar-respaldo'),
   abrirBVC: () => ipcRenderer.invoke('bvc:abrir'),
   guardarAjustes: (p) => ipcRenderer.invoke('ajustes:guardar', p),
   guardarActivos: (l) => ipcRenderer.invoke('activos:guardar', l),

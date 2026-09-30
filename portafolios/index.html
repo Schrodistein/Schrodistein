@@ -5,10 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Frontera Eficiente</title>
 <meta name="description" content="Construye y confirma portafolios eficientes con la teoría de Markowitz, Sharpe, Treynor y Jensen.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="css/styles.css">
+<script src="js/theme.js"></script>
 </head>
 <body>
 <!--APP-START-->
@@ -19,6 +17,7 @@
       <span>Frontera Eficiente</span>
     </div>
     <nav class="tabs" aria-label="Secciones">
+      <button type="button" data-go="terminal" id="tab-terminal">Terminal</button>
       <button type="button" data-go="datos" id="tab-datos">Datos</button>
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
       <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
@@ -29,13 +28,53 @@
       <button type="button" data-go="descargas" id="tab-descargas">Descargas</button>
       <button type="button" data-go="teoria" id="tab-teoria">Teoría</button>
     </nav>
+    <button type="button" class="ap-btn" id="ap-btn" aria-expanded="false" aria-controls="ap-panel" title="Apariencia"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/></svg><span>Apariencia</span></button>
+    <div class="ap-panel" id="ap-panel" hidden role="dialog" aria-label="Apariencia">
+      <h3>Apariencia</h3>
+      <div class="seg ap-mode" role="group" aria-label="Modo">
+        <button type="button" data-mode="dark">Oscuro</button>
+        <button type="button" data-mode="light">Claro</button>
+        <button type="button" data-mode="system">Según el sistema</button>
+      </div>
+      <p class="meta" id="ap-now"></p>
+      <div class="ap-row"><span>Fondo del modo oscuro</span><div class="sws" id="ap-sw-dark"></div><label class="ap-pick">Otro color <input type="color" id="ap-dark"></label></div>
+      <div class="ap-row"><span>Fondo del modo claro</span><div class="sws" id="ap-sw-light"></div><label class="ap-pick">Otro color <input type="color" id="ap-light"></label></div>
+      <button type="button" class="btn btn-ghost" id="ap-reset">Restablecer colores</button>
+    </div>
   </div>
 </header>
+<div class="tape" id="tape" hidden aria-label="Cotizaciones"></div>
 
 <div class="summary" id="summary" aria-live="polite"></div>
 
 <main class="wrap">
   <div class="banner" id="banner" hidden></div>
+
+  <!-- TERMINAL -->
+  <section class="screen" id="screen-terminal" hidden>
+    <div class="panel" id="term-empty" hidden><h2>Sin datos</h2><p>Carga los históricos de la BVC en la sección Datos (o en Mercado, en la app de escritorio) para ver el comportamiento de cada acción.</p></div>
+    <div id="term-body" class="term-body">
+      <div class="term">
+        <aside class="panel term-watch">
+          <h2>Lista de seguimiento</h2>
+          <div class="table-scroll"><table class="data watch" id="tw-table"></table></div>
+        </aside>
+        <div class="term-main">
+          <div class="panel term-head" id="th"></div>
+          <div class="tiles" id="t-tiles"></div>
+          <figure class="panel chart"><figcaption><h2 id="tc-price-t">Precio</h2></figcaption><div class="chart-box term-chart" id="tc-price"></div></figure>
+          <figure class="panel chart"><figcaption><h2 id="tc-ret-t">Rendimientos diarios</h2><p>Verde: días al alza; rojo: a la baja. Las líneas marcan ±2 desviaciones estándar.</p></figcaption><div class="chart-box term-chart" id="tc-ret"></div></figure>
+        </div>
+      </div>
+      <div class="grid-2">
+        <figure class="panel chart"><figcaption><h2>Distribución de los rendimientos</h2><p>Histograma de toda la historia frente a la curva normal con la misma media y desviación.</p></figcaption><div class="chart-box term-chart" id="tc-hist"></div></figure>
+        <figure class="panel chart"><figcaption><h2 id="tc-cum-t">Rendimiento acumulado</h2><p>Crecimiento de 100 invertidos al inicio del rango.</p></figcaption><div class="chart-box term-chart" id="tc-cum"></div><div class="legend" id="tc-cum-lg"></div></figure>
+      </div>
+      <figure class="panel chart"><figcaption><h2 id="tc-roll-t">Correlación móvil</h2><p>Correlación de los rendimientos con el índice en una ventana móvil de 60 días (12 periodos si los datos no son diarios).</p></figcaption><div class="chart-box term-chart" id="tc-roll"></div></figure>
+      <div class="panel"><h2>Desempeño por periodo</h2><div class="table-scroll"><table class="data perf" id="t-perf"></table></div></div>
+      <figure class="panel chart"><figcaption><h2>Correlación de los rendimientos</h2><p>Con las fechas que comparte cada par de series. Azul: se mueven juntas; rojo: en sentido contrario.</p></figcaption><div class="chart-box" id="tc-corr"></div></figure>
+    </div>
+  </section>
 
   <!-- DATOS -->
   <section class="screen" id="screen-datos" hidden>
@@ -249,6 +288,8 @@
         <button type="button" class="btn" id="mk-bvc">Abrir la BVC y descargar</button>
         <button type="button" class="btn" id="mk-import">Importar archivos de la BVC</button>
         <button type="button" class="btn" id="mk-use">Usar estos datos en el análisis</button>
+        <button type="button" class="btn btn-ghost" id="mk-export">Exportar mis datos</button>
+        <button type="button" class="btn btn-ghost" id="mk-restore">Importar datos de otro equipo</button>
       </div>
       <label class="field mk-src" for="mk-source"><span>Datos para el análisis y la recomendación</span>
         <select id="mk-source"><option value="cargados">Solo los que cargué de la BVC (descargas e importaciones)</option><option value="todos">Los cargados más los de la fuente automática</option></select></label>
@@ -370,6 +411,7 @@
 <script src="js/xlsx.js"></script>
 <script src="js/report.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/terminal.js"></script>
 <script src="js/app.js"></script>
 <script src="js/desktop.js"></script>
 </body>

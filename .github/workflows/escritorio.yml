@@ -72,10 +72,13 @@ jobs:
 
             | Sistema | Archivo |
             | --- | --- |
-            | Windows 10/11 (64 bits) | `Frontera-Eficiente-${{ steps.v.outputs.version }}-win-x64.exe` |
+            | Windows 10/11 (64 bits), con instalación | `Frontera-Eficiente-${{ steps.v.outputs.version }}-win-x64-instalador.exe` |
+            | Windows 10/11 (64 bits), portátil (se abre sin instalar) | `Frontera-Eficiente-${{ steps.v.outputs.version }}-win-x64-portable.exe` |
             | macOS con chip Apple (M1 o posterior) | `…-mac-arm64.dmg` |
             | macOS con Intel | `…-mac-x64.dmg` |
             | Linux | `…-linux-x86_64.AppImage` o `…-linux-amd64.deb` |
+
+            Cada archivo es la aplicación completa: se instala (o se abre, en la versión portátil) en cualquier equipo, sin necesitar una versión anterior. Para compartirla, envía el enlace de esta página o el archivo descargado. Los datos de cada equipo se pasan con «Exportar mis datos» e «Importar datos de otro equipo» en la sección Mercado.
 
             Los instaladores no están firmados con un certificado de desarrollador:
             - Windows muestra «Windows protegió su PC»: pulsa «Más información» y luego «Ejecutar de todas formas».

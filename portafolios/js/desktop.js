@@ -189,6 +189,22 @@
       setPref('source', $('mk-source').value);
       if (fromDesktop) useInAnalysis(false);
     });
+    $('mk-export').addEventListener('click', async () => {
+      try {
+        const r = await api.exportarDatos();
+        if (r) status(`Datos exportados a ${r.file}. Copia ese archivo al otro equipo y usa «Importar datos de otro equipo».`, 'ok');
+      } catch (e) {
+        status('No se pudieron exportar los datos: ' + e.message, 'bad');
+      }
+    });
+    $('mk-restore').addEventListener('click', async () => {
+      try {
+        const r = await api.importarRespaldo();
+        if (r) status(`Datos importados: ${r.assets} activos nuevos, ${r.points} cierres y ${r.news} noticias.`, 'ok');
+      } catch (e) {
+        status('No se pudieron importar los datos: ' + String(e.message).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''), 'bad');
+      }
+    });
     $('mk-use').addEventListener('click', async () => {
       if (await useInAnalysis(false)) globalThis.PFApp.go('frontera');
     });

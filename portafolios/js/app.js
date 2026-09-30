@@ -14,7 +14,7 @@
     { key: 'equal', label: 'Pesos iguales', short: '1/N', shape: 'diamond', title: 'Portafolio de pesos iguales (1/N)', desc: 'La diversificación ingenua: el mismo peso en cada activo. Sirve de referencia; rara vez es eficiente.' },
   ];
 
-  const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'frontera', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
+  const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'terminal', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
 
   /* ---------- Utilidades ---------- */
   const LOCALE = { COP: 'es-CO', USD: 'en-US', MXN: 'es-MX', EUR: 'es-ES' };
@@ -882,7 +882,30 @@
     return el && el.clientWidth ? el.clientWidth : 0;
   }
 
+  /* Datos para la terminal y la cinta: los historiales cargados tal como vienen
+   * (diarios si se subieron los CSV de la BVC), o la tabla por periodo. */
+  function terminalCtx() {
+    const p = st.parsed;
+    if (!p) return null;
+    let list;
+    if (st.series && $('csv').value === st.mergedText) list = st.series.map((x) => ({ name: x.name, dates: x.dates, prices: x.prices }));
+    else list = p.names.map((n) => Object.assign({ name: n }, priceSeries(n)));
+    list = list.filter((x) => x.dates.length >= 2);
+    const market = st.model ? st.model.marketName : p.names[PF.data.guessMarket(p.names)];
+    // El índice de referencia va primero
+    list.sort((a, b) => (a.name === market ? -1 : b.name === market ? 1 : 0));
+    const all = [...new Set(list.flatMap((x) => x.dates))].sort();
+    const gaps = all.slice(1).map((d, i) => (Date.parse(d) - Date.parse(all[i])) / 864e5).sort((a, b) => a - b);
+    const daily = gaps.length > 0 && gaps[Math.floor(gaps.length / 2)] <= 4;
+    return { list, market, daily, f: st.model ? st.model.f : 12 };
+  }
+
   function renderCharts() {
+    if (st.parsed && PF.terminal) {
+      const ctx = terminalCtx();
+      PF.terminal.tape(ctx);
+      if (st.screen === 'terminal') PF.terminal.render(ctx);
+    }
     if (!st.model) return;
     const m = st.model;
     const P = st.P;
@@ -925,7 +948,7 @@
 
   /* ---------- Navegación ---------- */
   function go(screen) {
-    if (!document.getElementById('screen-' + screen)) screen = 'frontera';
+    if (!document.getElementById('screen-' + screen)) screen = 'terminal';
     st.screen = screen;
     document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== 'screen-' + screen));
     document.querySelectorAll('.tabs button').forEach((b) => (b.getAttribute('data-go') === screen ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
@@ -1124,6 +1147,7 @@
     }, 150));
 
     initTip();
+    if (PF.terminal) PF.terminal.wire(() => PF.terminal.render(terminalCtx()));
     const savedMode = store.get('mode');
     if (savedMode === 'acciones') {
       st.mode = 'acciones';
@@ -1133,7 +1157,7 @@
       $('box-acciones').hidden = false;
     }
     const hash = (location.hash || '').slice(1);
-    st.screen = document.getElementById('screen-' + hash) ? hash : 'frontera';
+    st.screen = document.getElementById('screen-' + hash) ? hash : 'terminal';
     parse(false);
     go(st.screen);
   }

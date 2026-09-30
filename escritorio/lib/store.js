@@ -141,6 +141,35 @@ class Store {
     return fresh;
   }
 
+  /* Respaldo para llevar los datos a otro equipo. */
+  exportData() {
+    return { app: 'frontera-eficiente', version: 1, exported: new Date().toISOString(), data: this.data };
+  }
+
+  /* Une un respaldo con los datos de este equipo: activos nuevos, precios (sin pisar
+   * un cierre de la BVC con uno automático) y noticias. Los ajustes locales se conservan. */
+  importData(backup) {
+    const d = backup && backup.app === 'frontera-eficiente' && backup.data;
+    if (!d || backup.version !== 1 || !Array.isArray(d.assets) || typeof d.prices !== 'object') throw new Error('El archivo no es un respaldo de Frontera Eficiente.');
+    let assets = 0;
+    let points = 0;
+    for (const a of d.assets) {
+      if (!a || !a.name) continue;
+      if (!this.asset(a.name)) {
+        this.data.assets.push({ name: String(a.name).toUpperCase().slice(0, 40), yahoo: String(a.yahoo || ''), news: String(a.news || a.name), index: !!a.index, enabled: a.enabled !== false });
+        assets++;
+      }
+    }
+    for (const [name, book] of Object.entries(d.prices)) {
+      for (const src of ['yahoo', 'bvc']) {
+        const dates = Object.keys(book || {}).filter((k) => Array.isArray(book[k]) && book[k][1] === src);
+        points += this.mergePrices(name, dates, dates.map((k) => +book[k][0]), src);
+      }
+    }
+    const news = Array.isArray(d.news) ? this.addNews(d.news.filter((n) => n && n.title)) : [];
+    return { assets, points, news: news.length };
+  }
+
   summary() {
     const d = this.data;
     return {

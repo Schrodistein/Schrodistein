@@ -12,6 +12,10 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
 - **Comprar** y **Descargas** funcionan igual que en la app web: plan de compra con comisiones de trii y libro de Excel con todos los cálculos (se guarda donde elijas).
 - Los datos se guardan en el equipo (`datos.json` en la carpeta de datos de la app); no se envían a ningún servidor.
 
+## Compartir la app
+
+Cada instalador es la aplicación completa y funciona en cualquier equipo sin una versión anterior. En Windows hay dos opciones: el instalador (`…-win-x64-instalador.exe`) y la versión portátil (`…-win-x64-portable.exe`), que se abre sin instalar. Para llevar tus datos cargados a otro equipo: **Mercado → Exportar mis datos** y, en el otro equipo, **Importar datos de otro equipo**.
+
 ## Descargar
 
 Los instaladores se compilan en GitHub Actions (`.github/workflows/escritorio.yml`) y se publican en la *Release* `escritorio-v<versión>` del repositorio. No están firmados con un certificado de desarrollador: la Release explica cómo abrirlos en cada sistema.

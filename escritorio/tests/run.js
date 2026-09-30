@@ -134,6 +134,29 @@ test('un índice importado se marca como índice', () => {
   assert(a && a.index && st.history('MSCI COLCAP').prices[0] === 2468.58);
 });
 
+test('respaldo: exportar e importar en otro equipo sin perder la prioridad de la BVC', () => {
+  const a = new Store(tmp());
+  a.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-18'], [2745, 2770], 'bvc');
+  a.mergePrices('NUTRESA', ['2026-08-14', '2026-08-18'], [50000, 50500], 'yahoo');
+  a.addNews([{ asset: 'ECOPETROL', title: 'Titular', link: 'https://x/1', date: new Date().toISOString() }]);
+  const backup = JSON.parse(JSON.stringify(a.exportData()));
+  const b = new Store(tmp());
+  b.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-19'], [2700, 2800], 'yahoo');
+  const r = b.importData(backup);
+  assert(r.assets === 1 && r.news === 1, JSON.stringify(r));
+  const h = b.history('ECOPETROL');
+  assert(h.dates.join() === '2026-08-14,2026-08-18,2026-08-19' && h.prices[0] === 2745 && h.sources[0] === 'bvc', JSON.stringify(h));
+  assert(b.asset('NUTRESA') && b.history('NUTRESA').prices[1] === 50500);
+  let err = null;
+  try {
+    b.importData({ hola: 1 });
+  } catch (e) {
+    err = e;
+  }
+  assert(err && /no es un respaldo/.test(err.message));
+});
+
+
 Promise.all(pending).then(() => {
   console.log(`${passed} pruebas correctas, ${failed} fallidas`);
   if (failed) process.exit(1);

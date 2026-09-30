@@ -107,6 +107,8 @@
             <select id="freq"><option value="diaria">Diaria (242 días hábiles al año)</option><option value="semanal">Semanal (52)</option><option value="mensual" selected>Mensual (12)</option><option value="trimestral">Trimestral (4)</option><option value="anual">Anual (1)</option></select></label>
           <label class="field" for="agg"><span>Precio de cada periodo</span>
             <select id="agg"><option value="last" selected>Último cierre del periodo</option><option value="avg">Promedio del periodo (fechas desfasadas)</option></select></label>
+          <label class="field" for="fill"><span>Días sin negociación</span>
+            <select id="fill"><option value="si" selected>Repetir el último precio hasta el siguiente día hábil</option><option value="no">Dejar vacíos</option></select></label>
           <label class="field" for="rettype"><span>Rendimientos</span>
             <select id="rettype"><option value="log" selected>Logarítmicos: ln(Pt / Pt−1)</option><option value="simple">Simples: Pt / Pt−1 − 1</option></select></label>
           <label class="field" for="history"><span>Activos con fechas distintas</span>
@@ -162,6 +164,7 @@
       <ol>
         <li>En <b>bvc.com.co</b>, entra a la ficha de cada acción (Ecopetrol, PF Bancolombia, ISA, Grupo Argos, Grupo Sura, Celsia…) y descarga su histórico en tramos de 6 meses hasta cubrir el periodo que quieras. Lo ideal son 3 a 5 años.</li>
         <li>Descarga también el histórico del índice <b>MSCI COLCAP</b>, o el del ETF <b>ICOLCAP</b>. Será el portafolio de mercado de los cálculos de Sharpe, Treynor y Jensen.</li>
+        <li>Los días sin negociación de cualquier activo (acción, índice, renta fija, divisa o derivado) se completan con el último precio anterior, porque ese precio se mantiene hasta el siguiente día hábil. Se hace desde la primera fecha de cada activo hasta hoy: un activo que empezó a cotizar hace poco, como PFCIBEST, queda vacío antes de su primer dato. Se puede apagar en <i>Supuestos → Días sin negociación</i>.</li>
         <li>Selecciona todos los archivos a la vez en <i>Subir archivos</i>, o arrástralos aquí. La app toma el último cierre de cada mes (o de la frecuencia que elijas) y usa solo los periodos que tienen todos los activos.</li>
         <li>Descarga también los índices de los otros segmentos que vayas a usar: <b>COLTES</b> (TES y bonos), <b>COLIBR</b> (CDT y mercado monetario) y la <b>TRM</b> (divisas). La tabla «Índices de referencia» dice cuáles faltan.</li>
         <li>En <i>Supuestos</i>, escribe como tasa libre de riesgo el rendimiento actual de los TES de corto plazo, o usa el del <b>COLIBR</b> con el botón que aparece cuando lo cargas.</li>

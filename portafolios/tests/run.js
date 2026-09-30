@@ -614,5 +614,19 @@ test('desfase de fechas: no se evalúan series semanales ni de tasas', () => {
   assert(PF.data.detectLags(list.concat([mkS('D', 5, 0.1)])).some((x) => x.name === 'D'), 'la diaria corrida sí');
 });
 
+test('días sin negociación: se repite el último precio desde la primera fecha de cada activo', () => {
+  const A = { name: 'A', dates: ['2026-01-05', '2026-01-06', '2026-01-07', '2026-01-08', '2026-01-09'], prices: [10, 11, 12, 13, 14] };
+  const B = { name: 'B', dates: ['2026-01-05', '2026-01-07', '2026-01-09'], prices: [100, 90, 95] };
+  const C = { name: 'C', dates: ['2026-01-07', '2026-01-08'], prices: [50, 52] }; // empieza a cotizar después y deja de tener datos
+  const D = { name: 'D', dates: A.dates, prices: [1, 2, 3, 4, 5] };
+  const m = PF.data.mergeSeries([A, B, C, D], 'diaria');
+  const col = (n) => m.values[m.names.indexOf(n)];
+  assert(col('B').join() === '100,100,90,90,95', col('B').join());
+  assert(Number.isNaN(col('C')[0]) && Number.isNaN(col('C')[1]) && col('C').slice(2).join() === '50,52,52', col('C').join());
+  assert(m.filled.join() === '0,2,1,0');
+  const raw = PF.data.mergeSeries([A, B, C, D], 'diaria', { fill: false });
+  assert(Number.isNaN(raw.values[1][1]) && raw.filled.join() === '0,0,0,0');
+});
+
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);
 if (failed) process.exit(1);

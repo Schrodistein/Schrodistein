@@ -114,7 +114,7 @@
     };
   }
   const FEE_NORMAL = 15000; // comisión de trii por operación, sin promociones
-  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'div', 'capital', 'fee', 'feesell', 'currency', 'tol'];
+  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'fill', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'div', 'capital', 'fee', 'feesell', 'currency', 'tol'];
 
   function showBanner(msg, kind) {
     const b = $('banner');
@@ -199,7 +199,10 @@
     const p = st.parsed;
     const warnings = [];
     try {
-      const R = PF.data.toReturns(p.values, s.kind, s.retType === 'log');
+      // Tabla pegada o subida ya armada: los huecos también se completan con el último precio
+      const vals = s.kind === 'prices' && $('fill').value !== 'no' ? p.values.map((c) => { let last = NaN; return c.map((v) => (Number.isFinite(v) ? (last = v) : last)); }) : p.values;
+      st.table = vals === p.values ? p : Object.assign({}, p, { values: vals });
+      const R = PF.data.toReturns(vals, s.kind, s.retType === 'log');
       const mi = s.market;
       // Activos invertibles: los de los segmentos elegidos; los índices solo son referencia
       const clsAll = p.names.map(clsOf);
@@ -437,7 +440,7 @@
   function mergeLoaded(keepMarket) {
     try {
       const freq = $('freq').value;
-      const merged = PF.data.mergeSeries(st.series, freq, { agg: $('agg').value });
+      const merged = PF.data.mergeSeries(st.series, freq, { agg: $('agg').value, fill: $('fill').value !== 'no' });
       const text = PF.data.toCSV(merged);
       st.mergedText = text;
       const lags = PF.data.detectLags(st.series);
@@ -448,7 +451,8 @@
       st.mergeNote = `Se unieron ${st.series.length} activos (${st.series.map((x) => `${x.name}: «${x.column}»${x.parts > 1 ? `, ${x.parts} archivos` : ''}, ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}).` +
         ` ${merged.dates.length} periodos; ${merged.common} con todos los activos.` +
         (merged.holidays.length ? ` Se quitaron ${merged.holidays.length} días en que casi ningún precio cambió (festivos).` : '') +
-        (noTrade ? ` Se omitieron ${noTrade} días sin negociación (precio de referencia sin cantidad negociada).` : '');
+        (noTrade ? ` ${noTrade} días sin negociación (precio de referencia sin cantidad negociada) no se tomaron como cierre.` : '') +
+        (merged.filled.some((x) => x) ? ` Se completaron ${merged.filled.reduce((q, x) => q + x, 0)} ${freq === 'diaria' ? 'días' : 'periodos'} sin negociación con el último precio anterior (${merged.names.map((n, j) => [n, merged.filled[j]]).filter((x) => x[1]).map((x) => `${x[0]}: ${x[1]}`).join(', ')}); cada activo queda completo desde su primera fecha hasta hoy.` : '');
       $('csv').value = text;
       $('kind').value = 'prices';
       st.userNames = null;
@@ -934,7 +938,7 @@
       extra.push({ label: st.mode === 'acciones' ? 'Tu portafolio (acciones compradas)' : 'Tu portafolio (pesos escritos)', w: st.userW.map((x) => x / sum) });
     }
     if (st.plan && st.plan.plan.rows.length) extra.push({ label: `Plan de compra (${st.plan.plan.k} activos, pesos reales)`, w: st.plan.ev.w });
-    return { m, P: st.P, table: st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
+    return { m, P: st.P, table: st.table || st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
   }
 
   function doDownload(kind) {
@@ -1232,7 +1236,7 @@
     }, 0));
     const recompute = debounce(compute, 250);
     for (const id of ['kind', 'market', 'mumodel', 'covmodel']) $(id).addEventListener('change', compute);
-    $('agg').addEventListener('change', () => {
+    for (const id of ['agg', 'fill']) $(id).addEventListener('change', () => {
       if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
     });
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);

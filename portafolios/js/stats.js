@@ -639,7 +639,8 @@
   /* Une varios historiales en una tabla por periodo.
    *   agg 'last': último precio del periodo;  'avg': promedio de los precios del periodo,
    *   que suaviza fechas que no coinciden entre activos (como la hoja guía del curso).
-   * Se conservan todos los periodos con al menos dos activos; los huecos quedan en NaN.
+   * Se conservan todos los periodos con al menos dos activos. Por defecto (fill) los huecos se
+   * completan con el último precio anterior del mismo activo; antes de su primer dato quedan en NaN.
    * En datos diarios se quitan los días en que casi ningún activo cambió de precio
    * (festivos en que la plataforma repite el cierre anterior). */
   function mergeSeries(list, freq, opts) {
@@ -687,9 +688,25 @@
     if (keys.length < 3) throw new Error('Los activos casi no tienen periodos en común. Revisa que cubran las mismas fechas.');
     const dates = keys.map((k) => maps.reduce((a, m) => (m.has(k) && m.get(k)[0] > a ? m.get(k)[0] : a), ''));
     const values = maps.map((m) => keys.map((k) => (m.has(k) ? m.get(k)[1] : NaN)));
+    // Días (o periodos) sin negociación: el último precio se mantiene hasta el siguiente día
+    // hábil. Se completa desde la primera fecha de cada activo hasta la más reciente; antes de
+    // que empiece a cotizar (p. ej. un activo listado hace poco) queda vacío.
+    const filled = values.map(() => 0);
+    if (o.fill !== false) {
+      values.forEach((c, j) => {
+        let last = NaN;
+        for (let t = 0; t < c.length; t++) {
+          if (Number.isFinite(c[t])) last = c[t];
+          else if (Number.isFinite(last)) {
+            c[t] = last;
+            filled[j]++;
+          }
+        }
+      });
+    }
     const coverage = values.map((c) => c.filter(Number.isFinite).length);
     const common = keys.filter((k, t) => values.every((c) => Number.isFinite(c[t]))).length;
-    return { names, dates, values, dropped: 0, coverage, common, holidays, sep: ',', decimalComma: false };
+    return { names, dates, values, dropped: 0, coverage, common, holidays, filled, sep: ',', decimalComma: false };
   }
 
   /* Detecta series corridas en el tiempo respecto a las demás (pasa cuando se pegan

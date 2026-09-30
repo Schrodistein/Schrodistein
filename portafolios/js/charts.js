@@ -6,7 +6,7 @@
   const PF = (root.PF = root.PF || {});
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const nf = (d) => new Intl.NumberFormat('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
+  const nf = (d) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
   const pct = (x, d = 1) => (Number.isFinite(x) ? nf(d).format(x * 100) + ' %' : '—');
   const num = (x, d = 2) => (Number.isFinite(x) ? nf(d).format(x) : '—');
   const f1 = (x) => (Number.isFinite(x) ? (x < 0 ? '−' : '') + nf(2).format(Math.abs(x)) : '—');

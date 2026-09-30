@@ -77,6 +77,18 @@ const shots = process.argv[3];
     const periods = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
     if (periods !== 60) errors.push('archivos: meses unidos ' + periods);
     if (shots) await page.screenshot({ path: `${shots}/archivos-datos.png`, fullPage: true });
+    // Compras por número de acciones y fecha: el precio sale del cierre de ese día
+    await page.click('#tab-confirmar');
+    await page.click('#mode-acciones');
+    await page.fill('#buy-date', '2024-03-02'); // sábado: debe usar el cierre del viernes 1
+    await page.dispatchEvent('#buy-date', 'change');
+    await page.fill('#bq-0', '100');
+    await page.waitForTimeout(600);
+    const note = await page.textContent('#bn-0');
+    if (!/Cierre del 2024-03-01 \(ese día no hubo negociación\)/.test(note)) errors.push('compras: ' + note);
+    if (!/Total invertido/.test(await page.textContent('#buy-sum'))) errors.push('compras: sin total');
+    if (await page.isHidden('#buy-detail')) errors.push('compras: sin detalle');
+    if (!/Eficiente|No eficiente|Casi eficiente/.test(await page.textContent('#verdict'))) errors.push('compras: sin veredicto');
     await page.close();
   }
   // Descargas de la BVC en Excel: tramos de 6 meses, títulos encima y columna de nemotécnico.

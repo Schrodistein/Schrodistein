@@ -679,6 +679,26 @@
 
 
   const MARKET_RE = /(mercado|market|[íi]ndice|index|benchmark|colcap|coleqty|ipc|s&p|sp ?500|spx|ibex|merval|bovespa|ibov|ipsa|colcap|msci|nasdaq|dow|acwi|^spy$)/i;
+  /* Precio de compra de una fecha: el cierre de ese día si hubo negociación; si no
+   * (festivo, fin de semana, día sin negociación), el último cierre anterior.
+   * dates: ISO ascendentes (también acepta 'AAAA-MM', que se toma como el día 1).
+   * Devuelve { price, date, exact } o { error }. */
+  function priceOn(dates, prices, iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso || '')) return { error: 'Escribe una fecha de compra.' };
+    const d = dates.map((x) => (/^\d{4}-\d{2}$/.test(x) ? x + '-01' : x));
+    if (!d.length) return { error: 'No hay precios de este activo.' };
+    if (iso < d[0]) return { error: `No hay precios antes del ${d[0]}; la fecha de compra es anterior al inicio de los datos.` };
+    let lo = 0;
+    let hi = d.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (d[mid] <= iso) lo = mid;
+      else hi = mid - 1;
+    }
+    if (iso > d[d.length - 1]) return { price: prices[lo], date: d[lo], exact: false, after: true };
+    return { price: prices[lo], date: d[lo], exact: d[lo] === iso };
+  }
+
   const isMarketName = (n) => MARKET_RE.test(n);
   function guessMarket(names) {
     const i = names.findIndex((n) => MARKET_RE.test(n));
@@ -687,6 +707,6 @@
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

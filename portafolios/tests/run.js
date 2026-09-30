@@ -401,5 +401,20 @@ test('modelo con toda la historia de cada activo frente a solo periodos comunes'
 });
 
 
+test('precio de compra: cierre del día, o el último cierre anterior', () => {
+  const dates = ['2026-08-13', '2026-08-14', '2026-08-18', '2026-08-19'];
+  const prices = [100, 101, 103, 104];
+  const a = PF.data.priceOn(dates, prices, '2026-08-14');
+  assert(a.price === 101 && a.exact && a.date === '2026-08-14');
+  const b = PF.data.priceOn(dates, prices, '2026-08-17'); // festivo
+  assert(b.price === 101 && !b.exact && b.date === '2026-08-14');
+  const c = PF.data.priceOn(dates, prices, '2026-09-01');
+  assert(c.price === 104 && c.after);
+  assert(PF.data.priceOn(dates, prices, '2026-01-01').error);
+  assert(PF.data.priceOn(dates, prices, '').error);
+  assert(PF.data.priceOn(['2024-01', '2024-02'], [5, 6], '2024-02-15').price === 6);
+});
+
+
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);
 if (failed) process.exit(1);

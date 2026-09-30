@@ -14,7 +14,7 @@
     { key: 'equal', label: 'Pesos iguales', short: '1/N', shape: 'diamond', title: 'Portafolio de pesos iguales (1/N)', desc: 'La diversificación ingenua: el mismo peso en cada activo. Sirve de referencia; rara vez es eficiente.' },
   ];
 
-  const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'frontera', err: null };
+  const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'frontera', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
 
   /* ---------- Utilidades ---------- */
   const LOCALE = { COP: 'es-CO', USD: 'en-US', MXN: 'es-MX', EUR: 'es-ES' };
@@ -141,6 +141,7 @@
         st.userW = saved && saved.names.join('|') === names.join('|') ? saved.w : equalRounded(n);
         st.userNames = names;
         renderWeightInputs();
+        renderBuyInputs();
       }
       showBanner(warnings.join(' '), 'warn');
       $('div-hint').textContent = `Con un peso máximo de ${nf1(s.wmax * 100)} % el portafolio tendrá al menos ${Math.ceil(1 / s.wmax - 1e-9)} activos.`;
@@ -152,7 +153,7 @@
     }
   }
   const nf2 = (x) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
-  const nf1 = (x) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(x);
+  const nf1 = (x) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 }).format(x);
   function equalRounded(n) {
     const w = new Array(n).fill(Math.floor(1000 / n) / 1000);
     w[0] += 1 - w.reduce((a, b) => a + b, 0);
@@ -380,6 +381,7 @@
     renderPort();
     renderCompare();
     renderTB();
+    if (st.mode === 'acciones') computeBuys();
     renderConfirm();
     renderCharts();
   }
@@ -520,6 +522,116 @@
     renderCharts();
   }
 
+  /* ---------- Compras: acciones y fecha → precio de ese día ---------- */
+  const capitalNow = () => (st.mode === 'acciones' && st.buyTotal > 0 ? st.buyTotal : st.s.capital);
+
+  // Historial de precios de un activo: los diarios de los archivos cargados, o la tabla.
+  function priceSeries(name) {
+    if (st.series && $('csv').value === st.mergedText) {
+      const s = st.series.find((x) => x.name === name);
+      if (s) return { dates: s.dates, prices: s.prices, daily: true };
+    }
+    const p = st.parsed;
+    const k = p ? p.names.indexOf(name) : -1;
+    if (k < 0) return { dates: [], prices: [] };
+    const dates = [];
+    const prices = [];
+    p.dates.forEach((d, t) => {
+      const v = p.values[k][t];
+      if (Number.isFinite(v)) {
+        dates.push(d);
+        prices.push(v);
+      }
+    });
+    return { dates, prices, daily: false };
+  }
+
+  function renderBuyInputs() {
+    if (!st.userNames) return;
+    const saved = store.get('buys');
+    if (saved && typeof saved === 'object') st.buys = saved;
+    if (!$('buy-date').value) {
+      const sers = st.userNames.map(priceSeries).filter((x) => x.dates.length);
+      const last = sers.map((x) => x.dates.at(-1)).sort()[0];
+      if (last && /^\d{4}-\d{2}-\d{2}$/.test(last)) $('buy-date').value = last;
+    }
+    $('buys').innerHTML = st.userNames
+      .map((n, i) => {
+        const b = st.buys[n] || {};
+        return `<div class="brow"><span class="bname">${esc(n)}</span>` +
+          `<input id="bq-${i}" data-bq="${i}" type="number" min="0" step="1" inputmode="numeric" placeholder="Acciones" aria-label="Acciones de ${esc(n)}" value="${b.qty != null ? esc(b.qty) : ''}">` +
+          `<input id="bd-${i}" data-bd="${i}" type="date" aria-label="Fecha de compra de ${esc(n)}" value="${esc(b.date || $('buy-date').value || '')}">` +
+          `<span class="bnote" id="bn-${i}"></span></div>`;
+      })
+      .join('');
+  }
+
+  function computeBuys() {
+    if (!st.userNames) return;
+    const rows = st.userNames.map((n, i) => {
+      const b = st.buys[n] || {};
+      const qty = Math.max(0, parseFloat(String(b.qty ?? '').replace(',', '.')) || 0);
+      const date = b.date || $('buy-date').value;
+      const ser = priceSeries(n);
+      const hit = qty > 0 ? PF.data.priceOn(ser.dates, ser.prices, date) : null;
+      const ok = hit && !hit.error;
+      const amount = ok ? qty * hit.price : 0;
+      const lastP = ser.prices.at(-1);
+      const lastD = ser.dates.at(-1);
+      return { n, i, qty, date, hit, ok, amount, lastP, lastD, value: ok ? qty * lastP : 0 };
+    });
+    const total = rows.reduce((q, r) => q + r.amount, 0);
+    const value = rows.reduce((q, r) => q + r.value, 0);
+    st.buyTotal = total;
+    rows.forEach((r) => {
+      const el = $('bn-' + r.i);
+      if (!el) return;
+      el.className = 'bnote' + (r.hit && r.hit.error ? ' bad' : '');
+      el.textContent = !r.qty
+        ? ''
+        : r.hit.error
+          ? r.hit.error
+          : `Cierre del ${r.hit.date}${r.hit.exact ? '' : r.hit.after ? ' (último dato disponible)' : ' (ese día no hubo negociación)'}: ${money(r.hit.price)} × ${r.qty} = ${money(r.amount)}`;
+    });
+    $('buy-sum').textContent = total > 0 ? `Total invertido: ${money(total)}` : '';
+    const has = rows.filter((r) => r.ok);
+    $('buy-detail').hidden = !has.length;
+    if (has.length) {
+      const pctc = (x) => (Number.isFinite(x) ? (x >= 0 ? '+' : '') + pct(x) : '—');
+      $('buy-table').innerHTML =
+        '<thead><tr><th>Activo</th><th class="n">Acciones</th><th>Fecha de compra</th><th>Cierre usado</th><th class="n">Precio de compra</th><th class="n">Invertido</th><th class="n">Peso</th><th>Último cierre</th><th class="n">Precio</th><th class="n">Valor hoy</th><th class="n">Ganancia</th></tr></thead><tbody>' +
+        has.map((r) => `<tr><td>${esc(r.n)}</td><td class="n">${r.qty.toLocaleString('es-CO')}</td><td>${esc(r.date)}</td><td>${esc(r.hit.date)}${r.hit.exact ? '' : ' *'}</td><td class="n">${money(r.hit.price)}</td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.amount / total)}</td><td>${esc(r.lastD)}</td><td class="n">${money(r.lastP)}</td><td class="n">${money(r.value)}</td><td class="n ${r.value >= r.amount ? 'pos' : 'neg'}">${pctc(r.value / r.amount - 1)}</td></tr>`).join('') +
+        `<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(total)}</td><td class="n">${pct(1)}</td><td></td><td></td><td class="n">${money(value)}</td><td class="n ${value >= total ? 'pos' : 'neg'}">${pctc(value / total - 1)}</td></tr></tbody>`;
+      const notes = [];
+      if (has.some((r) => !r.hit.exact && !r.hit.after)) notes.push('* Ese día no hubo negociación del activo; se usó el último cierre anterior.');
+      if (has.some((r) => r.hit.after)) notes.push('Alguna fecha es posterior al último dato cargado; se usó el último cierre disponible.');
+      if (has.some((r) => !priceSeries(r.n).daily)) notes.push('Los precios salen de la tabla agrupada por periodo; para el cierre exacto de un día, carga los CSV diarios de la BVC.');
+      notes.push('La ganancia no incluye dividendos ni comisiones. Los pesos del portafolio salen del monto invertido en cada activo.');
+      $('buy-notes').textContent = notes.join(' ');
+    }
+    if (total > 0) st.userW = rows.map((r) => r.amount / total);
+    else st.userW = rows.map(() => 0);
+  }
+
+  function setMode(mode) {
+    st.mode = mode;
+    store.set('mode', mode);
+    $('mode-pesos').setAttribute('aria-selected', String(mode === 'pesos'));
+    $('mode-acciones').setAttribute('aria-selected', String(mode === 'acciones'));
+    $('box-pesos').hidden = mode !== 'pesos';
+    $('box-acciones').hidden = mode !== 'acciones';
+    if (!st.model) return;
+    if (mode === 'acciones') computeBuys();
+    else {
+      $('buy-detail').hidden = true;
+      const saved = store.get('userW');
+      st.userW = saved && saved.names.join('|') === st.userNames.join('|') ? saved.w : equalRounded(st.userNames.length);
+      renderWeightInputs();
+    }
+    renderConfirm();
+    renderCharts();
+  }
+
   function renderConfirm() {
     const m = st.model;
     const sum = st.userW.reduce((a, b) => a + b, 0);
@@ -527,7 +639,7 @@
     sumEl.textContent = `Suma: ${nf1(sum * 100)} %`;
     sumEl.className = 'sum' + (Math.abs(sum - 1) > 0.0005 ? ' bad' : '');
     if (!(sum > 0)) {
-      $('verdict').innerHTML = '<p>Escribe al menos un peso positivo.</p>';
+      $('verdict').innerHTML = st.mode === 'acciones' ? '<p>Escribe cuántas acciones compraste de al menos un activo y la fecha de compra.</p>' : '<p>Escribe al menos un peso positivo.</p>';
       $('checks').innerHTML = '';
       $('confirm-table').innerHTML = '';
       st.conf = null;
@@ -550,7 +662,7 @@
         ${tile('Rendimiento esperado', pct(e.ret), 'IC 95 %: ' + pct(e.ciRet[0]) + ' a ' + pct(e.ciRet[1]))}
         ${tile('Riesgo σ', pct(e.vol))}
         ${tile('Sharpe', num(e.sharpe), c.tangency ? 'máximo posible: ' + num(c.tangency.sharpe) : '')}
-        ${tile('Ganancia esperada', money(st.s.capital * e.ret), 'sobre ' + money(st.s.capital))}
+        ${tile('Ganancia esperada', money(capitalNow() * e.ret), (st.mode === 'acciones' ? 'sobre lo invertido: ' : 'sobre ') + money(capitalNow()))}
       </div>
       ${Math.abs(sum - 1) > 0.0005 ? `<p class="hint">Tus pesos suman ${nf1(sum * 100)} %; se reescalaron a 100 % para el análisis.</p>` : ''}
       ${relaxed ? '<p class="hint">Tus pesos salen de los límites definidos en Datos; la frontera de comparación amplía esos límites para incluir tu portafolio.</p>' : ''}`;
@@ -764,6 +876,33 @@
       renderConfirm();
       renderCharts();
     }, 300));
+    $('mode-pesos').addEventListener('click', () => setMode('pesos'));
+    $('mode-acciones').addEventListener('click', () => setMode('acciones'));
+    const buysChanged = debounce(() => {
+      store.set('buys', st.buys);
+      if (!st.model || st.mode !== 'acciones') return;
+      computeBuys();
+      renderConfirm();
+      renderCharts();
+    }, 300);
+    $('buys').addEventListener('input', (ev) => {
+      const q = ev.target.getAttribute('data-bq');
+      const d = ev.target.getAttribute('data-bd');
+      const i = q ?? d;
+      if (i == null) return;
+      const n = st.userNames[+i];
+      st.buys[n] = Object.assign({}, st.buys[n], q != null ? { qty: ev.target.value } : { date: ev.target.value });
+      buysChanged();
+    });
+    $('buy-date').addEventListener('change', () => {
+      const v = $('buy-date').value;
+      (st.userNames || []).forEach((n, i) => {
+        st.buys[n] = Object.assign({}, st.buys[n], { date: v });
+        const el = $('bd-' + i);
+        if (el) el.value = v;
+      });
+      buysChanged();
+    });
     $('w-rec').addEventListener('click', () => st.model && setUserW(rec().w.map((x) => Math.round(x * 10000) / 10000)));
     $('w-eq').addEventListener('click', () => st.model && setUserW(equalRounded(st.userNames.length)));
     $('w-norm').addEventListener('click', () => {
@@ -780,6 +919,14 @@
     }, 150));
 
     initTip();
+    const savedMode = store.get('mode');
+    if (savedMode === 'acciones') {
+      st.mode = 'acciones';
+      $('mode-pesos').setAttribute('aria-selected', 'false');
+      $('mode-acciones').setAttribute('aria-selected', 'true');
+      $('box-pesos').hidden = true;
+      $('box-acciones').hidden = false;
+    }
     const hash = (location.hash || '').slice(1);
     st.screen = document.getElementById('screen-' + hash) ? hash : 'frontera';
     parse(false);

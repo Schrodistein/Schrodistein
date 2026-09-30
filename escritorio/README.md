@@ -7,9 +7,10 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
   - **Importar archivos de la BVC** carga CSV ya descargados, por ejemplo los tramos de 6 meses de cada acción.
   - **Actualización automática**: la BVC no ofrece una conexión abierta para aplicaciones, así que la app toma los cierres diarios de Yahoo Finance con el símbolo de cada activo (las acciones de la BVC llevan el sufijo `.CL`). Esos cierres nunca reemplazan un cierre descargado de la BVC. Se puede apagar o cambiar el símbolo de cada activo.
 - **Noticias**: titulares recientes de Google News (español, Colombia) para cada activo y para la BVC. Se abren en el navegador.
-- Se actualiza al abrir y cada 1 a 24 horas, avisa de cierres y noticias nuevas, y puede seguir en la bandeja del sistema y abrirse al iniciar sesión.
+- Se actualiza al abrir y cada hora, día o **semana** (lo predeterminado), avisa de cierres y noticias nuevas y, si los datos nuevos cambian el **portafolio recomendado**, lo recalcula y avisa con la nueva composición. Puede seguir en la bandeja del sistema y abrirse al iniciar sesión.
+- Además de acciones: TES, bonos y CDT (por precio o por tasa), divisas (el dólar USD/COP se descarga solo), futuros y opciones. Trae en la lista los índices de referencia de cada segmento: MSCI COLCAP, COLTES y COLIBR (estos dos se importan desde la BVC).
 - El análisis y la recomendación usan por defecto solo los datos que cargaste de la BVC (descargas e importaciones); en Mercado se puede incluir también la fuente automática.
-- **Comprar** y **Descargas** funcionan igual que en la app web: plan de compra con comisiones de trii y libro de Excel con todos los cálculos (se guarda donde elijas).
+- **Comprar**, **Dónde invertir** y **Descargas** funcionan igual que en la app web: plan de inversión por presupuesto y horizonte con comisiones editables (promociones incluidas), montos mínimos y renta fija; canales y paso a paso para invertir; y libro de Excel con todos los cálculos (se guarda donde elijas).
 - Los datos se guardan en el equipo (`datos.json` en la carpeta de datos de la app); no se envían a ningún servidor.
 
 ## Compartir la app

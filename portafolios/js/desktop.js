@@ -45,7 +45,7 @@
     if (!summary) return;
     const s = summary.settings;
     const m = summary.meta;
-    $('mk-meta').textContent = `Última actualización de cierres: ${fmtDateTime(m.lastPrices)} · de noticias: ${fmtDateTime(m.lastNews)}${s.auto ? ` · la próxima, en unas ${s.intervalHours} h` : ' · actualización automática apagada'}.`;
+    $('mk-meta').textContent = `Última actualización de cierres: ${fmtDateTime(m.lastPrices)} · de noticias: ${fmtDateTime(m.lastNews)}${s.auto ? ` · la próxima, en unas ${s.intervalHours >= 48 ? Math.round(s.intervalHours / 24) + ' días' : s.intervalHours + ' h'}` : ' · actualización automática apagada'}.`;
     const rows = summary.assets
       .map((a, i) => {
         const ch = a.price && a.prev ? a.price / a.prev - 1 : null;
@@ -158,7 +158,45 @@
         names.length ? 'ok' : 'bad'
       );
     }
-    if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) useInAnalysis(true);
+    if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) {
+      const before = lastRecommended();
+      if (await useInAnalysis(true)) await announceRecommendation(before, payload);
+    }
+  }
+
+  /* Con datos nuevos se recalcula el portafolio recomendado; si cambió, se avisa. */
+  function lastRecommended() {
+    try {
+      return JSON.parse(localStorage.getItem('pf.lastRec') || 'null');
+    } catch (e) {
+      return null;
+    }
+  }
+  async function announceRecommendation(before, payload) {
+    const r = globalThis.PFApp && globalThis.PFApp.recommended();
+    if (!r) return;
+    try {
+      localStorage.setItem('pf.lastRec', JSON.stringify(r));
+    } catch (e) {
+      /* sin almacenamiento */
+    }
+    const fresh = payload.result ? payload.result.prices.updated.length : Object.keys(payload.imported.assets).length;
+    if (!fresh) return;
+    const w = (x, n) => {
+      const i = x.names.indexOf(n);
+      return i >= 0 ? x.w[i] : 0;
+    };
+    const moved = before ? Math.max(...[...new Set(before.names.concat(r.names))].map((n) => Math.abs(w(r, n) - w(before, n)))) : 1;
+    const top = r.names.map((n, i) => [n, r.w[i]]).filter((x) => x[1] > 0.005).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, x]) => `${n} ${Math.round(x * 100)} %`).join(', ');
+    const msg = `${before && moved < 0.02 ? 'El portafolio recomendado casi no cambió' : 'Nuevo portafolio recomendado'}: ${top}. Rendimiento esperado ${(r.ret * 100).toFixed(1).replace('.', ',')} %.`;
+    status(`Datos nuevos de ${fresh} ${fresh === 1 ? 'activo' : 'activos'}. ${msg} Revisa Comprar para el plan con tu presupuesto.`, 'ok');
+    if ((!before || moved >= 0.02) && summary && summary.settings && summary.settings.notify && typeof Notification !== 'undefined') {
+      try {
+        new Notification('Frontera Eficiente', { body: msg });
+      } catch (e) {
+        /* sin notificaciones */
+      }
+    }
   }
 
   function init() {

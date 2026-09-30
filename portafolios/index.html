@@ -23,6 +23,7 @@
       <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
       <button type="button" data-go="comprar" id="tab-comprar">Comprar</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
+      <button type="button" data-go="invertir" id="tab-invertir">Dónde invertir</button>
       <button type="button" data-go="mercado" id="tab-mercado" class="desktop-only" hidden>Mercado</button>
       <button type="button" data-go="noticias" id="tab-noticias" class="desktop-only" hidden>Noticias</button>
       <button type="button" data-go="descargas" id="tab-descargas">Descargas</button>
@@ -110,7 +111,7 @@
             <select id="rettype"><option value="log" selected>Logarítmicos: ln(Pt / Pt−1)</option><option value="simple">Simples: Pt / Pt−1 − 1</option></select></label>
           <label class="field" for="history"><span>Activos con fechas distintas</span>
             <select id="history"><option value="all" selected>Toda la historia de cada activo</option><option value="common">Solo periodos comunes a todos</option></select></label>
-          <label class="field" for="market"><span>Índice de mercado (portafolio de mercado)</span>
+          <label class="field" for="market"><span>Índice de mercado principal (renta variable)</span>
             <select id="market"></select></label>
           <label class="field" for="rf"><span>Tasa libre de riesgo anual (%)</span>
             <input id="rf" type="number" step="0.05" value="4" inputmode="decimal"></label>
@@ -122,18 +123,38 @@
             <select id="covmodel"><option value="sample">Covarianza muestral (Markowitz)</option><option value="index">Modelo de índice único (Sharpe)</option></select></label>
           <label class="field" for="wmin"><span>Peso mínimo por activo (%)</span>
             <input id="wmin" type="number" step="1" value="0" inputmode="decimal"></label>
-          <label class="field" for="wmax"><span>Peso máximo por activo (%)</span>
-            <input id="wmax" type="number" step="1" value="20" min="1" max="100" inputmode="decimal"></label>
+          <label class="field" for="wmax"><span>Peso máximo por activo (%; 100 = sin tope)</span>
+            <input id="wmax" type="number" step="1" value="100" min="1" max="100" inputmode="decimal"></label>
+          <label class="field" for="div"><span>Diversificación del portafolio recomendado</span>
+            <select id="div"><option value="alta">Alta: N efectivo ≥ 80 % de los activos</option><option value="media" selected>Media: N efectivo ≥ 60 % de los activos</option><option value="baja">Baja: N efectivo ≥ 40 % de los activos</option></select></label>
           <label class="field" for="capital"><span>Capital a invertir</span>
             <input id="capital" type="number" step="1000000" value="100000000" min="0" inputmode="decimal"></label>
-          <label class="field" for="fee"><span>Comisión por operación, compra o venta (trii ≈ $15.000)</span>
+          <label class="field" for="fee"><span>Comisión por compra (trii ≈ $15.000)</span>
             <input id="fee" type="number" step="1000" value="15000" min="0" inputmode="decimal"></label>
+          <label class="field" for="feesell"><span>Comisión por venta</span>
+            <input id="feesell" type="number" step="1000" value="15000" min="0" inputmode="decimal"></label>
           <label class="field" for="currency"><span>Moneda</span>
             <select id="currency"><option value="COP" selected>Peso colombiano (COP)</option><option value="USD">Dólar (USD)</option><option value="MXN">Peso mexicano (MXN)</option><option value="EUR">Euro (EUR)</option></select></label>
         </div>
+        <fieldset class="segs" id="segs">
+          <legend>Invertir en</legend>
+          <label class="check"><input type="checkbox" id="seg-variable" data-seg="variable" checked> Renta variable <span class="sub">acciones y ETF</span></label>
+          <label class="check"><input type="checkbox" id="seg-fija" data-seg="fija" checked> Renta fija <span class="sub">TES, bonos y CDT</span></label>
+          <label class="check"><input type="checkbox" id="seg-derivados" data-seg="derivados" checked> Derivados <span class="sub">futuros y opciones</span></label>
+          <label class="check"><input type="checkbox" id="seg-divisas" data-seg="divisas" checked> Divisas <span class="sub">dólar y otras monedas</span></label>
+        </fieldset>
         <p class="hint" id="div-hint"></p>
         <p class="hint">Un peso mínimo negativo permite ventas en corto. La mezcla con el CAPM reduce el error de estimación de las medias históricas, que es la principal debilidad práctica de Markowitz.</p>
       </div>
+    </div>
+    <div class="panel" id="bench-panel">
+      <h2>Índices de referencia e instrumentos</h2>
+      <p class="hint">Cada segmento se mide contra su propio índice de mercado: con él se calculan β, el rendimiento CAPM, Treynor y el α de Jensen de cada activo. Descarga el histórico de cada índice y súbelo junto con los demás archivos. Si falta uno, sus activos se miden contra el índice principal.</p>
+      <div class="table-scroll"><table class="data" id="bench-table"></table></div>
+      <p class="status" id="colibr-note" hidden></p>
+      <h3>Instrumentos cargados</h3>
+      <p class="hint">El tipo se detecta por el nombre y las columnas del archivo; corrígelo aquí si hace falta. Los índices no se compran: solo sirven de referencia.</p>
+      <div class="table-scroll"><table class="data" id="inst-table"></table></div>
     </div>
     <div class="panel guide">
       <h2>Datos reales de la Bolsa de Valores de Colombia</h2>
@@ -142,8 +163,10 @@
         <li>En <b>bvc.com.co</b>, entra a la ficha de cada acción (Ecopetrol, PF Bancolombia, ISA, Grupo Argos, Grupo Sura, Celsia…) y descarga su histórico en tramos de 6 meses hasta cubrir el periodo que quieras. Lo ideal son 3 a 5 años.</li>
         <li>Descarga también el histórico del índice <b>MSCI COLCAP</b>, o el del ETF <b>ICOLCAP</b>. Será el portafolio de mercado de los cálculos de Sharpe, Treynor y Jensen.</li>
         <li>Selecciona todos los archivos a la vez en <i>Subir archivos</i>, o arrástralos aquí. La app toma el último cierre de cada mes (o de la frecuencia que elijas) y usa solo los periodos que tienen todos los activos.</li>
-        <li>En <i>Supuestos</i>, escribe como tasa libre de riesgo el rendimiento actual de los TES de corto plazo.</li>
+        <li>Descarga también los índices de los otros segmentos que vayas a usar: <b>COLTES</b> (TES y bonos), <b>COLIBR</b> (CDT y mercado monetario) y la <b>TRM</b> (divisas). La tabla «Índices de referencia» dice cuáles faltan.</li>
+        <li>En <i>Supuestos</i>, escribe como tasa libre de riesgo el rendimiento actual de los TES de corto plazo, o usa el del <b>COLIBR</b> con el botón que aparece cuando lo cargas.</li>
       </ol>
+      <p><b>Otros instrumentos.</b> Los archivos de <b>TES, bonos y CDT</b> pueden traer precio o solo la tasa (TIR, tasa de negociación o de valoración): con la tasa la app arma un índice de rendimiento total que suma la causación de la tasa y resta el efecto precio por duración (<code>Rₜ = (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁)·Δy</code>). Si el archivo trae una columna de duración se usa; si no, 6 años para TES, 4 para bonos y 0,5 para CDT. Las <b>divisas</b> se leen de columnas como «TRM» o «Tasa de cambio», y los <b>futuros y opciones</b> de su precio de cierre o de liquidación.</p>
       <p class="hint">También sirven las descargas de Investing.com (en español o inglés) y de Yahoo Finance, donde las acciones de la BVC llevan el sufijo <code>.CL</code>, por ejemplo <code>ECOPETROL.CL</code>. El activo toma su nombre de la columna de nemotécnico o, si no la hay, del nombre del archivo. El índice se detecta si su nombre contiene «COLCAP», «índice» o «mercado». Para leer archivos de Excel la app descarga un lector la primera vez, así que necesita internet. Los CSV funcionan sin conexión.</p>
     </div>
   </section>
@@ -197,26 +220,66 @@
   <!-- COMPRAR -->
   <section class="screen" id="screen-comprar" hidden>
     <div class="head">
-      <h1>Plan de compra</h1>
-      <p class="lede">Cuántas acciones comprar de cada activo con tu presupuesto, según el portafolio eficiente calculado solo con los datos cargados. Incluye la comisión por cada compra y cada venta.</p>
+      <h1>Plan de inversión</h1>
+      <p class="lede">Cómo repartir tu presupuesto según el portafolio eficiente calculado con los datos cargados: cuántas acciones o cuánto dinero en cada activo, cuánto en renta fija segura según tu horizonte, y qué esperar a corto, mediano y largo plazo después de comisiones.</p>
     </div>
     <div class="panel">
       <div class="form">
         <label class="field" for="plan-budget"><span>Presupuesto</span>
           <input id="plan-budget" type="number" step="100000" min="0" inputmode="decimal"></label>
-        <label class="field" for="plan-fee"><span>Comisión por operación (compra o venta)</span>
+        <label class="field" for="plan-horizon"><span>Horizonte de inversión</span>
+          <select id="plan-horizon"><option value="1">Corto plazo: 1 año</option><option value="3" selected>Mediano plazo: 3 años</option><option value="5">Largo plazo: 5 años</option><option value="10">Muy largo plazo: 10 años</option></select></label>
+        <label class="field" for="plan-fee"><span>Comisión por compra</span>
           <input id="plan-fee" type="number" step="1000" min="0" inputmode="decimal"></label>
+        <label class="field" for="plan-feesell"><span>Comisión por venta</span>
+          <input id="plan-feesell" type="number" step="1000" min="0" inputmode="decimal"></label>
+        <label class="field" for="plan-min"><span>Monto mínimo por inversión</span>
+          <input id="plan-min" type="number" step="100000" min="0" inputmode="decimal" placeholder="automático"></label>
+        <label class="field" for="plan-safe"><span>Tasa de la renta fija segura: CDT o TES corto (% EA)</span>
+          <input id="plan-safe" type="number" step="0.05" min="0" inputmode="decimal" placeholder="la tasa libre de riesgo"></label>
+        <label class="field" for="plan-loss"><span>Probabilidad máxima de terminar con pérdida</span>
+          <select id="plan-loss"><option value="">Sin límite: todo en el portafolio</option><option value="0.2">20 %</option><option value="0.1" selected>10 %</option><option value="0.05">5 %</option></select></label>
         <label class="field" for="plan-base"><span>Portafolio</span>
-          <select id="plan-base"><option value="tangency">Recomendado (máxima razón de Sharpe)</option><option value="minVar">Mínima varianza</option><option value="maxDiv">Máxima diversificación</option><option value="riskParity">Paridad de riesgo</option><option value="equal">Pesos iguales</option></select></label>
+          <select id="plan-base"><option value="recommended">Recomendado (máximo rendimiento diversificado)</option><option value="tangency">Máxima razón de Sharpe (tangente)</option><option value="minVar">Mínima varianza</option><option value="maxDiv">Máxima diversificación</option><option value="riskParity">Paridad de riesgo</option><option value="equal">Pesos iguales</option></select></label>
+      </div>
+      <div class="row-btns fee-presets" role="group" aria-label="Comisión de compra">
+        <span class="sub">Comisión de compra:</span>
+        <button type="button" class="btn" data-fee="1">Normal ($15.000)</button>
+        <button type="button" class="btn" data-fee="0.5">Promoción: mitad</button>
+        <button type="button" class="btn" data-fee="0">Promoción: sin comisión</button>
       </div>
       <label class="check"><input type="checkbox" id="plan-optk" checked> Ajustar el número de activos para que las comisiones no se coman el rendimiento</label>
+      <p class="hint" id="plan-hint"></p>
     </div>
     <div class="panel" id="plan-out"></div>
+    <div class="panel" id="plan-proj-box">
+      <h2>Rendimiento esperado a corto, mediano y largo plazo</h2>
+      <p class="hint">Con el plan de arriba, después de comisiones de compra y de venta (se vende todo al final del plazo) y con la renta fija segura a su tasa. El rango del 95 % sale de la volatilidad histórica; los rendimientos pasados no garantizan los futuros.</p>
+      <div class="table-scroll"><table class="data" id="plan-proj"></table></div>
+    </div>
     <div class="panel" id="plan-alt-box">
       <h2>Alternativas según el número de activos</h2>
-      <p class="hint">La comisión es un costo fijo por activo: con presupuestos pequeños, tener menos activos puede dar más rendimiento neto. Cada alternativa conserva los activos de mayor peso y recalcula el portafolio de máxima razón de Sharpe con ellos.</p>
+      <p class="hint">La comisión es un costo fijo por activo: con presupuestos pequeños, tener menos activos puede dar más rendimiento neto. Cada alternativa conserva los activos de mayor peso y recalcula el portafolio con ellos; se elige la de mejor razón de Sharpe neta en tu horizonte.</p>
       <div class="table-scroll"><table class="data" id="plan-alt"></table></div>
     </div>
+  </section>
+
+  <!-- DÓNDE INVERTIR -->
+  <section class="screen" id="screen-invertir" hidden>
+    <div class="head">
+      <h1>Dónde y cómo invertir</h1>
+      <p class="lede">Los canales para comprar cada parte de tu plan en Colombia, qué cuestan y el paso a paso. Las tarifas, tasas y requisitos cambian: confírmalos siempre en el sitio oficial de cada entidad antes de invertir.</p>
+    </div>
+    <div class="panel where-plan" id="where-plan"></div>
+    <div class="panel">
+      <h2>Canales</h2>
+      <div class="where-grid" id="where-cards"></div>
+    </div>
+    <div class="panel">
+      <h2>Paso a paso</h2>
+      <ol class="steps" id="where-steps"></ol>
+    </div>
+    <p class="hint">Esta sección es orientación general y educativa, no una recomendación personalizada ni asesoría de inversión; la app no tiene relación comercial con ninguna de las entidades nombradas.</p>
   </section>
 
   <!-- CONFIRMAR -->
@@ -310,7 +373,7 @@
     <div class="panel">
       <h2>Actualización automática</h2>
       <div class="mk-settings">
-        <label class="check"><input type="checkbox" id="set-auto"> Actualizar sola cada <select id="set-interval"><option value="1">hora</option><option value="3">3 horas</option><option value="6">6 horas</option><option value="12">12 horas</option><option value="24">24 horas</option></select></label>
+        <label class="check"><input type="checkbox" id="set-auto"> Actualizar sola cada <select id="set-interval"><option value="1">hora</option><option value="3">3 horas</option><option value="6">6 horas</option><option value="12">12 horas</option><option value="24">día</option><option value="168">semana</option></select></label>
         <label class="check"><input type="checkbox" id="set-yahoo"> Traer cierres diarios de la fuente automática</label>
         <label class="check"><input type="checkbox" id="set-news"> Traer noticias</label>
         <label class="check"><input type="checkbox" id="set-notify"> Avisarme de cierres y noticias nuevas</label>
@@ -381,6 +444,10 @@
     <div class="panel">
       <h2>Sharpe (1963, 1964, 1966): índice único, CAPM y razón de Sharpe</h2>
       <p>El <strong>modelo de índice único</strong> explica cada rendimiento como <code>Rᵢ = αᵢ + βᵢ Rm + εᵢ</code>, de modo que <code>σᵢⱼ = βᵢ βⱼ σm²</code>. Reduce el número de parámetros a estimar y suele dar covarianzas más estables. Con una tasa libre de riesgo, el mejor portafolio riesgoso es el <strong>tangente</strong>, el que maximiza la <strong>razón de Sharpe</strong> <code>(E(Rp) − rf) / σp</code>; la recta que lo une con rf es la <strong>línea del mercado de capitales</strong>. En equilibrio (CAPM), <code>E(Rᵢ) = rf + βᵢ (E(Rm) − rf)</code>: la línea del mercado de valores.</p>
+      <p>El <strong>portafolio recomendado</strong> busca el <strong>mayor rendimiento esperado sobre la frontera eficiente</strong> sin renunciar a la diversificación: <code>max E(Rp)</code> sujeto a que sea eficiente (mínima varianza para ese rendimiento), a un <strong>número efectivo de activos</strong> <code>N = 1 / Σ wᵢ² ≥ N*</code> . No impone un tope fijo a cada acción (con 5 activos, un tope de 20 % obliga a pesos iguales): una acción puede pesar 35 % o 45 % si eso sube el rendimiento, siempre que el conjunto conserve el N efectivo pedido. Si la frontera sin tope no llega a esa diversificación, la app usa el tope por activo más holgado con el que sí llega, y lo aplica a toda la frontera para que el recomendado siga siendo eficiente. N* es el 80, 60 o 40 % del número de activos según el nivel de diversificación elegido en Datos.</p>
+      <p><strong>Varios segmentos, varios índices.</strong> La app puede combinar renta variable, renta fija, derivados y divisas. Markowitz no cambia: la frontera usa los rendimientos esperados y la matriz de covarianzas de todos los activos juntos. Lo que cambia es la referencia del CAPM. Cada activo se regresa contra el índice de su segmento, <code>rᵢ − rf = αᵢ + βᵢ (r_b − rf) + εᵢ</code>: el MSCI COLCAP para acciones y ETF, el COLTES para TES y bonos, el COLIBR para CDT y mercado monetario, la TRM para divisas y el índice del subyacente para los derivados. De ahí salen su rendimiento CAPM, <code>rf + βᵢ (E(R_b) − rf)</code>, su Treynor y su α de Jensen. La β del portafolio, el modelo de índice único y Treynor-Black se calculan contra el índice principal, para que todas las medidas del portafolio compartan una sola referencia.</p>
+      <p><strong>Renta fija a partir de tasas.</strong> Un TES o un CDT se cotiza por su tasa. Su rendimiento en un periodo es la causación de la tasa más el efecto precio: <code>Rₜ ≈ (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁) · (yₜ − yₜ₋₁)</code>, con la duración de Macaulay <code>D</code>. Si la tasa sube, el precio cae en proporción a la duración.</p>
+      <p><strong>Plan por horizonte.</strong> Con un activo seguro (un CDT, un TES corto o la tasa del COLIBR), el teorema de separación de Tobin dice que conviene combinar el mismo portafolio riesgoso con renta fija segura, y el criterio de «primero la seguridad» de Roy fija la mezcla: la mayor parte <code>α</code> en el portafolio con la que la probabilidad de terminar el horizonte <code>H</code> con pérdida no pasa del límite <code>p</code>. Con aproximación normal: <code>H·rs + α [H (μ − rs) − z σ √H] ≥ 0</code>, con <code>z = Φ⁻¹(1 − p)</code>. Como el rendimiento esperado crece con <code>H</code> y el riesgo con <code>√H</code>, a más plazo más parte en el portafolio. Las comisiones son un costo fijo por activo. Por eso se exige un monto mínimo por inversión, de modo que la compra y la venta no pasen del 1 % anual de lo invertido, y con presupuestos pequeños el plan puede concentrarse en menos activos.</p>
     </div>
     <div class="panel">
       <h2>Treynor (1965) y Treynor-Black (1973)</h2>
@@ -396,7 +463,7 @@
     </div>
     <div class="panel">
       <h2>Límites de este análisis</h2>
-      <p>Todo parte de datos históricos. Las medias estimadas tienen mucho error, por lo que la app muestra un intervalo de confianza del 95 % del rendimiento esperado. Además, los portafolios optimizados dentro de la muestra suelen parecer mejores de lo que rinden después. Por eso la opción predeterminada mezcla la media histórica con el CAPM y limita el peso de cada activo. Los rendimientos pasados no garantizan los futuros, y esta herramienta es educativa: no constituye asesoría de inversión.</p>
+      <p>Todo parte de datos históricos. Las medias estimadas tienen mucho error, por lo que la app muestra un intervalo de confianza del 95 % del rendimiento esperado. Además, los portafolios optimizados dentro de la muestra suelen parecer mejores de lo que rinden después. Por eso la opción predeterminada mezcla la media histórica con el CAPM y el recomendado exige un número efectivo de activos mínimo. Los rendimientos pasados no garantizan los futuros, y esta herramienta es educativa: no constituye asesoría de inversión.</p>
     </div>
   </section>
 </main>
@@ -410,6 +477,7 @@
 <script src="js/plan.js"></script>
 <script src="js/xlsx.js"></script>
 <script src="js/report.js"></script>
+<script src="js/invertir.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/app.js"></script>

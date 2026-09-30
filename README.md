@@ -19,7 +19,7 @@ La carpeta [`portafolios/`](portafolios/README.md) contiene otra app independien
 
 ## Frontera Eficiente para escritorio
 
-La carpeta [`escritorio/`](escritorio/README.md) empaqueta la app de portafolios como aplicación instalable (Windows, macOS, Linux) con Electron. Se actualiza sola con los cierres diarios de los activos de la BVC y sus noticias. Los instaladores se publican en la Release `escritorio-v<versión>`.
+La carpeta [`escritorio/`](escritorio/README.md) empaqueta la app de portafolios como aplicación instalable (Windows, macOS, Linux) con Electron. Se actualiza sola (cada semana, por defecto) con los cierres de los activos de la BVC, el dólar y sus noticias, combina renta variable, renta fija, derivados y divisas, y recalcula el portafolio recomendado cuando llegan datos nuevos. Los instaladores se publican en la Release `escritorio-v<versión>`.
 
 ## Qué mide
 

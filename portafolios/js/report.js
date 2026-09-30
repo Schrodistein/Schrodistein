@@ -21,15 +21,18 @@
     const col = X().colName;
     const logRet = s.retType !== 'simple';
     const f = m.f;
-    // Orden de columnas: mercado primero, luego los activos en el orden del modelo
-    const order = [ctx.marketIdx].concat(m.names.map((n) => table.names.indexOf(n)));
-    const labels = order.map((k) => table.names[k]);
-    const NS = order.length; // series (mercado + activos)
+    // Orden de columnas: mercado primero, luego los activos en el orden del modelo y al final
+    // los índices de referencia de otros segmentos (COLTES, COLIBR, TRM…), si los hay
+    const benchNames = [...new Set(m.assets.map((a) => a.bench).filter((b) => b && b !== m.marketName && table.names.includes(b)))];
+    const order = [ctx.marketIdx].concat(m.names.map((n) => table.names.indexOf(n)), benchNames.map((b) => table.names.indexOf(b)));
+    const labels = order.map((k, j) => (j > m.names.length ? `${table.names[k]} (índice de referencia)` : table.names[k]));
     const N = m.names.length;
+    const NS = N + 1; // series con estadísticas (mercado + activos)
+    const NP = order.length; // columnas de precios y rendimientos (con los índices de referencia)
     const T = table.dates.length;
     const price = order.map((k) => table.values[k]);
     const common = s.history === 'common';
-    const rowOk = (t) => price.every((p) => fin(p[t]));
+    const rowOk = (t) => price.slice(0, NS).every((p) => fin(p[t]));
     const ret = price.map((p) =>
       p.map((v, t) => {
         if (t === 0 || !fin(v) || !fin(p[t - 1])) return NaN;
@@ -56,7 +59,7 @@
     for (let t = 1; t < T; t++) {
       const n = t + 1; // Precios: la fila t está en n + 1 y la anterior en n
       const row = [table.dates[t]];
-      for (let j = 0; j < NS; j++) {
+      for (let j = 0; j < NP; j++) {
         const a = `Precios!${C(j)}${n + 1}`;
         const b = `Precios!${C(j)}${n}`;
         const core = logRet ? `LN(${a}/${b})` : `${a}/${b}-1`;
@@ -86,6 +89,10 @@
     const statRow = {};
     const assetAt = (j) => m.assets[j - 1];
     const Rm = range(0);
+    // Rango de rendimientos del índice de referencia del activo j (el principal si no tiene otro)
+    const benchJ = (j) => (j === 0 ? -1 : benchNames.indexOf(assetAt(j).bench));
+    const Rb = (j) => (benchJ(j) >= 0 ? range(NS + benchJ(j)) : Rm);
+    const ownBench = (j) => benchJ(j) >= 0;
     const cell = (key, j) => `Estadisticas!$${C(j)}$${statRow[key]}`;
     const local = (key, j) => `${C(j)}${statRow[key]}`;
     const measures = [
@@ -95,11 +102,15 @@
       ['var', 'Varianza por periodo', 'num6', (j) => `_xlfn.VAR.S(${range(j)})`, (j) => PF.stats.variance(ret[j].filter(fin)), 'Σ(r − media)² / (n − 1)'],
       ['sd', 'Desviación estándar por periodo', 'num6', (j) => `_xlfn.STDEV.S(${range(j)})`, (j) => Math.sqrt(PF.stats.variance(ret[j].filter(fin))), '√varianza'],
       ['volh', 'Volatilidad histórica anual', 'pct', (j) => `${local('sd', j)}*SQRT($B$6)`, (j) => Math.sqrt(PF.stats.variance(ret[j].filter(fin)) * f), 'Desviación × √f'],
-      ['beta', 'Beta β', 'num4', (j) => (j === 0 ? '1' : `SLOPE(${range(j)},${Rm})`), (j) => (j === 0 ? 1 : assetAt(j).beta), 'Pendiente de la regresión de r del activo sobre r del mercado = Cov(rᵢ, rm) / Var(rm)'],
-      ['r2', 'R² con el mercado', 'num4', (j) => (j === 0 ? '1' : `RSQ(${range(j)},${Rm})`), (j) => (j === 0 ? 1 : assetAt(j).r2), 'Parte del riesgo explicada por el mercado (riesgo sistemático)'],
-      ['alphah', 'Alfa histórico anual (regresión)', 'pct', (j) => (j === 0 ? '0' : `(INTERCEPT(${range(j)},${Rm})-$B$7*(1-${local('beta', j)}))*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).alphaHist), 'Ordenada de la regresión del exceso de rendimiento (r − rf) sobre el del mercado, × f'],
-      ['resid', 'Varianza residual anual σ²(ε)', 'num6', (j) => (j === 0 ? '0' : `STEYX(${range(j)},${Rm})^2*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).residVar), 'Riesgo no sistemático: error típico de la regresión al cuadrado × f'],
-      ['capm', 'Rendimiento CAPM', 'pct', (j) => `$B$5+${local('beta', j)}*($B$8-$B$5)`, (j) => (j === 0 ? m.Em : assetAt(j).capmRet), 'rf + β (E(Rm) − rf)'],
+      ['bench', 'Índice de referencia del segmento', 'n', () => null, (j) => (j === 0 ? m.marketName : assetAt(j).bench), 'Renta variable: el índice principal; renta fija: COLTES o COLIBR; divisas: TRM; derivados: el índice del subyacente'],
+      ['eb', 'E(R) del índice de referencia', 'pct', (j) => (j === 0 || !ownBench(j) ? '$B$8' : `AVERAGE(${Rb(j)})*$B$6`), (j) => (j === 0 ? m.Em : assetAt(j).benchRet), 'E(Rm) del índice principal, o la media histórica anual del índice del segmento'],
+      ['beta', 'Beta β (frente a su índice)', 'num4', (j) => (j === 0 ? '1' : `SLOPE(${range(j)},${Rb(j)})`), (j) => (j === 0 ? 1 : assetAt(j).beta), 'Pendiente de la regresión de r del activo sobre r de su índice = Cov(rᵢ, rb) / Var(rb)'],
+      ['r2', 'R² con su índice', 'num4', (j) => (j === 0 ? '1' : `RSQ(${range(j)},${Rb(j)})`), (j) => (j === 0 ? 1 : assetAt(j).r2), 'Parte del riesgo explicada por el índice (riesgo sistemático)'],
+      ['alphah', 'Alfa histórico anual (regresión)', 'pct', (j) => (j === 0 ? '0' : `(INTERCEPT(${range(j)},${Rb(j)})-$B$7*(1-${local('beta', j)}))*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).alphaHist), 'Ordenada de la regresión del exceso de rendimiento (r − rf) sobre el del índice, × f'],
+      ['resid', 'Varianza residual anual σ²(ε)', 'num6', (j) => (j === 0 ? '0' : `STEYX(${range(j)},${Rb(j)})^2*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).residVar), 'Riesgo no sistemático: error típico de la regresión al cuadrado × f'],
+      ['betaM', 'Beta frente al índice principal βM', 'num4', (j) => (j === 0 ? '1' : ownBench(j) ? `SLOPE(${range(j)},${Rm})` : local('beta', j)), (j) => (j === 0 ? 1 : assetAt(j).betaM), 'Para la β del portafolio y el modelo de índice único'],
+      ['residM', 'σ²(ε) frente al índice principal', 'num6', (j) => (j === 0 ? '0' : ownBench(j) ? `STEYX(${range(j)},${Rm})^2*$B$6` : local('resid', j)), (j) => (j === 0 ? 0 : assetAt(j).residVarM), 'Riesgo no sistemático frente al índice principal'],
+      ['capm', 'Rendimiento CAPM', 'pct', (j) => `$B$5+${local('beta', j)}*(${local('eb', j)}-$B$5)`, (j) => (j === 0 ? m.Em : assetAt(j).capmRet), 'rf + β (E(Rb) − rf)'],
       [
         'exp',
         'Rendimiento esperado usado E(R)',
@@ -111,7 +122,7 @@
       ['vol', 'Volatilidad usada σ (de la matriz de covarianzas)', 'pct', (j) => (j === 0 ? local('volh', j) : `SQRT(INDEX(Covarianza!$B$${COV0 + 1}:$${col(N)}$${COV0 + N},${j},${j}))`), (j) => (j === 0 ? m.mktVol : m.vol[j - 1]), 'Raíz de la diagonal de la matriz de covarianzas anual'],
       ['sharpe', 'Razón de Sharpe', 'num4', (j) => `(${local('exp', j)}-$B$5)/${local('vol', j)}`, (j) => (j === 0 ? m.mktSharpe : assetAt(j).sharpe), '(E(R) − rf) / σ'],
       ['treynor', 'Razón de Treynor', 'pct', (j) => `(${local('exp', j)}-$B$5)/${local('beta', j)}`, (j) => (j === 0 ? m.Em - m.rf : assetAt(j).treynor), '(E(R) − rf) / β'],
-      ['jensen', 'Alfa de Jensen', 'pct', (j) => `${local('exp', j)}-($B$5+${local('beta', j)}*($B$8-$B$5))`, (j) => (j === 0 ? 0 : assetAt(j).jensen), 'E(R) − [rf + β (E(Rm) − rf)]'],
+      ['jensen', 'Alfa de Jensen', 'pct', (j) => `${local('exp', j)}-($B$5+${local('beta', j)}*(${local('eb', j)}-$B$5))`, (j) => (j === 0 ? 0 : assetAt(j).jensen), 'E(R) − [rf + β (E(Rb) − rf)]'],
     ];
     const COV0 = 5; // fila (1-based) del encabezado de la matriz anual en la hoja Covarianza
     measures.forEach((ms, k) => (statRow[ms[0]] = 13 + k));
@@ -119,8 +130,8 @@
     if (emFormula) E[7][1] = { f: `${C(0)}${statRow.hist}`, v: m.Em, s: 'pct' };
     for (const [key, label, sty, fx, vx, expl] of measures) {
       const row = [label];
-      for (let j = 0; j < NS; j++) row.push({ f: fx(j), v: vx(j), s: sty });
-      row.push({ v: '=' + fx(Math.min(1, NS - 1)).replace(/\$/g, ''), s: 'n' }, { v: expl, s: 'n' });
+      for (let j = 0; j < NS; j++) row.push(fx(j) == null ? { v: vx(j), s: sty } : { f: fx(j), v: vx(j), s: sty });
+      row.push({ v: fx(Math.min(1, NS - 1)) == null ? '' : '=' + fx(Math.min(1, NS - 1)).replace(/\$/g, ''), s: 'n' }, { v: expl, s: 'n' });
       E.push(row);
       void key;
     }
@@ -198,7 +209,7 @@
       const row = [{ v: m.names[i], s: 'b' }];
       for (let j = 0; j < N; j++) {
         let fx;
-        if (s.covModel === 'index') fx = `${cell('beta', i + 1)}*${cell('beta', j + 1)}*${cell('volh', 0)}^2${i === j ? `+${cell('resid', i + 1)}` : ''}`;
+        if (s.covModel === 'index') fx = `${cell('betaM', i + 1)}*${cell('betaM', j + 1)}*${cell('volh', 0)}^2${i === j ? `+${cell('residM', i + 1)}` : ''}`;
         else if (common) fx = `_xlfn.COVARIANCE.S(${range(i + 1)},${range(j + 1)})*Estadisticas!$B$6`;
         else fx = `${corrCell(i + 1, j + 1)}*${cell('volh', i + 1)}*${cell('volh', j + 1)}`;
         row.push(m.info.psdFixed ? { v: m.Sigma[i][j], s: 'num6' } : { f: fx, v: m.Sigma[i][j], s: 'num6' });
@@ -250,7 +261,8 @@
     const estRange = (key) => `Estadisticas!$${C(1)}$${statRow[key]}:$${C(N)}$${statRow[key]}`;
     const covRow = (i) => `Covarianza!$B$${COV0 + 1 + i}:$${col(N)}$${COV0 + 1 + i}`;
     const blocks = [
-      ['Recomendado: máxima razón de Sharpe (tangente)', P.tangency],
+      ['Recomendado: máximo rendimiento eficiente con diversificación mínima', P.recommended],
+      ['Máxima razón de Sharpe (tangente)', P.tangency],
       ['Mínima varianza', P.minVar],
       ['Máxima diversificación', P.maxDiv],
       ['Paridad de riesgo', P.riskParity],
@@ -271,7 +283,7 @@
       const wR = `$B$${rw}:$${col(N)}$${rw}`;
       Pt.push(['Peso wᵢ'].concat(blk.w.map((x) => ({ v: x, s: 'pct' }))));
       Pt.push(['E(Rᵢ)'].concat(m.names.map((_, i) => ({ f: cell('exp', i + 1), v: m.mu[i], s: 'pct' }))));
-      Pt.push(['βᵢ'].concat(m.names.map((_, i) => ({ f: cell('beta', i + 1), v: m.assets[i].beta, s: 'num4' }))));
+      Pt.push(['βᵢ (frente al índice principal)'].concat(m.names.map((_, i) => ({ f: cell('betaM', i + 1), v: m.assets[i].betaM, s: 'num4' }))));
       Pt.push(['σᵢ'].concat(m.names.map((_, i) => ({ f: cell('vol', i + 1), v: m.vol[i], s: 'pct' }))));
       const Sw = PF.stats.matVec(m.Sigma, blk.w);
       Pt.push(['(Σw)ᵢ = Σⱼ σᵢⱼ wⱼ'].concat(m.names.map((_, i) => ({ f: `SUMPRODUCT(${covRow(i)},${wR})`, v: Sw[i], s: 'num6' })), [{ v: '=SUMAPRODUCTO(fila i de la matriz; pesos)', s: 'n' }]));
@@ -300,42 +312,53 @@
     /* ---------- Plan de compra ---------- */
     const Pl = [];
     const plan = ctx.plan;
-    if (plan && plan.rows && plan.rows.length) {
-      Pl.push([{ v: 'Plan de compra con comisiones', s: 't' }]);
-      Pl.push([{ v: 'Acciones enteras para el presupuesto; la comisión se cobra por cada operación de compra y de venta. Precios: último cierre de los datos cargados.', s: 'n' }]);
+    if (plan && plan.rows && (plan.rows.length || plan.safe > 0)) {
+      const H = plan.years || 1;
+      const rs = plan.safeRate == null ? m.rf : plan.safeRate;
+      Pl.push([{ v: 'Plan de inversión con comisiones y horizonte', s: 't' }]);
+      Pl.push([{ v: 'Acciones enteras para acciones y ETF; monto en pesos para renta fija, divisas y derivados. Comisión fija por cada compra y cada venta (los CDT no pagan). La renta fija segura rinde su tasa efectiva anual.', s: 'n' }]);
       Pl.push([]);
       Pl.push(['Presupuesto', { v: plan.budget, s: 'money' }]); // B4
-      Pl.push(['Comisión por operación', { v: plan.fee, s: 'money' }]); // B5
+      Pl.push(['Comisión por compra', { v: plan.feeBuy == null ? plan.fee : plan.feeBuy, s: 'money' }]); // B5
+      Pl.push(['Comisión por venta', { v: plan.feeSell == null ? plan.fee : plan.feeSell, s: 'money' }]); // B6
+      Pl.push(['Horizonte (años)', H]); // B7
+      Pl.push(['Tasa de la renta fija segura (EA)', { v: rs, s: 'pct' }]); // B8
+      Pl.push(['En renta fija segura', { v: plan.safe || 0, s: 'money' }]); // B9
+      Pl.push(['Monto mínimo por inversión', { v: plan.minAmt || 0, s: 'money' }]); // B10
       Pl.push([]);
-      Pl.push(['Activo', 'Peso objetivo', 'Precio', 'Fecha del precio', 'Acciones', 'Monto', 'Peso real', 'Comisión de compra', 'Comisión de venta', 'E(R) del activo'].map((x) => ({ v: x, s: 'h' })));
-      const r0 = 8;
-      const r1 = r0 + plan.rows.length - 1;
+      Pl.push(['Activo', 'Tipo', 'Peso objetivo', 'Precio', 'Fecha del precio', 'Acciones', 'Monto', 'Peso real', 'Comisión de compra', 'Comisión de venta', 'E(R) del activo'].map((x) => ({ v: x, s: 'h' })));
+      const r0 = 13;
+      const r1 = r0 + Math.max(plan.rows.length, 1) - 1;
+      const t = r1 + 1;
       plan.rows.forEach((r, k) => {
         const n = r0 + k;
+        const monto = r.unit === 'monto';
         Pl.push([
           r.name,
+          (PF.data.CLASSES || {})[r.cls] || '',
           { v: r.w, s: 'pct' },
-          { v: r.price, s: 'money' },
+          monto ? '' : { v: r.price, s: 'money' },
           r.date || '',
-          { v: r.shares, s: 'int' },
-          { f: `C${n}*E${n}`, v: r.amount, s: 'money' },
-          { f: `F${n}/$F$${r1 + 1}`, v: r.realW, s: 'pct' },
-          { f: `IF(E${n}>0,$B$5,0)`, v: plan.fee, s: 'money' },
-          { f: `IF(E${n}>0,$B$5,0)`, v: plan.fee, s: 'money' },
+          monto ? '' : { v: r.shares, s: 'int' },
+          monto ? { v: r.amount, s: 'money' } : { f: `D${n}*F${n}`, v: r.amount, s: 'money' },
+          { f: `G${n}/$G$${t}`, v: r.realW, s: 'pct' },
+          r.noFee ? { v: 0, s: 'money' } : { f: '$B$5', v: r.feeBuy, s: 'money' },
+          r.noFee ? { v: 0, s: 'money' } : { f: '$B$6', v: r.feeSell, s: 'money' },
           { f: `INDEX(${estRange('exp')},MATCH(A${n},Estadisticas!$${C(1)}$12:$${C(N)}$12,0))`, v: m.mu[m.names.indexOf(r.name)], s: 'pct' },
         ]);
       });
-      const t = r1 + 1;
-      const ev = PF.plan.evaluatePlan(m, plan);
-      Pl.push([{ v: 'Total', s: 'b' }, null, null, null, null, { f: `SUM(F${r0}:F${r1})`, v: plan.invested, s: 'moneyb' }, { f: `SUM(G${r0}:G${r1})`, v: 1, s: 'pct' }, { f: `SUM(H${r0}:H${r1})`, v: plan.buyFees, s: 'moneyb' }, { f: `SUM(I${r0}:I${r1})`, v: plan.sellFees, s: 'moneyb' }]);
+      if (!plan.rows.length) Pl.push(['(todo en renta fija segura)']);
+      const ev = PF.plan.evaluatePlan(m, plan, rs, H);
+      Pl.push([{ v: 'Total', s: 'b' }, null, null, null, null, null, { f: `SUM(G${r0}:G${r1})`, v: plan.invested, s: 'moneyb' }, { f: `SUM(H${r0}:H${r1})`, v: plan.rows.length ? 1 : 0, s: 'pct' }, { f: `SUM(I${r0}:I${r1})`, v: plan.buyFees, s: 'moneyb' }, { f: `SUM(J${r0}:J${r1})`, v: plan.sellFees, s: 'moneyb' }]);
       Pl.push([]);
       const L = (label, fx, v, sty, txt) => Pl.push([label, { f: fx, v, s: sty }, { v: txt, s: 'n' }]);
-      L('Efectivo sin invertir', `B4-F${t}-H${t}`, plan.cash, 'money', 'Presupuesto − invertido − comisiones de compra');
-      L('Rendimiento esperado del portafolio comprado', `SUMPRODUCT(G${r0}:G${r1},J${r0}:J${r1})`, ev ? ev.e.ret : '', 'pct', 'Σ peso real × E(R)');
-      L('Ganancia esperada bruta en un año', `F${t}*B${t + 3}`, ev ? ev.grossGain : '', 'money', 'Invertido × E(Rp)');
-      L('Ganancia esperada neta (compra y venta)', `B${t + 4}-H${t}-I${t}`, ev ? ev.netGain : '', 'moneyb', 'Bruta − comisiones de compra − comisiones de venta');
-      L('Rendimiento neto sobre el presupuesto', `B${t + 5}/B4`, ev ? ev.netRet : '', 'pctb', 'Ganancia neta / presupuesto');
-      L('Rendimiento mínimo para cubrir comisiones', `(H${t}+I${t})/F${t}`, ev ? ev.breakEven : '', 'pct', '(comisiones de compra + venta) / invertido');
+      const q = t + 2; // primera fila de resultados
+      L('Efectivo sin invertir', `B4-G${t}-I${t}-B9`, plan.cash, 'money', 'Presupuesto − invertido − comisiones de compra − renta fija segura');
+      L('Rendimiento esperado del portafolio comprado', `SUMPRODUCT(H${r0}:H${r1},K${r0}:K${r1})`, ev.e.ret, 'pct', 'Σ peso real × E(R)');
+      L(`Valor esperado en ${H} ${H === 1 ? 'año' : 'años'}`, `G${t}*(1+B${q + 1})^B7+B9*(1+B8)^B7+B${q}-J${t}`, ev.proj.value, 'moneyb', 'Invertido × (1 + E(Rp))^H + renta fija × (1 + tasa)^H + efectivo − comisiones de venta');
+      L('Ganancia esperada neta', `B${q + 2}-B4`, ev.proj.gain, 'money', 'Valor esperado − presupuesto');
+      L('Rendimiento neto anual', `(B${q + 2}/B4)^(1/B7)-1`, ev.netRet, 'pctb', '(valor / presupuesto)^(1/H) − 1');
+      L('Rendimiento mínimo anual para cubrir comisiones', `IF(G${t}>0,(I${t}+J${t})/G${t}/B7,0)`, ev.breakEven, 'pct', '(comisiones de compra + venta) / invertido / H');
     }
 
     /* ---------- Formulas ---------- */
@@ -370,8 +393,12 @@
     add('Razón de diversificación', 'DR = Σ wᵢ σᵢ / σp', '', '', 'Portafolios');
     add('Frontera eficiente', 'min ½ wᵀΣw − t μᵀw, Σw = 1, límites por activo', 'Solver (la app usa un método exacto de conjunto activo)', '', 'Frontera');
     add('Portafolio tangente', 'max (E(Rp) − rf) / σp', 'Solver', '', 'Portafolios');
-    add('Comisiones', 'Costo = comisión × activos comprados × 2 (compra y venta)', '=CONTAR.SI(acciones;">0")*comisión', '', 'Plan_compra');
-    add('Rendimiento neto', '(invertido × E(Rp) − comisiones) / presupuesto', '', '', 'Plan_compra');
+    add('Portafolio recomendado', 'max E(Rp) sobre la frontera eficiente, con 1 / Σ wᵢ² ≥ N*', 'Solver (restricción: 1/SUMA.CUADRADOS(pesos) >= N*)', P.recommended && P.recommended.div ? 'N* = ' + g(P.recommended.div.target, 2) : '', 'Portafolios');
+    add('Comisiones', 'Costo = comisión de compra × activos + comisión de venta × activos (los CDT no pagan)', '=SUMA(comisiones)', '', 'Plan_compra');
+    add('Monto mínimo por inversión', '(comisión de compra + venta) / (1 % × H), sin pasar de la mitad del presupuesto', '', '', 'Plan_compra');
+    add('Reparto con renta fija segura', 'mayor α con P(pérdida en H) ≤ p:  H·rs + α[H(μ − rs) − z σ √H] ≥ 0', '', '', 'Plan_compra');
+    add('Valor esperado al horizonte', 'V = I (1 + E(Rp))^H + S (1 + rs)^H + efectivo − comisiones de venta', '', '', 'Plan_compra');
+    add('Rendimiento neto anual', '(V / presupuesto)^(1/H) − 1', '', '', 'Plan_compra');
 
     /* ---------- Resumen ---------- */
     const Rs = [];

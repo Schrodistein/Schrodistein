@@ -53,7 +53,15 @@ const shots = process.argv[3];
     await page.click('#tab-comprar');
     await page.waitForSelector('#plan-out .plan-lead');
     const lead = await page.textContent('#plan-out .plan-lead');
-    if (!/^Compra \d/.test(lead.trim())) errors.push(`${label}: plan sin acciones (${lead})`);
+    if (!/^Invierte así: .*\d+ acciones de /.test(lead.trim())) errors.push(`${label}: plan sin acciones (${lead})`);
+    if ((await page.$$eval('#plan-proj tbody tr', (r) => r.length)) < 3) errors.push(`${label}: faltan las proyecciones a corto, mediano y largo plazo`);
+    // Promoción sin comisión: la compra queda en $0 y la venta sigue en $15.000
+    await page.click('.fee-presets [data-fee="0"]');
+    await page.waitForTimeout(600);
+    const promo = await page.textContent('#plan-out .tiles');
+    if (!/Comisiones de compra\s*\$\s*0/.test(promo) || !/Comisiones de venta[^$]*\$\s*[1-9]/.test(promo)) errors.push(`${label}: la promoción sin comisión no se aplicó (${promo.slice(0, 200)})`);
+    await page.click('.fee-presets [data-fee="1"]');
+    await page.waitForTimeout(600);
     const tiles = await page.textContent('#plan-out .tiles');
     if (!/Comisiones de compra/.test(tiles) || !/15\.000/.test(tiles)) errors.push(`${label}: plan sin comisiones de $15.000`);
     await page.fill('#plan-budget', '300000');
@@ -63,7 +71,14 @@ const shots = process.argv[3];
     if (shots) await page.screenshot({ path: `${shots}/${label}-comprar.png`, fullPage: true });
     await page.click('#plan-register');
     await page.waitForTimeout(500);
-    if (!/Comisiones de compra/.test(await page.textContent('#buy-table'))) errors.push(`${label}: Confirmar sin comisiones`);
+    if (!/Comisión de compra/.test(await page.textContent('#buy-table'))) errors.push(`${label}: Confirmar sin comisiones`);
+    // Comisión propia de una compra (promoción a mitad de precio)
+    const bi = await page.$$eval('#buys [data-bq]', (els) => els.findIndex((e) => e.value !== ''));
+    const bf = await page.$(`#bf-${bi}`);
+    const before = await page.textContent('#buy-sum');
+    await bf.fill('7500');
+    await page.waitForTimeout(700);
+    if ((await page.textContent('#buy-sum')) === before) errors.push(`${label}: la comisión de una compra no cambia el total`);
     // Descargas
     await page.click('#tab-descargas');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dl-xlsx')]);

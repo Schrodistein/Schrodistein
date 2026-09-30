@@ -292,7 +292,7 @@ table.data th.sortable:hover { color: var(--ink); }
 .seg button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); }
 .mode-box { display: grid; gap: 12px; }
 .buys { display: grid; gap: 10px; }
-.brow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 4px 8px; align-items: center; font-size: 0.9rem; }
+.brow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) minmax(0, 0.9fr); gap: 4px 8px; align-items: center; font-size: 0.9rem; }
 .brow .bname { grid-column: 1 / -1; font-weight: 600; }
 .brow input { padding: 6px 8px; }
 .brow .bnote { grid-column: 1 / -1; font-size: 0.8rem; color: var(--ink-2); }
@@ -425,3 +425,22 @@ table.perf td.cell { font-weight: 600; }
 .term-chart svg .hit:hover { fill: var(--ink); opacity: 0.06; }
 .term-main .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 560px) { .term-main .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Segmentos, comisiones y dónde invertir */
+.segs { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin: 12px 0 4px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
+.segs legend { padding: 0 6px; font-weight: 600; color: var(--ink-2); }
+.segs .sub, .fee-presets .sub { color: var(--ink-3); font-size: 0.85em; }
+.fee-presets { align-items: center; margin-top: 10px; }
+#bench-panel h3 { margin: 16px 0 4px; font-size: 1rem; }
+#inst-table select { padding: 4px 6px; }
+.where-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
+.where-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--sunk); display: grid; gap: 6px; align-content: start; }
+.where-card h3 { margin: 0; font-size: 1.05rem; }
+.where-card .tag { display: inline-block; font-size: 0.75rem; padding: 1px 8px; border-radius: 999px; background: var(--up-soft); color: var(--up); margin-right: 4px; }
+.where-card .tag.off { background: var(--grid); color: var(--ink-3); }
+.where-card ul { margin: 0; padding-left: 18px; }
+.where-card a { color: var(--accent, var(--up)); }
+.steps { counter-reset: st; list-style: none; padding: 0; display: grid; gap: 8px; }
+.steps li { counter-increment: st; position: relative; padding-left: 34px; }
+.steps li::before { content: counter(st); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 0.8rem; font-weight: 700; background: var(--up-soft); color: var(--up); }
+.where-plan { border-left: 3px solid var(--up); padding: 6px 12px; background: var(--sunk); }

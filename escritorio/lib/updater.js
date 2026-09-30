@@ -103,7 +103,7 @@ function importFiles(store, files, readExcel) {
         series = PF.data.readText(text, path.basename(f)).series;
       }
       for (const s of series) {
-        store.ensureAsset(s.name, PF.data.isMarketName(s.name));
+        store.ensureAsset(s.name, s.cls === 'indice' || PF.data.isMarketName(s.name), s);
         const n = store.mergePrices(s.name, s.dates, s.prices, 'bvc');
         res.assets[s.name] = (res.assets[s.name] || 0) + n;
       }

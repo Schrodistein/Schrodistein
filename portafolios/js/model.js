@@ -54,24 +54,47 @@
     const Em = ajustes.marketReturn != null && fin(ajustes.marketReturn) ? ajustes.marketReturn : mktHist;
 
     const counts = R.map((r) => r.filter(fin).length);
+    // Índice de referencia de cada activo: el de su segmento (renta fija, divisas…) o el principal
+    const benchOf = (i) => {
+      const b = datos.bench && datos.bench[i];
+      if (!b || b.name === datos.marketName) return null;
+      const br = pairwise ? b.returns : pick(b.returns);
+      const own = br.filter(fin);
+      if (own.length < 6 || both(R[i], br)[0].length < 6) return null;
+      return { name: b.name, r: br, E: S.mean(own) * f, vol: Math.sqrt(S.variance(own) * f) };
+    };
     const assets = R.map((r, i) => {
       const own = r.filter(fin);
       const [y, x] = both(r, rm);
       if (own.length < 6 || y.length < 6) throw new Error(`«${datos.names[i]}» tiene muy pocos periodos con dato junto al índice (${y.length}; mínimo 6).`);
-      const reg = S.regress(y.map((v) => v - rfp), x.map((v) => v - rfp));
+      const regM = S.regress(y.map((v) => v - rfp), x.map((v) => v - rfp));
+      const bm = benchOf(i);
+      let reg = regM;
+      if (bm) {
+        const [yb, xb] = both(r, bm.r);
+        reg = S.regress(yb.map((v) => v - rfp), xb.map((v) => v - rfp));
+      }
+      const Eb = bm ? bm.E : Em;
       const histRet = S.mean(own) * f;
       const vol = Math.sqrt(S.variance(own) * f);
       return {
         name: datos.names[i],
         histRet,
         histVol: vol,
+        // Frente al índice del segmento del activo (igual al principal si no tiene otro)
+        bench: bm ? bm.name : datos.marketName,
+        benchRet: Eb,
+        benchVol: bm ? bm.vol : mktVol,
         beta: reg.beta,
         alphaHist: reg.alpha * f,
         tAlpha: reg.tAlpha,
-        pAlpha: S.pValue(reg.tAlpha, y.length - 2),
+        pAlpha: S.pValue(reg.tAlpha, (bm ? both(r, bm.r)[0].length : y.length) - 2),
         r2: reg.r2,
         residVar: reg.residVar * f,
-        capmRet: rf + reg.beta * (Em - rf),
+        capmRet: rf + reg.beta * (Eb - rf),
+        // Frente al índice principal: β del portafolio, modelo de índice único y Treynor-Black
+        betaM: regM.beta,
+        residVarM: regM.residVar * f,
         periods: own.length,
       };
     });
@@ -84,7 +107,7 @@
     let minOverlap = Tc;
     if (ajustes.covModel === 'index') {
       const vm = mktVol * mktVol;
-      Sigma = assets.map((a, i) => assets.map((b, j) => a.beta * b.beta * vm + (i === j ? a.residVar : 0)));
+      Sigma = assets.map((a, i) => assets.map((b, j) => a.betaM * b.betaM * vm + (i === j ? a.residVarM : 0)));
     } else if (!pairwise) {
       Sigma = S.covMatrix(returnsC).map((row) => row.map((x) => x * f));
     } else {
@@ -110,7 +133,8 @@
       a.vol = vol[i];
       a.sharpe = (mu[i] - rf) / vol[i];
       a.treynor = Math.abs(a.beta) > 1e-9 ? (mu[i] - rf) / a.beta : NaN;
-      a.jensen = mu[i] - (rf + a.beta * (Em - rf));
+      a.jensen = mu[i] - (rf + a.beta * (a.benchRet - rf));
+      a.jensenM = mu[i] - (rf + a.betaM * (Em - rf));
     });
     const sortedCounts = counts.slice().sort((a, b) => a - b);
     const Teff = pairwise ? sortedCounts[Math.floor(n / 2)] : Tc;
@@ -139,6 +163,7 @@
       mktSharpe: (Em - rf) / mktVol,
       settings: ajustes,
       singular: !pairwise && ajustes.covModel !== 'index' && Tc <= n,
+      multiBench: assets.some((a) => a.bench !== datos.marketName),
       info: { pairwise, common: Tc, counts, marketCount: rmOwn.length, minOverlap, psdFixed, total: Tall },
     };
   }
@@ -147,7 +172,7 @@
   function evaluate(m, w) {
     const ret = S.dot(m.mu, w);
     const vol = Math.sqrt(Math.max(0, S.quad(m.Sigma, w)));
-    const beta = S.dot(m.assets.map((a) => a.beta), w);
+    const beta = S.dot(m.assets.map((a) => a.betaM), w);
     const sharpe = (ret - m.rf) / vol;
     const treynor = Math.abs(beta) > 1e-9 ? (ret - m.rf) / beta : NaN;
     const jensen = ret - (m.rf + beta * (m.Em - m.rf));
@@ -188,15 +213,74 @@
     };
   }
 
+  /* Niveles de diversificación del portafolio recomendado: N efectivo mínimo (1 / Σwᵢ²)
+   * como fracción del número de activos. */
+  const DIV_LEVELS = {
+    alta: { frac: 0.8, label: 'alta' },
+    media: { frac: 0.6, label: 'media' },
+    baja: { frac: 0.4, label: 'baja' },
+  };
+  const effNOf = (w) => 1 / w.reduce((s, x) => s + x * x, 0);
+
+  /* El punto de mayor rendimiento de la frontera eficiente (límites lo/hi) con N efectivo ≥ target. */
+  function topDiversified(m, lo, hi, target) {
+    const front = O.frontier(m.Sigma, m.mu, lo, hi, { points: 80 });
+    const ok = (p) => effNOf(p.w) >= target - 1e-9;
+    let k = -1;
+    for (let i = 0; i < front.length; i++) if (ok(front[i])) k = i;
+    if (k < 0) return null;
+    let a = front[k];
+    if (k < front.length - 1) {
+      // Afinar entre el último punto que cumple y el siguiente, que ya no cumple
+      let bRet = front[k + 1].ret;
+      for (let i = 0; i < 50 && bRet - a.ret > 1e-9; i++) {
+        const p = O.frontierAtRet(m.Sigma, m.mu, lo, hi, front, (a.ret + bRet) / 2);
+        if (ok(p)) a = p;
+        else bRet = p.ret;
+      }
+    }
+    return a.w;
+  }
+
+  /* Portafolio recomendado: el de mayor rendimiento esperado sobre la frontera eficiente
+   * de Markowitz que conserva la diversificación exigida:
+   *   max E(Rp)  sujeto a  ser eficiente (mínima varianza para ese rendimiento),
+   *                        N efectivo = 1 / Σwᵢ² ≥ N*,  lo ≤ wᵢ ≤ tope,  Σwᵢ = 1.
+   * El tope por activo no es fijo: se usa el más holgado (sin tope, si se puede) cuya frontera
+   * tiene portafolios con ese N efectivo. Así un activo puede pesar mucho más que 1/N si eso
+   * da más rendimiento, mientras el conjunto siga diversificado. capMax es el tope del usuario. */
+  function recommended(m, loA, capMax, level) {
+    const n = m.mu.length;
+    const L = DIV_LEVELS[level] || DIV_LEVELS.media;
+    const target = Math.min(n, Math.max(1, L.frac * n));
+    const top = Math.min(1, Math.max(capMax, 1 / n));
+    const caps = [top];
+    for (let c = Math.ceil(top * 20 - 1e-9) / 20 - 0.05; c > 1 / n + 1e-9; c -= 0.05) caps.push(Math.round(c * 100) / 100);
+    if (caps[caps.length - 1] > 1 / n + 1e-9) caps.push(1 / n);
+    for (const cap of caps) {
+      const hi = new Array(n).fill(cap);
+      if (!O.feasible(loA, hi)) continue;
+      const w = topDiversified(m, loA, hi, target);
+      if (w) return { w, cap, info: { target, level: L.label, cap, capMax: top } };
+    }
+    const hi = new Array(n).fill(top);
+    return { w: O.projectBoxSimplex(new Array(n).fill(1 / n), loA, hi), cap: top, info: { target, level: L.label, cap: top, capMax: top, reached: false } };
+  }
+
   /* Carteras de referencia bajo los límites lo/hi. */
-  function portfolios(m, lo, hi) {
+  function portfolios(m, lo, hi, opts) {
     const n = m.mu.length;
     const loA = O.toArr(lo, n);
-    const hiA = O.toArr(hi, n);
+    // El recomendado fija el tope por activo (el más holgado que permite diversificar, sin pasar
+    // del tope del usuario); la frontera y los demás portafolios usan ese mismo tope, así el
+    // recomendado queda sobre la frontera que se dibuja y se confirma.
+    const rc = recommended(m, loA, Math.min(...O.toArr(hi, n)), (opts && opts.div) || 'media');
+    const hiA = new Array(n).fill(rc.cap);
     const front = O.frontier(m.Sigma, m.mu, loA, hiA);
     const minVar = front[0].w;
-    const out = { front, lo: loA, hi: hiA, warnings: [] };
+    const out = { front, lo: loA, hi: hiA, cap: rc.cap, warnings: [] };
     out.minVar = evaluate(m, minVar);
+    out.recommended = Object.assign(evaluate(m, rc.w), { div: rc.info });
     if (Math.max(...m.mu) > m.rf) {
       out.tangency = evaluate(m, O.maxRatio(m.Sigma, m.mu, m.rf, loA, hiA, front).w);
     } else {
@@ -252,18 +336,18 @@
    * una cartera activa que explota los alfas, ponderados por α / σ²(ε). */
   function treynorBlack(m) {
     const a = m.assets;
-    const alpha = a.map((x) => x.jensen);
-    const raw = a.map((x, i) => alpha[i] / x.residVar);
+    const alpha = a.map((x) => x.jensenM);
+    const raw = a.map((x, i) => alpha[i] / x.residVarM);
     const s = raw.reduce((p, x) => p + x, 0);
-    const ir = Math.sqrt(a.reduce((p, x, i) => p + (alpha[i] * alpha[i]) / x.residVar, 0));
+    const ir = Math.sqrt(a.reduce((p, x, i) => p + (alpha[i] * alpha[i]) / x.residVarM, 0));
     const premium = m.Em - m.rf;
     if (Math.abs(s) < 1e-12 || ir < 1e-9 || premium <= 0) {
       return { ok: false, reason: premium <= 0 ? 'La prima esperada del mercado no es positiva.' : 'Todos los alfas son cero: la cartera óptima es el índice.', ir: ir || 0, sharpeMkt: m.mktSharpe };
     }
     const wA = raw.map((x) => x / s);
     const alphaA = S.dot(wA, alpha);
-    const betaA = S.dot(wA, a.map((x) => x.beta));
-    const resA = a.reduce((p, x, i) => p + wA[i] * wA[i] * x.residVar, 0);
+    const betaA = S.dot(wA, a.map((x) => x.betaM));
+    const resA = a.reduce((p, x, i) => p + wA[i] * wA[i] * x.residVarM, 0);
     const w0 = alphaA / resA / (premium / (m.mktVol * m.mktVol));
     const wStar = w0 / (1 + (1 - betaA) * w0);
     const sharpeP = Math.sqrt(m.mktSharpe * m.mktSharpe + ir * ir);
@@ -278,7 +362,7 @@
       wIndex: 1 - wStar,
       assetW: wA.map((x) => x * wStar),
       ir,
-      appraisal: a.map((x, i) => alpha[i] / Math.sqrt(x.residVar)),
+      appraisal: a.map((x, i) => alpha[i] / Math.sqrt(x.residVarM)),
       sharpeMkt: m.mktSharpe,
       sharpeP,
       significant: tStats.filter((t) => Math.abs(t) >= 2).length,
@@ -286,5 +370,5 @@
     };
   }
 
-  PF.model = { FREQ, build, evaluate, portfolios, confirm, treynorBlack };
+  PF.model = { FREQ, DIV_LEVELS, build, evaluate, portfolios, recommended, confirm, treynorBlack };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

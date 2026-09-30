@@ -7,14 +7,15 @@
   const $ = (id) => document.getElementById(id);
 
   const PORTS = [
-    { key: 'tangency', label: 'Recomendado', short: 'Recomendado', title: 'Portafolio recomendado: máxima razón de Sharpe', desc: 'El portafolio tangente: la mayor prima por unidad de riesgo total dentro de tus límites de peso. Es el portafolio riesgoso eficiente que recomienda la teoría de Markowitz y Sharpe; para menos riesgo, combínalo con el activo libre de riesgo sobre la línea del mercado de capitales.' },
+    { key: 'recommended', label: 'Recomendado', short: 'Recomendado', title: 'Portafolio recomendado: máximo rendimiento diversificado', desc: 'El portafolio eficiente (frontera de Markowitz) con el mayor rendimiento esperado que conserva la diversificación exigida: un número efectivo de activos N = 1 / Σwᵢ² mínimo. No reparte por igual ni aplica un tope fijo por acción: un activo puede pesar más que los demás si eso sube el rendimiento, mientras el conjunto siga diversificado. El nivel de diversificación se elige en Datos.' },
+    { key: 'tangency', label: 'Máxima Sharpe', short: 'Tangente', title: 'Portafolio tangente: máxima razón de Sharpe', desc: 'La mayor prima por unidad de riesgo total dentro de tus límites de peso. Es el portafolio riesgoso eficiente de la teoría de Markowitz y Sharpe; para menos riesgo, combínalo con el activo libre de riesgo sobre la línea del mercado de capitales.' },
     { key: 'minVar', label: 'Mínima varianza', short: 'Mín. varianza', title: 'Portafolio de mínima varianza', desc: 'El punto de menor riesgo de la frontera eficiente. No usa los rendimientos esperados, así que es el más robusto al error de estimación de las medias.' },
     { key: 'maxDiv', label: 'Máxima diversificación', short: 'Máx. diversif.', shape: 'diamond', title: 'Portafolio de máxima diversificación', desc: 'Maximiza la razón de diversificación Σwσ / σp: el mayor beneficio de combinar activos poco correlacionados.' },
     { key: 'riskParity', label: 'Paridad de riesgo', short: 'Paridad', shape: 'diamond', title: 'Portafolio de paridad de riesgo', desc: 'Cada activo aporta la misma parte del riesgo total. No aplica tus límites de peso.' },
     { key: 'equal', label: 'Pesos iguales', short: '1/N', shape: 'diamond', title: 'Portafolio de pesos iguales (1/N)', desc: 'La diversificación ingenua: el mismo peso en cada activo. Sirve de referencia; rara vez es eficiente.' },
   ];
 
-  const st = { parsed: null, model: null, P: null, sel: 'tangency', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'terminal', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
+  const st = { parsed: null, model: null, P: null, sel: 'recommended', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'terminal', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
 
   /* ---------- Utilidades ---------- */
   const LOCALE = { COP: 'es-CO', USD: 'en-US', MXN: 'es-MX', EUR: 'es-ES' };
@@ -50,6 +51,47 @@
     bad: '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="9" fill="currentColor" opacity="0.15"/><path d="M6.5 6.5l7 7M13.5 6.5l-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   };
 
+  /* ---------- Tipos de instrumento, segmentos e índices de referencia ---------- */
+  const SEGS = {
+    variable: { label: 'Renta variable', cls: ['accion', 'etf'] },
+    fija: { label: 'Renta fija', cls: ['tes', 'bono', 'cdt'] },
+    derivados: { label: 'Derivados', cls: ['futuro', 'opcion'] },
+    divisas: { label: 'Divisas', cls: ['divisa'] },
+  };
+  const segOf = (cls) => Object.keys(SEGS).find((k) => SEGS[k].cls.includes(cls)) || null;
+  const FX_RE = /(trm|usd ?\/? ?cop|cop ?=? ?x|dolar|d[óo]lar)/i;
+  // Índice que pide cada grupo de instrumentos, dónde se consigue y cómo se reconoce
+  const BENCH = [
+    { key: 'variable', label: 'Renta variable: acciones y ETF', need: 'MSCI COLCAP', where: 'bvc.com.co → Índices → MSCI COLCAP → Históricos', cls: ['accion', 'etf'], main: true },
+    { key: 'tes', label: 'Renta fija: TES y bonos', need: 'COLTES (CP, LP o UVR, según el plazo)', where: 'bvc.com.co → Índices de renta fija → COLTES', cls: ['tes', 'bono'], re: [/coltes/i] },
+    { key: 'cdt', label: 'Renta fija: CDT y mercado monetario', need: 'COLIBR (índice del IBR); si no está, COLTES', where: 'bvc.com.co → Índices → COLIBR', cls: ['cdt'], re: [/colibr|(^|\W)ibr(\W|$)/i, /coltes/i] },
+    { key: 'divisas', label: 'Divisas', need: 'TRM (dólar/peso)', where: 'banrep.gov.co → Tasa de cambio TRM → serie histórica; en la app de escritorio se descarga sola', cls: ['divisa'], re: [FX_RE] },
+    { key: 'derivados', label: 'Derivados: futuros y opciones', need: 'El índice del subyacente: MSCI COLCAP (futuros de índice y de acciones), COLTES (futuros de TES) o TRM (futuros de dólar)', where: 'Los mismos índices de arriba', cls: ['futuro', 'opcion'] },
+  ];
+  function clsOf(name) {
+    const o = store.get('cls') || {};
+    if (o[name]) return o[name];
+    const s = st.series && st.series.find((x) => x.name === name);
+    return (s && s.cls) || PF.data.classify(name);
+  }
+  // Nombre del índice de referencia de un activo, entre las columnas cargadas (null: el principal)
+  function benchName(name, cls, names, mainName) {
+    const find = (res) => {
+      for (const re of res) {
+        const hit = names.find((x) => x !== mainName && re.test(x) && (clsOf(x) === 'indice' || clsOf(x) === 'divisa'));
+        if (hit) return hit;
+      }
+      return null;
+    };
+    let rule = BENCH.find((b) => b.cls.includes(cls));
+    if (cls === 'futuro' || cls === 'opcion') {
+      if (/tes/i.test(name)) rule = BENCH[1];
+      else if (FX_RE.test(name)) rule = BENCH[3];
+      else return null;
+    }
+    return rule && rule.re ? find(rule.re) : null;
+  }
+
   function settings() {
     return {
       kind: $('kind').value,
@@ -61,14 +103,18 @@
       covModel: $('covmodel').value,
       wmin: (val('wmin') ?? 0) / 100,
       wmax: (val('wmax') ?? 100) / 100,
+      div: $('div').value,
       capital: val('capital') ?? 0,
       fee: Math.max(0, val('fee') ?? 0),
+      feeSell: Math.max(0, val('feesell') ?? 0),
+      segs: [...document.querySelectorAll('#segs [data-seg]')].filter((c) => c.checked).map((c) => c.getAttribute('data-seg')),
       retType: $('rettype').value,
       agg: $('agg').value,
       history: $('history').value,
     };
   }
-  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'capital', 'fee', 'currency', 'tol'];
+  const FEE_NORMAL = 15000; // comisión de trii por operación, sin promociones
+  const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'div', 'capital', 'fee', 'feesell', 'currency', 'tol'];
 
   function showBanner(msg, kind) {
     const b = $('banner');
@@ -99,17 +145,74 @@
     compute();
   }
 
+  /* Panel de Datos: índices que pide cada segmento y tipo de cada instrumento cargado. */
+  function renderBenchPanel(s) {
+    const p = st.parsed;
+    if (!p) return;
+    const mainName = p.names[s.market];
+    const has = (cls) => p.names.some((nm, i) => i !== s.market && cls.includes(clsOf(nm)));
+    $('bench-table').innerHTML = '<thead><tr><th>Segmento</th><th>Índice requerido</th><th>Dónde descargarlo</th><th>Estado</th></tr></thead><tbody>' +
+      BENCH.map((b) => {
+        let state;
+        if (b.main) state = PF.data.isMarketName(mainName) ? `<span class="pos">✓ ${esc(mainName)}</span>` : `<span class="neg">✗ Falta (se usa ${esc(mainName)})</span>`;
+        else if (!b.re) state = has(b.cls) ? 'Según el subyacente de cada contrato' : '<span class="sub">No hay instrumentos de este tipo</span>';
+        else {
+          const hit = p.names.find((x) => x !== mainName && b.re.some((re) => re.test(x)) && ['indice', 'divisa'].includes(clsOf(x)));
+          state = hit ? `<span class="pos">✓ ${esc(hit)}</span>` : has(b.cls) ? `<span class="neg">✗ Falta (se usa ${esc(mainName)})</span>` : '<span class="sub">No hace falta todavía: no hay instrumentos de este tipo</span>';
+        }
+        return `<tr><td>${esc(b.label)}</td><td>${esc(b.need)}</td><td>${esc(b.where)}</td><td>${state}</td></tr>`;
+      }).join('') + '</tbody>';
+    // COLIBR: rendimiento del último año, la mejor referencia de tasa libre de riesgo en pesos
+    const ibr = p.names.find((x) => /colibr/i.test(x));
+    const note = $('colibr-note');
+    st.colibr = null;
+    if (ibr) {
+      const ser = priceSeries(ibr);
+      const last = ser.dates.length - 1;
+      if (last > 0) {
+        const t1 = Date.parse(ser.dates[last].length === 7 ? ser.dates[last] + '-01' : ser.dates[last]);
+        let k = last;
+        while (k > 0 && t1 - Date.parse(ser.dates[k - 1].length === 7 ? ser.dates[k - 1] + '-01' : ser.dates[k - 1]) <= 366 * 864e5) k--;
+        const days = (t1 - Date.parse(ser.dates[k].length === 7 ? ser.dates[k] + '-01' : ser.dates[k])) / 864e5;
+        if (days > 20) st.colibr = Math.pow(ser.prices[last] / ser.prices[k], 365 / days) - 1;
+      }
+    }
+    note.hidden = st.colibr == null;
+    if (st.colibr != null) note.innerHTML = `<b>${esc(ibr)}</b> rindió <b>${pct(st.colibr)}</b> efectivo anual en el último año: es la referencia del mercado monetario en pesos. <button type="button" class="btn" id="use-colibr">Usarla como tasa libre de riesgo y en la renta fija segura del plan</button>`;
+    const C = PF.data.CLASSES;
+    $('inst-table').innerHTML = '<thead><tr><th>Instrumento</th><th>Tipo</th><th>Segmento</th><th>Índice de referencia</th><th>¿Se invierte?</th></tr></thead><tbody>' +
+      p.names.map((nm, i) => {
+        const cls = clsOf(nm);
+        const seg = segOf(cls);
+        const opts = Object.keys(C).map((k) => `<option value="${k}"${k === cls ? ' selected' : ''}>${C[k]}</option>`).join('');
+        const b = i === s.market || cls === 'indice' ? '—' : benchName(nm, cls, p.names, mainName) || mainName;
+        const why = i === s.market ? 'No: índice principal' : cls === 'indice' ? 'No: es un índice' : !s.segs.includes(seg) ? `No: ${SEGS[seg].label.toLowerCase()} desmarcada` : 'Sí';
+        return `<tr><td>${esc(nm)}</td><td><select data-cls="${esc(nm)}" aria-label="Tipo de ${esc(nm)}">${opts}</select></td><td>${seg ? SEGS[seg].label : 'Referencia'}</td><td>${esc(b)}</td><td>${why}</td></tr>`;
+      }).join('') + '</tbody>';
+  }
+
   function compute() {
     if (!st.parsed) return;
     const s = settings();
+    renderBenchPanel(s);
     store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
     const p = st.parsed;
     const warnings = [];
     try {
       const R = PF.data.toReturns(p.values, s.kind, s.retType === 'log');
       const mi = s.market;
-      const names = p.names.filter((_, i) => i !== mi);
+      // Activos invertibles: los de los segmentos elegidos; los índices solo son referencia
+      const clsAll = p.names.map(clsOf);
+      const inv = p.names.map((_, i) => i !== mi && clsAll[i] !== 'indice' && s.segs.includes(segOf(clsAll[i])));
+      const names = p.names.filter((_, i) => inv[i]);
       const n = names.length;
+      if (!s.segs.length) throw new Error('Elige al menos un segmento en «Invertir en» (renta variable, renta fija, derivados o divisas).');
+      if (n < 2) throw new Error(`Con los segmentos elegidos quedan ${n} ${n === 1 ? 'activo' : 'activos'} para invertir; se necesitan al menos dos. Marca más segmentos en Datos o sube más archivos.`);
+      const bench = names.map((nm) => {
+        const b = benchName(nm, clsOf(nm), p.names, p.names[mi]);
+        const bi = b ? p.names.indexOf(b) : -1;
+        return bi >= 0 ? { name: b, returns: R[bi] } : null;
+      });
       if (s.wmax * n < 1 - 1e-9) {
         warnings.push(`Con ${n} activos un peso máximo de ${nf1(s.wmax * 100)} % no alcanza para sumar 100 %; se usa ${nf1(100 / n)} %, que obliga a pesos iguales. Sube el peso máximo o agrega activos.`);
         s.wmax = 1 / n;
@@ -119,8 +222,12 @@
       }
       if (s.wmin * n > 1 + 1e-9) throw new Error(`Con ${n} activos el peso mínimo no puede pasar de ${nf1(100 / n)} %.`);
       if (s.wmin > s.wmax) throw new Error('El peso mínimo es mayor que el máximo.');
-      const datos = { names, returns: R.filter((_, i) => i !== mi), market: R[mi], marketName: p.names[mi], dates: p.dates };
+      const datos = { names, returns: R.filter((_, i) => inv[i]), market: R[mi], marketName: p.names[mi], dates: p.dates, bench };
       const m = PF.model.build(datos, { freq: s.freq, rf: s.rf, muModel: s.muModel, covModel: s.covModel, marketReturn: s.marketReturn, history: s.history });
+      m.assets.forEach((a) => (a.cls = clsOf(a.name)));
+      const missing = BENCH.filter((b) => b.re && names.some((nm) => b.cls.includes(clsOf(nm)) && !benchName(nm, clsOf(nm), p.names, p.names[mi])));
+      if (missing.length) warnings.push(`Faltan índices de referencia: ${missing.map((b) => `${b.need} para ${b.label.toLowerCase()}`).join('; ')}. Mientras tanto esos activos se miden contra ${p.names[mi]}. Mira «Índices de referencia» en Datos.`);
+      if (names.some((nm) => ['futuro', 'opcion'].includes(clsOf(nm)))) warnings.push('Futuros y opciones: la app usa su precio de cierre o de liquidación como si fuera un activo al contado. No modela apalancamiento, garantías ni vencimientos; úsalos con cuidado.');
       if (!PF.data.isMarketName(p.names[mi])) warnings.push(`No se encontró un índice de mercado (COLCAP o ICOLCAP) entre los datos; se está usando «${p.names[mi]}» como mercado, así que las β, Treynor y Jensen no son las del mercado. Sube también el histórico del índice MSCI COLCAP o del ETF ICOLCAP, o elige el índice en «Índice de mercado».`);
       if (st.lagNote && st.series && $('csv').value === st.mergedText) warnings.push(st.lagNote);
       const inf = m.info;
@@ -130,12 +237,12 @@
         if (short.length) warnings.push(`Historias de distinta longitud: ${short.map((x) => `${x[0]} (${x[1]} periodos)`).join(', ')} frente a ${Math.max(...inf.counts)} del activo más largo. Cada activo usa toda su historia y cada correlación, las fechas que comparten los dos.${inf.psdFixed ? ' La matriz de correlación se ajustó para que fuera válida.' : ''}`);
         if (m.Teff < 36) warnings.push(`La mayoría de los activos tiene ${m.Teff} periodos; con menos de 36 las estimaciones son inestables.`);
       } else if (m.T < 36) warnings.push(`Solo hay ${m.T} periodos en que todos los activos tienen dato. Con menos de 36 las estimaciones son muy inestables.`);
-      const P = PF.model.portfolios(m, s.wmin, s.wmax);
+      const P = PF.model.portfolios(m, s.wmin, s.wmax, { div: s.div });
       warnings.push(...P.warnings);
       st.model = m;
       st.P = P;
       st.s = s;
-      if (!P[st.sel]) st.sel = P.tangency ? 'tangency' : 'maxDiv';
+      if (!P[st.sel]) st.sel = 'recommended';
       const same = st.userNames && st.userNames.join('|') === names.join('|');
       if (!same) {
         const saved = store.get('userW');
@@ -145,7 +252,12 @@
         renderBuyInputs();
       }
       showBanner(warnings.join(' '), 'warn');
-      $('div-hint').textContent = `Con un peso máximo de ${nf1(s.wmax * 100)} % el portafolio tendrá al menos ${Math.ceil(1 / s.wmax - 1e-9)} activos.`;
+      const dv = P.recommended.div;
+      const userCap = s.wmax;
+      s.userCap = userCap;
+      s.wmax = P.cap; // tope efectivo: lo usan la frontera, la confirmación y el plan de compra
+      $('div-hint').textContent = `Recomendado: el mayor rendimiento sobre la frontera eficiente con un N efectivo de al menos ${nf1(dv.target)} de ${n} activos (diversificación ${dv.level}). ` +
+        (P.cap >= 1 - 1e-9 ? 'No hizo falta ningún tope por activo: el optimizador reparte libremente.' : `Tope por activo usado: ${nf1(P.cap * 100)} %${P.cap < userCap - 1e-9 ? `, el más holgado con el que la frontera alcanza esa diversificación (tu límite es ${nf1(userCap * 100)} %)` : ' (tu límite)'}.`);
       render();
     } catch (e) {
       st.model = null;
@@ -305,16 +417,7 @@
    * sesgo por acciones que no negocian todos los días). Si hay series desfasadas: mensual
    * con promedio del periodo, que amortigua el desfase. */
   function suggestSettings(list) {
-    const capNote = suggestCap(list.length - 1);
-    return (suggestFreq(list) + ' ' + capNote).trim();
-  }
-  /* Peso máximo que deja optimizar: con n activos, al menos 1,5 / n (redondeado a 5 %). */
-  function suggestCap(n) {
-    const wmax = (val('wmax') ?? 100) / 100;
-    if (n < 2 || n * wmax >= 1.5) return '';
-    const cap = Math.min(100, Math.ceil(150 / n / 5) * 5);
-    $('wmax').value = cap;
-    return `Con ${n} activos el peso máximo por activo pasa a ${cap} % para que el portafolio se pueda optimizar sin dejar de diversificar.`;
+    return suggestFreq(list);
   }
   function suggestFreq(list) {
     const dates = [...new Set(list.flatMap((x) => x.dates))].sort();
@@ -384,7 +487,7 @@
   }
 
   function rec() {
-    return st.P.tangency || st.P.maxDiv;
+    return st.P.recommended;
   }
 
   function render() {
@@ -430,12 +533,15 @@
       ['sharpe', 'Sharpe', (a) => num(a.sharpe), true],
       ['treynor', 'Treynor', (a) => pct(a.treynor), true],
       ['r2', 'R²', (a) => num(a.r2), true],
+      ['clsName', 'Tipo', (a) => esc(a.clsName), false],
+      ['bench', 'Índice de referencia', (a) => esc(a.bench), false],
     ];
     let rows = m.assets.slice();
-    if (st.sort.key) rows.sort((a, b) => (st.sort.key === 'name' ? a.name.localeCompare(b.name) : a[st.sort.key] - b[st.sort.key]) * st.sort.dir);
+    rows.forEach((a) => (a.clsName = PF.data.CLASSES[a.cls] || ''));
+    if (st.sort.key) rows.sort((a, b) => (typeof a[st.sort.key] === 'string' ? a[st.sort.key].localeCompare(b[st.sort.key]) : a[st.sort.key] - b[st.sort.key]) * st.sort.dir);
     const head = cols.map(([k, t, , n]) => `<th class="sortable${n ? ' n' : ''}" data-sort="${k}" scope="col"${st.sort.key === k ? ` aria-sort="${st.sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${t}</th>`).join('');
     const body = rows.map((a) => `<tr>${cols.map(([, , f, n, cl]) => `<td class="${n ? 'n' : ''} ${cl ? cl(a) : ''}">${f(a)}</td>`).join('')}</tr>`).join('');
-    const mk = `<tr class="hl"><td>${esc(m.marketName)} (mercado)</td><td class="n">${pct(m.Em)}</td><td class="n">${pct(m.mktHist)}</td><td class="n">${pct(m.mktVol)}</td><td class="n">${num(1)}</td><td class="n">${pct(0, 2)}</td><td class="n">—</td><td class="n">${num(m.mktSharpe)}</td><td class="n">${pct(m.Em - m.rf)}</td><td class="n">${num(1)}</td></tr>`;
+    const mk = `<tr class="hl"><td>${esc(m.marketName)} (mercado)</td><td class="n">${pct(m.Em)}</td><td class="n">${pct(m.mktHist)}</td><td class="n">${pct(m.mktVol)}</td><td class="n">${num(1)}</td><td class="n">${pct(0, 2)}</td><td class="n">—</td><td class="n">${num(m.mktSharpe)}</td><td class="n">${pct(m.Em - m.rf)}</td><td class="n">${num(1)}</td><td>Índice</td><td>—</td></tr>`;
     $('assets-table').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}${mk}</tbody>`;
   }
 
@@ -572,9 +678,12 @@
     $('buys').innerHTML = st.userNames
       .map((n, i) => {
         const b = st.buys[n] || {};
+        const monto = unitOf(n) === 'monto';
+        const defFee = clsOf(n) === 'cdt' ? 0 : st.s ? st.s.fee : FEE_NORMAL;
         return `<div class="brow"><span class="bname">${esc(n)}</span>` +
-          `<input id="bq-${i}" data-bq="${i}" type="number" min="0" step="1" inputmode="numeric" placeholder="Acciones" aria-label="Acciones de ${esc(n)}" value="${b.qty != null ? esc(b.qty) : ''}">` +
+          `<input id="bq-${i}" data-bq="${i}" type="number" min="0" step="${monto ? 100000 : 1}" inputmode="numeric" placeholder="${monto ? 'Monto ($)' : 'Acciones'}" aria-label="${monto ? 'Monto invertido en' : 'Acciones de'} ${esc(n)}" value="${b.qty != null ? esc(b.qty) : ''}">` +
           `<input id="bd-${i}" data-bd="${i}" type="date" aria-label="Fecha de compra de ${esc(n)}" value="${esc(b.date || $('buy-date').value || '')}">` +
+          `<input id="bf-${i}" data-bf="${i}" type="number" min="0" step="1000" inputmode="numeric" class="bfee" placeholder="Comisión: ${esc(String(defFee))}" title="Comisión que pagaste en esta compra (déjala vacía para usar la de Datos; 0 si fue una promoción sin comisión)" aria-label="Comisión de la compra de ${esc(n)}" value="${b.fee != null ? esc(b.fee) : ''}">` +
           `<span class="bnote" id="bn-${i}"></span></div>`;
       })
       .join('');
@@ -589,16 +698,22 @@
       const ser = priceSeries(n);
       const hit = qty > 0 ? PF.data.priceOn(ser.dates, ser.prices, date) : null;
       const ok = hit && !hit.error;
-      const amount = ok ? qty * hit.price : 0;
+      const monto = unitOf(n) === 'monto';
+      // Por monto (renta fija, divisas, derivados): se compran «unidades» del índice ese día
+      const units = ok ? (monto ? qty / hit.price : qty) : 0;
+      const amount = ok ? units * hit.price : 0;
       const lastP = ser.prices.at(-1);
       const lastD = ser.dates.at(-1);
-      return { n, i, qty, date, hit, ok, amount, lastP, lastD, value: ok ? qty * lastP : 0 };
+      const cdt = clsOf(n) === 'cdt';
+      const fb = b.fee != null && String(b.fee).trim() !== '' ? Math.max(0, parseFloat(String(b.fee).replace(',', '.')) || 0) : cdt ? 0 : st.s ? st.s.fee : 0;
+      const fs = cdt ? 0 : st.s ? st.s.feeSell : 0;
+      return { n, i, qty, monto, units, date, hit, ok, amount, lastP, lastD, value: units * lastP, feeBuy: ok ? fb : 0, feeSell: ok ? fs : 0 };
     });
     const total = rows.reduce((q, r) => q + r.amount, 0);
     const value = rows.reduce((q, r) => q + r.value, 0);
-    const fee = st.s ? st.s.fee : 0;
-    const nBuys = rows.filter((r) => r.ok && r.qty > 0).length;
-    const buyFees = nBuys * fee;
+    const buyFees = rows.reduce((q, r) => q + r.feeBuy, 0);
+    const sellFees = rows.reduce((q, r) => q + r.feeSell, 0);
+    const fee = buyFees + sellFees;
     st.buyTotal = total;
     rows.forEach((r) => {
       const el = $('bn-' + r.i);
@@ -608,27 +723,28 @@
         ? ''
         : r.hit.error
           ? r.hit.error
-          : `Cierre del ${r.hit.date}${r.hit.exact ? '' : r.hit.after ? ' (último dato disponible)' : ' (ese día no hubo negociación)'}: ${money(r.hit.price)} × ${r.qty} = ${money(r.amount)}`;
+          : r.monto
+            ? `Valor del ${r.hit.date}${r.hit.exact ? '' : r.hit.after ? ' (último dato disponible)' : ' (ese día no hubo negociación)'}: ${money(r.amount)} invertidos · comisión ${money(r.feeBuy)}`
+            : `Cierre del ${r.hit.date}${r.hit.exact ? '' : r.hit.after ? ' (último dato disponible)' : ' (ese día no hubo negociación)'}: ${money(r.hit.price)} × ${r.qty} = ${money(r.amount)} · comisión ${money(r.feeBuy)}`;
     });
-    $('buy-sum').textContent = total > 0 ? `Total invertido: ${money(total)}${buyFees ? ` + comisiones ${money(buyFees)} = ${money(total + buyFees)}` : ''}` : '';
+    $('buy-sum').textContent = total > 0 ? `Total invertido: ${money(total)}${buyFees ? ` + comisiones de compra ${money(buyFees)} = ${money(total + buyFees)}` : ''}` : '';
     const has = rows.filter((r) => r.ok);
     $('buy-detail').hidden = !has.length;
     if (has.length) {
       const pctc = (x) => (Number.isFinite(x) ? (x >= 0 ? '+' : '') + pct(x) : '—');
       $('buy-table').innerHTML =
-        '<thead><tr><th>Activo</th><th class="n">Acciones</th><th>Fecha de compra</th><th>Cierre usado</th><th class="n">Precio de compra</th><th class="n">Invertido</th><th class="n">Peso</th><th>Último cierre</th><th class="n">Precio</th><th class="n">Valor hoy</th><th class="n">Ganancia</th></tr></thead><tbody>' +
-        has.map((r) => `<tr><td>${esc(r.n)}</td><td class="n">${r.qty.toLocaleString('es-CO')}</td><td>${esc(r.date)}</td><td>${esc(r.hit.date)}${r.hit.exact ? '' : ' *'}</td><td class="n">${money(r.hit.price)}</td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.amount / total)}</td><td>${esc(r.lastD)}</td><td class="n">${money(r.lastP)}</td><td class="n">${money(r.value)}</td><td class="n ${r.value >= r.amount ? 'pos' : 'neg'}">${pctc(r.value / r.amount - 1)}</td></tr>`).join('') +
-        `<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(total)}</td><td class="n">${pct(1)}</td><td></td><td></td><td class="n">${money(value)}</td><td class="n ${value >= total ? 'pos' : 'neg'}">${pctc(value / total - 1)}</td></tr>` +
+        '<thead><tr><th>Activo</th><th class="n">Cantidad</th><th>Fecha de compra</th><th>Cierre usado</th><th class="n">Precio de compra</th><th class="n">Invertido</th><th class="n">Comisión de compra</th><th class="n">Peso</th><th>Último cierre</th><th class="n">Precio</th><th class="n">Valor hoy</th><th class="n">Ganancia</th></tr></thead><tbody>' +
+        has.map((r) => `<tr><td>${esc(r.n)}</td><td class="n">${r.monto ? 'por monto' : r.qty.toLocaleString('es-CO')}</td><td>${esc(r.date)}</td><td>${esc(r.hit.date)}${r.hit.exact ? '' : ' *'}</td><td class="n">${r.monto ? '—' : money(r.hit.price)}</td><td class="n">${money(r.amount)}</td><td class="n">${money(r.feeBuy)}</td><td class="n">${pct(r.amount / total)}</td><td>${esc(r.lastD)}</td><td class="n">${r.monto ? '—' : money(r.lastP)}</td><td class="n">${money(r.value)}</td><td class="n ${r.value >= r.amount ? 'pos' : 'neg'}">${pctc(r.value / r.amount - 1)}</td></tr>`).join('') +
+        `<tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(total)}</td><td class="n">${money(buyFees)}</td><td class="n">${pct(1)}</td><td></td><td></td><td class="n">${money(value)}</td><td class="n ${value >= total ? 'pos' : 'neg'}">${pctc(value / total - 1)}</td></tr>` +
         (fee
-          ? `<tr><td colspan="5">Comisiones de compra (${nBuys} × ${money(fee)})</td><td class="n">${money(buyFees)}</td><td colspan="3"></td><td class="n">Si vendes hoy: −${money(buyFees)}</td><td></td></tr>` +
-            `<tr class="hl"><td colspan="5"><b>Costo total con comisiones</b></td><td class="n"><b>${money(total + buyFees)}</b></td><td colspan="3"><b>Neto si vendes hoy (menos comisiones de compra y venta)</b></td><td class="n"><b>${money(value - buyFees)}</b></td><td class="n ${value - buyFees >= total + buyFees ? 'pos' : 'neg'}"><b>${pctc((value - buyFees) / (total + buyFees) - 1)}</b></td></tr>`
+          ? `<tr class="hl"><td colspan="5"><b>Costo total con comisiones de compra</b></td><td class="n"><b>${money(total + buyFees)}</b></td><td colspan="3"><b>Neto si vendes hoy (menos ${money(sellFees)} de comisiones de venta)</b></td><td></td><td class="n"><b>${money(value - sellFees)}</b></td><td class="n ${value - sellFees >= total + buyFees ? 'pos' : 'neg'}"><b>${pctc((value - sellFees) / (total + buyFees) - 1)}</b></td></tr>`
           : '') +
         '</tbody>';
       const notes = [];
       if (has.some((r) => !r.hit.exact && !r.hit.after)) notes.push('* Ese día no hubo negociación del activo; se usó el último cierre anterior.');
       if (has.some((r) => r.hit.after)) notes.push('Alguna fecha es posterior al último dato cargado; se usó el último cierre disponible.');
       if (has.some((r) => !priceSeries(r.n).daily)) notes.push('Los precios salen de la tabla agrupada por periodo; para el cierre exacto de un día, carga los CSV diarios de la BVC.');
-      notes.push(`La ganancia por activo no incluye dividendos ni comisiones; la fila «Neto si vendes hoy» descuenta ${fee ? `${money(fee)} por cada compra y cada venta` : 'las comisiones (hoy en $0; cámbialas en Datos)'}. Los pesos del portafolio salen del monto invertido en cada activo.`);
+      notes.push(`La ganancia por activo no incluye dividendos ni comisiones; la fila «Neto si vendes hoy» descuenta la comisión que pagaste en cada compra (${money(buyFees)}; puedes cambiarla en cada fila si hubo promoción) y ${money(st.s ? st.s.feeSell : 0)} por cada venta. Los pesos del portafolio salen del monto invertido en cada activo.`);
       $('buy-notes').textContent = notes.join(' ');
     }
     if (total > 0) st.userW = rows.map((r) => r.amount / total);
@@ -662,57 +778,111 @@
     });
   }
 
+  const unitOf = (name) => (['accion', 'etf'].includes(clsOf(name)) ? 'acciones' : 'monto');
+  function planOptions() {
+    const m = st.model;
+    const key = $('plan-base').value;
+    const years = +$('plan-horizon').value || 1;
+    const loss = $('plan-loss').value;
+    const safePct = val('plan-safe');
+    const o = {
+      feeBuy: st.s.fee,
+      feeSell: st.s.feeSell,
+      years,
+      minAmt: val('plan-min'),
+      safeRate: safePct == null ? st.s.rf : safePct / 100,
+      maxLoss: loss === '' ? null : +loss,
+      units: m.names.map(unitOf),
+      noFee: m.names.map((n) => clsOf(n) === 'cdt'),
+      cls: m.names.map(clsOf),
+      optimizeK: $('plan-optk').checked && (key === 'tangency' || key === 'recommended'),
+      hi: st.s.wmax,
+    };
+    if (key === 'recommended') {
+      // Con menos activos se vuelve a buscar el máximo rendimiento eficiente con la misma diversificación
+      o.solve = (idx) => {
+        const sub = { mu: idx.map((i) => m.mu[i]), Sigma: idx.map((i) => idx.map((j) => m.Sigma[i][j])) };
+        return idx.length === 1 ? [1] : PF.model.recommended(sub, new Array(idx.length).fill(Math.max(0, st.s.wmin)), st.s.userCap, st.s.div).w;
+      };
+    }
+    return o;
+  }
+
   function renderPlan() {
     const m = st.model;
     if (!m) return;
     if (document.activeElement !== $('plan-budget')) $('plan-budget').value = st.s.capital;
     if (document.activeElement !== $('plan-fee')) $('plan-fee').value = st.s.fee;
+    if (document.activeElement !== $('plan-feesell')) $('plan-feesell').value = st.s.feeSell;
     const key = $('plan-base').value;
     const base = st.P[key] || rec();
     const lp = lastPrices();
-    const res = PF.plan.recommend(m, base.w, lp.map((x) => x.price), st.s.capital, st.s.fee, { optimizeK: $('plan-optk').checked && key === 'tangency', hi: st.s.wmax });
+    const o = planOptions();
+    const res = PF.plan.recommend(m, base.w, lp.map((x) => x.price), st.s.capital, o);
+    $('plan-min').placeholder = `automático: ${money(res.minAmt)}`;
+    $('plan-hint').textContent = `Monto mínimo automático: el que hace que las comisiones de compra y venta (${money(o.feeBuy + o.feeSell)}) no pasen del 1 % anual del monto invertido en ${o.years} ${o.years === 1 ? 'año' : 'años'}, sin pasar de la mitad del presupuesto. Las acciones y los ETF se compran por acciones enteras; la renta fija, las divisas y los derivados, por monto. Los CDT no pagan comisión de bolsa.`;
     const best = res.best;
     const plan = best.plan;
     st.plan = null;
-    if (!plan.rows.length) {
-      $('plan-out').innerHTML = `<h2>Sin plan</h2><p>${esc(plan.error || 'El presupuesto no alcanza para comprar acciones con estas comisiones.')}</p>`;
+    if (!plan.rows.length && !plan.safe) {
+      $('plan-out').innerHTML = `<h2>Sin plan</h2><p>${esc(plan.error || 'El presupuesto no alcanza con estas comisiones.')}</p>`;
       $('plan-alt').innerHTML = '';
+      $('plan-proj').innerHTML = '';
       return;
     }
     plan.rows.forEach((r) => (r.date = lp[m.names.indexOf(r.name)].date));
     const ev = best.ev;
     st.plan = { plan, ev, label: best.label };
-    const names = plan.rows.map((r) => r.name);
+    const H = o.years;
+    const yrs = (h) => `${h} ${h === 1 ? 'año' : 'años'}`;
+    const qty = (r) => (r.unit === 'monto' ? money(r.amount) : `${r.shares.toLocaleString('es-CO')} ${r.shares === 1 ? 'acción' : 'acciones'}`);
+    const buys = plan.rows.map((r) => `${qty(r)} de ${esc(r.name)}`);
+    if (plan.safe > 0) buys.push(`${money(plan.safe)} en renta fija segura (CDT o TES corto al ${pct(plan.safeRate)} EA)`);
     const changed = best !== res.full && res.full.plan.k !== plan.k;
-    const fullNote = changed && res.full.ev
-      ? `<p class="hint">Con ${money(plan.budget)} y ${money(plan.fee)} por operación conviene comprar ${plan.k} ${plan.k === 1 ? 'activo' : 'activos'} en lugar de ${res.full.plan.k}: la razón de Sharpe neta sube de ${num(res.full.ev.netSharpe)} a ${num(ev.netSharpe)}. Desmarca la casilla de arriba para ver el plan con todos los activos.</p>`
-      : '';
+    const notes = [];
+    if (changed && res.full.ev) notes.push(`Con ${money(plan.budget)} y estas comisiones conviene invertir en ${plan.k} ${plan.k === 1 ? 'activo' : 'activos'} en lugar de ${res.full.plan.k}: la razón de Sharpe neta en ${yrs(H)} sube de ${num(res.full.ev.netSharpe)} a ${num(ev.netSharpe)}. Desmarca «Ajustar el número de activos» para ver el plan con todos.`);
+    const sh = plan.riskyShare;
+    if (sh.dominated) notes.push(`El portafolio rinde menos que la renta fija segura (${pct(plan.safeRate)}), así que con el límite de pérdida elegido todo va a renta fija.`);
+    else if (plan.safe > 0) notes.push(`Con un horizonte de ${yrs(H)} y una probabilidad máxima de pérdida de ${pct(o.maxLoss, 0)}, el ${pct(1 - plan.safe / plan.budget, 0)} va al portafolio y el resto a renta fija segura: es la mayor parte en el portafolio que cumple ese límite (separación de Tobin con el criterio de seguridad de Roy). Con un horizonte más largo o más tolerancia a la pérdida, sube la parte en el portafolio.`);
+    if (plan.dropped && plan.dropped.length) notes.push(`Quedan fuera: ${esc([...new Set(plan.dropped.map((d) => `${d.name} (${d.why})`))].join(', '))}.`);
     const dates = [...new Set(plan.rows.map((r) => r.date))];
+    const C = PF.data.CLASSES;
     $('plan-out').innerHTML = `
-      <p class="plan-lead">Compra <b>${plan.rows.map((r) => `${r.shares.toLocaleString('es-CO')} ${esc(r.name)}`).join(', ')}</b>, por ${money(plan.invested)} más ${money(plan.buyFees)} de comisiones.</p>
+      <p class="plan-lead">Invierte así: <b>${buys.join('; ')}</b>. Pagas ${money(plan.buyFees)} de comisiones de compra.</p>
       <div class="tiles">
-        ${tile('Invertido en acciones', money(plan.invested), `${plan.k} ${plan.k === 1 ? 'activo' : 'activos'}`)}
-        ${tile('Comisiones de compra', money(plan.buyFees), `${plan.k} × ${money(plan.fee)}`)}
-        ${tile('Comisiones de venta (futuras)', money(plan.sellFees), 'al vender todo')}
+        ${tile('En el portafolio', money(plan.invested), `${plan.k} ${plan.k === 1 ? 'activo' : 'activos'} · ${pct(plan.invested / plan.budget, 0)} del presupuesto`)}
+        ${tile('En renta fija segura', money(plan.safe), plan.safe > 0 ? `al ${pct(plan.safeRate)} EA` : 'no hace falta con este límite de pérdida')}
+        ${tile('Comisiones de compra', money(plan.buyFees), `${money(plan.feeBuy)} por activo`)}
+        ${tile('Comisiones de venta (al final)', money(plan.sellFees), `${money(plan.feeSell)} por activo`)}
         ${tile('Efectivo sin invertir', money(plan.cash), 'no alcanza para otra acción')}
-        ${tile('Rendimiento esperado del portafolio', pct(ev.e.ret), 'anual, antes de comisiones')}
-        ${tile('Rendimiento neto sobre el presupuesto', pct(ev.netRet), 'descontando compra y venta')}
-        ${tile('Ganancia esperada neta', money(ev.netGain), 'en un año')}
-        ${tile('Mínimo para cubrir comisiones', pct(ev.breakEven), 'de rendimiento sobre lo invertido')}
+        ${tile('Rendimiento neto anual esperado', pct(ev.netRet), `en ${yrs(H)}, después de comisiones`)}
+        ${tile('Riesgo σ del total', pct(ev.netVol), 'anual')}
+        ${tile('Probabilidad de pérdida', pct(ev.lossProb, 0), `al cabo de ${yrs(H)}`)}
+        ${tile('Monto mínimo por inversión', money(plan.minAmt), val('plan-min') == null ? 'automático' : 'elegido por ti')}
       </div>
-      <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso objetivo</th><th class="n">Último cierre</th><th>Fecha</th><th class="n">Acciones</th><th class="n">Monto</th><th class="n">Peso real</th><th class="n">Comisión de compra</th></tr></thead><tbody>
-        ${plan.rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${pct(r.w)}</td><td class="n">${money(r.price)}</td><td>${esc(r.date || '')}</td><td class="n"><b>${r.shares.toLocaleString('es-CO')}</b></td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.realW)}</td><td class="n">${money(plan.fee)}</td></tr>`).join('')}
-        <tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td class="n">${money(plan.invested)}</td><td class="n">${pct(1)}</td><td class="n">${money(plan.buyFees)}</td></tr>
+      <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th>Tipo</th><th class="n">Peso objetivo</th><th class="n">Último precio</th><th>Fecha</th><th class="n">Cantidad</th><th class="n">Monto</th><th class="n">Peso real</th><th class="n">Comisión de compra</th></tr></thead><tbody>
+        ${plan.rows.map((r) => `<tr><td>${esc(r.name)}</td><td>${esc(C[r.cls] || '')}</td><td class="n">${pct(r.w)}</td><td class="n">${r.unit === 'monto' ? '—' : money(r.price)}</td><td>${esc(r.date || '')}</td><td class="n"><b>${r.unit === 'monto' ? 'por monto' : r.shares.toLocaleString('es-CO')}</b></td><td class="n">${money(r.amount)}</td><td class="n">${pct(r.realW)}</td><td class="n">${money(r.feeBuy)}</td></tr>`).join('')}
+        ${plan.safe > 0 ? `<tr><td>Renta fija segura (CDT o TES corto)</td><td>Renta fija</td><td class="n">—</td><td class="n">—</td><td></td><td class="n">por monto</td><td class="n">${money(plan.safe)}</td><td class="n">—</td><td class="n">${money(0)}</td></tr>` : ''}
+        <tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="n">${money(plan.invested + plan.safe)}</td><td class="n">${plan.invested ? pct(1) : '—'}</td><td class="n">${money(plan.buyFees)}</td></tr>
       </tbody></table></div>
-      ${fullNote}
-      <p class="hint">Precios: último cierre de los datos cargados (${esc(dates.join(', '))}); el precio al comprar será distinto. El portafolio se calcula solo con los ${m.names.length} activos cargados (${esc(m.names.join(', '))}) y ${esc(m.marketName)} como índice de referencia. ${names.length < m.names.length ? `Quedan fuera: ${esc(m.names.filter((n) => !names.includes(n)).join(', '))}.` : ''}</p>
-      <div class="row-btns"><button type="button" class="btn btn-primary" id="plan-register">Registrar esta compra en Confirmar</button></div>`;
-    const tries = res.tries.filter((t) => t.ev);
+      ${notes.map((t) => `<p class="hint">${t}</p>`).join('')}
+      <p class="hint">Precios: último dato cargado (${esc(dates.join(', ') || '—')}); el precio al comprar será distinto. El portafolio se calcula solo con los ${m.names.length} activos de los segmentos elegidos en Datos.</p>
+      <div class="row-btns"><button type="button" class="btn btn-primary" id="plan-register"${plan.rows.length ? '' : ' disabled'}>Registrar esta compra en Confirmar</button> <button type="button" class="btn" data-go-where="1">Dónde y cómo invertir</button></div>`;
+    // Proyecciones
+    const hs = [...new Set([1, 3, 5, 10, H])].sort((a, b) => a - b);
+    const lbl = (h) => (h <= 1 ? 'Corto plazo' : h <= 3 ? 'Mediano plazo' : 'Largo plazo');
+    $('plan-proj').innerHTML = '<thead><tr><th>Plazo</th><th class="n">Valor esperado</th><th class="n">Ganancia neta</th><th class="n">Rendimiento neto anual</th><th class="n">Rango del 95 %</th><th class="n">Probabilidad de pérdida</th></tr></thead><tbody>' +
+      hs.map((h) => {
+        const pj = PF.plan.project(plan, ev.e, plan.safeRate, h);
+        return `<tr${h === H ? ' class="hl"' : ''}><td>${lbl(h)}: ${yrs(h)}${h === H ? ' (tu horizonte)' : ''}</td><td class="n">${money(pj.value)}</td><td class="n ${pj.gain >= 0 ? 'pos' : 'neg'}">${money(pj.gain)}</td><td class="n">${pct(pj.annual)}</td><td class="n">${money(Math.max(0, pj.lo))} a ${money(pj.hi)}</td><td class="n">${pct(pj.lossProb, 0)}</td></tr>`;
+      }).join('') + '</tbody>';
+    if (st.screen === 'invertir') renderWhere();
+    const tries = res.tries.filter((t) => t.ev && (t.plan.rows.length || t.plan.safe));
     $('plan-alt-box').hidden = tries.length < 2;
     $('plan-alt').innerHTML =
-      '<thead><tr><th>Alternativa</th><th class="n">Activos</th><th>Composición</th><th class="n">Invertido</th><th class="n">Comisiones (compra + venta)</th><th class="n">E(R) bruto</th><th class="n">Rendimiento neto</th><th class="n">Sharpe neto</th></tr></thead><tbody>' +
+      '<thead><tr><th>Alternativa</th><th class="n">Activos</th><th>Composición</th><th class="n">En el portafolio</th><th class="n">Renta fija</th><th class="n">Comisiones (compra + venta)</th><th class="n">E(R) bruto</th><th class="n">Neto anual</th><th class="n">Sharpe neto</th></tr></thead><tbody>' +
       tries
-        .map((t) => `<tr${t === best ? ' class="hl"' : ''}><td>${esc(t.label)}${t === best ? ' (elegida)' : ''}</td><td class="n">${t.plan.k}</td><td>${esc(t.plan.rows.map((r) => `${r.name} ${pct(r.realW, 0)}`).join(', '))}</td><td class="n">${money(t.plan.invested)}</td><td class="n">${money(t.plan.buyFees + t.plan.sellFees)}</td><td class="n">${pct(t.ev.e.ret)}</td><td class="n">${pct(t.ev.netRet)}</td><td class="n">${num(t.ev.netSharpe)}</td></tr>`)
+        .map((t) => `<tr${t === best ? ' class="hl"' : ''}><td>${esc(t.label)}${t === best ? ' (elegida)' : ''}</td><td class="n">${t.plan.k}</td><td>${esc(t.plan.rows.map((r) => `${r.name} ${pct(r.realW, 0)}`).join(', '))}</td><td class="n">${money(t.plan.invested)}</td><td class="n">${money(t.plan.safe)}</td><td class="n">${money(t.plan.buyFees + t.plan.sellFees)}</td><td class="n">${pct(t.ev.e.ret)}</td><td class="n">${pct(t.ev.netRet)}</td><td class="n">${num(t.ev.netSharpe)}</td></tr>`)
         .join('') +
       '</tbody>';
   }
@@ -722,7 +892,7 @@
     st.buys = {};
     // Datos mensuales («AAAA-MM»): el campo de fecha necesita un día; se usa el 1.
     const day = (d) => (/^\d{4}-\d{2}$/.test(d || '') ? d + '-01' : d);
-    for (const r of st.plan.plan.rows) st.buys[r.name] = { qty: String(r.shares), date: day(r.date) };
+    for (const r of st.plan.plan.rows) st.buys[r.name] = { qty: String(r.unit === 'monto' ? r.amount : r.shares), date: day(r.date), fee: String(r.feeBuy) };
     store.set('buys', st.buys);
     renderBuyInputs();
     setMode('acciones');
@@ -763,7 +933,7 @@
       const sum = st.userW.reduce((a, b) => a + b, 0);
       extra.push({ label: st.mode === 'acciones' ? 'Tu portafolio (acciones compradas)' : 'Tu portafolio (pesos escritos)', w: st.userW.map((x) => x / sum) });
     }
-    if (st.plan) extra.push({ label: `Plan de compra (${st.plan.plan.k} activos, pesos reales)`, w: st.plan.ev.w });
+    if (st.plan && st.plan.plan.rows.length) extra.push({ label: `Plan de compra (${st.plan.plan.k} activos, pesos reales)`, w: st.plan.ev.w });
     return { m, P: st.P, table: st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
   }
 
@@ -805,15 +975,20 @@
       } else if (kind === 'plan') {
         if (!st.plan) return dlStatus('No hay plan de compra: revisa la sección Comprar.', 'bad');
         const pl = st.plan.plan;
-        rows = [['Activo', 'Peso objetivo', 'Precio', 'Fecha del precio', 'Acciones', 'Monto', 'Peso real', 'Comisión de compra']].concat(pl.rows.map((r) => [r.name, r.w, r.price, r.date || '', r.shares, r.amount, r.realW, pl.fee]), [
+        rows = [['Activo', 'Tipo', 'Peso objetivo', 'Precio', 'Fecha del precio', 'Acciones', 'Monto', 'Peso real', 'Comisión de compra', 'Comisión de venta']].concat(pl.rows.map((r) => [r.name, PF.data.CLASSES[r.cls] || '', r.w, r.unit === 'monto' ? '' : r.price, r.date || '', r.unit === 'monto' ? '' : r.shares, r.amount, r.realW, r.feeBuy, r.feeSell]), [
           [],
           ['Presupuesto', pl.budget],
-          ['Invertido', pl.invested],
+          ['Horizonte (años)', pl.years],
+          ['En el portafolio', pl.invested],
+          ['En renta fija segura', pl.safe],
+          ['Tasa de la renta fija segura', pl.safeRate],
           ['Comisiones de compra', pl.buyFees],
           ['Comisiones de venta', pl.sellFees],
           ['Efectivo sin invertir', pl.cash],
-          ['Rendimiento esperado', st.plan.ev.e.ret],
-          ['Rendimiento neto sobre el presupuesto', st.plan.ev.netRet],
+          ['Monto mínimo por inversión', pl.minAmt],
+          ['Rendimiento esperado del portafolio', st.plan.ev.e.ret],
+          ['Rendimiento neto anual en el horizonte', st.plan.ev.netRet],
+          ['Probabilidad de pérdida en el horizonte', st.plan.ev.lossProb],
         ]);
         name = 'plan-de-compra';
       }
@@ -909,7 +1084,7 @@
     if (!st.model) return;
     const m = st.model;
     const P = st.P;
-    const assets = m.assets.map((a) => ({ name: a.name, short: short(a.name, 16), vol: a.vol, ret: a.expRet, beta: a.beta, tip: assetTip(a) }));
+    const assets = m.assets.map((a) => ({ name: a.name, short: short(a.name, 16), vol: a.vol, ret: a.expRet, beta: a.betaM, tip: assetTip(a) }));
     if (st.screen === 'frontera' && width('chart-front')) {
       const ports = PORTS.filter((p) => P[p.key]).map((p) => ({ label: p.short, vol: P[p.key].vol, ret: P[p.key].ret, sel: p.key === st.sel, shape: p.shape, tip: portTip(p.title, P[p.key]) }));
       ports.sort((a, b) => a.sel - b.sel);
@@ -957,7 +1132,15 @@
     } catch (e) {
       /* marco sin historial */
     }
+    if (screen === 'invertir') renderWhere();
     renderCharts();
+  }
+
+  function renderWhere() {
+    const r = PF.where.render({ plan: st.plan && st.plan.plan, money, pct, segOf, clsOf, SEGS });
+    $('where-plan').innerHTML = `<h2>Tu plan, canal por canal</h2>${r.summary}`;
+    $('where-cards').innerHTML = r.cards;
+    $('where-steps').innerHTML = r.steps;
   }
 
   /* ---------- Tooltip ---------- */
@@ -1009,7 +1192,11 @@
 
   function init() {
     const saved = store.get('settings');
-    if (saved) for (const id of SETTING_IDS) if (saved[id] != null && $(id)) $(id).value = saved[id];
+    if (saved) {
+      // Ajustes de versiones anteriores: el tope de 20-30 % por acción ya no es el predeterminado
+      if (saved.div == null) delete saved.wmax;
+      for (const id of SETTING_IDS) if (saved[id] != null && $(id)) $(id).value = saved[id];
+    }
     $('csv').value = store.get('csv') || PF.sample.csv();
 
     document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.getAttribute('data-go'))));
@@ -1048,7 +1235,31 @@
     $('agg').addEventListener('change', () => {
       if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
     });
-    for (const id of ['rettype', 'history']) $(id).addEventListener('change', compute);
+    for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
+    const savedSegs = store.get('segs');
+    if (Array.isArray(savedSegs)) document.querySelectorAll('#segs [data-seg]').forEach((c) => (c.checked = savedSegs.includes(c.getAttribute('data-seg'))));
+    $('segs').addEventListener('change', () => {
+      store.set('segs', settings().segs);
+      st.userNames = null;
+      compute();
+    });
+    $('colibr-note').addEventListener('click', (ev) => {
+      if (!ev.target.closest('#use-colibr') || st.colibr == null) return;
+      const v = Math.round(st.colibr * 10000) / 100;
+      $('rf').value = v;
+      $('plan-safe').value = v;
+      store.set('plan', Object.assign(store.get('plan') || {}, { 'plan-safe': String(v) }));
+      compute();
+    });
+    $('inst-table').addEventListener('change', (ev) => {
+      const sel = ev.target.closest('[data-cls]');
+      if (!sel) return;
+      const o = store.get('cls') || {};
+      o[sel.getAttribute('data-cls')] = sel.value;
+      store.set('cls', o);
+      st.userNames = null;
+      compute();
+    });
     $('freq').addEventListener('change', () => {
       // Con historiales diarios subidos, se reagrupan a la nueva frecuencia.
       if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
@@ -1058,7 +1269,7 @@
       store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
       if (st.model) render();
     });
-    for (const id of ['rf', 'em', 'wmin', 'wmax', 'capital', 'fee']) $(id).addEventListener('input', recompute);
+    for (const id of ['rf', 'em', 'wmin', 'wmax', 'capital', 'fee', 'feesell']) $(id).addEventListener('input', recompute);
     $('tol').addEventListener('input', debounce(() => {
       if (!st.model) return;
       store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
@@ -1094,14 +1305,35 @@
     const planSync = debounce(() => {
       const b = val('plan-budget');
       const f = val('plan-fee');
+      const fs = val('plan-feesell');
       if (b != null) $('capital').value = b;
       if (f != null) $('fee').value = f;
+      if (fs != null) $('feesell').value = fs;
       compute();
     }, 350);
-    $('plan-budget').addEventListener('input', planSync);
-    $('plan-fee').addEventListener('input', planSync);
-    $('plan-base').addEventListener('change', renderPlan);
+    for (const id of ['plan-budget', 'plan-fee', 'plan-feesell']) $(id).addEventListener('input', planSync);
+    const PLAN_IDS = ['plan-horizon', 'plan-min', 'plan-safe', 'plan-loss', 'plan-base'];
+    const savedPlan = store.get('plan');
+    if (savedPlan) for (const id of PLAN_IDS) if (savedPlan[id] != null) $(id).value = savedPlan[id];
+    const planSave = () => store.set('plan', Object.fromEntries(PLAN_IDS.map((id) => [id, $(id).value])));
+    for (const id of PLAN_IDS) $(id).addEventListener(id === 'plan-min' || id === 'plan-safe' ? 'input' : 'change', debounce(() => {
+      planSave();
+      if (st.model) renderPlan();
+    }, 250));
+    document.querySelector('.fee-presets').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-fee]');
+      if (!b) return;
+      const f = Math.round(FEE_NORMAL * +b.getAttribute('data-fee'));
+      $('plan-fee').value = f;
+      $('fee').value = f;
+      if (+b.getAttribute('data-fee') === 1) {
+        $('plan-feesell').value = FEE_NORMAL;
+        $('feesell').value = FEE_NORMAL;
+      }
+      compute();
+    });
     $('plan-optk').addEventListener('change', renderPlan);
+    $('plan-out').addEventListener('click', (ev) => ev.target.closest('[data-go-where]') && go('invertir'));
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('#plan-register') && registerPlan());
     for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan']) $('dl-' + k).addEventListener('click', () => doDownload(k));
     $('mode-pesos').addEventListener('click', () => setMode('pesos'));
@@ -1116,10 +1348,11 @@
     $('buys').addEventListener('input', (ev) => {
       const q = ev.target.getAttribute('data-bq');
       const d = ev.target.getAttribute('data-bd');
-      const i = q ?? d;
+      const f = ev.target.getAttribute('data-bf');
+      const i = q ?? d ?? f;
       if (i == null) return;
       const n = st.userNames[+i];
-      st.buys[n] = Object.assign({}, st.buys[n], q != null ? { qty: ev.target.value } : { date: ev.target.value });
+      st.buys[n] = Object.assign({}, st.buys[n], q != null ? { qty: ev.target.value } : d != null ? { date: ev.target.value } : { fee: ev.target.value });
       buysChanged();
     });
     $('buy-date').addEventListener('change', () => {
@@ -1165,6 +1398,12 @@
   /* Punto de entrada para la app de escritorio (js/desktop.js): carga historiales
    * ya descargados como si se hubieran subido archivos. */
   globalThis.PFApp = {
+    // Portafolio recomendado actual (para avisar cuando cambia con datos nuevos)
+    recommended() {
+      if (!st.model || !st.P || !st.P.recommended) return null;
+      const r = st.P.recommended;
+      return { names: st.model.names.slice(), w: r.w.slice(), ret: r.ret, vol: r.vol, date: st.parsed.dates.at(-1) };
+    },
     loadSeries(list, origin) {
       const combined = PF.data.combineSeries(list);
       if (combined.length < 2) {

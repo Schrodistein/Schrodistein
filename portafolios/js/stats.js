@@ -278,12 +278,22 @@
   const PRICE_LEVELS = [
     /(cierre ajustado|adj close|adjusted close|precio ajustado)/,
     /(precio de cierre|precio cierre|cierre|close|ultimo|last)/,
+    /(precio de liquidacion|precio liquidacion|liquidacion|settle|precio de valoracion|precio valoracion|precio de mercado|precio sucio|precio limpio)/,
     /^(precio|price|valor)( |$)/,
   ];
+  // Divisas: «TRM», «Tasa de cambio» son precios aunque digan «tasa» o «cambio»
+  const FX_PRICE = /(^| )(trm|tasa de cambio|tipo de cambio|tasa representativa)( |$)/;
+  // Renta fija: tasa de negociación o de valoración (TES, bonos, CDT)
+  const RATE_HDR = /(^| )(tasa|tir|yield|tasa efectiva|tasa de negociacion|tasa de valoracion|tasa cierre|tasa de cierre|rendimiento)( |$)/;
+  const NOT_RATE = /(variacion|cambio|representativa|trm|anterior|previo|maxim|minim|apertura|promedio)/;
+  const FI_PRICE = /(precio sucio|precio limpio|precio de valoracion|precio valoracion)/;
+  const DUR_HDR = /(^| )(duracion|duration)( |$)/;
   const isTickerHdr = (h) => /(nemotecnico|nemo|ticker|simbolo|symbol|especie|instrumento|emisor|accion)/.test(norm(h));
   const clean = (h) => String(h == null ? '' : h).replace(/^"|"$/g, '').replace(/\s+/g, ' ').trim();
 
   function priceColumn(h, skip) {
+    const fx = h.findIndex((x, k) => !skip.includes(k) && FX_PRICE.test(norm(x)) && !/variacion/.test(norm(x)));
+    if (fx >= 0) return fx;
     for (const re of PRICE_LEVELS) {
       const i = h.findIndex((x, k) => !skip.includes(k) && re.test(norm(x)) && !NOT_PRICE.test(norm(x)) && !isDateHdr(x) && !isTickerHdr(x));
       if (i >= 0) return i;
@@ -299,6 +309,10 @@
       if (di < 0) continue;
       const ti = h.findIndex((x, k) => k !== di && isTickerHdr(x));
       const pi = priceColumn(h, [di, ti]);
+      const ri = h.findIndex((x, k) => k !== di && k !== ti && RATE_HDR.test(norm(x)) && !NOT_RATE.test(norm(x)));
+      const ui = h.findIndex((x) => DUR_HDR.test(norm(x)));
+      // Renta fija: con tasa y sin precio de cierre, o con precio limpio/sucio, se usa la tasa
+      if (ri >= 0 && (pi < 0 || FI_PRICE.test(norm(h[pi])))) return { row: r, di, pi: ri, ti, head: h, rate: true, ui };
       if (pi >= 0) return { row: r, di, pi, ti, head: h };
     }
     return null;
@@ -399,7 +413,8 @@
     }
     const body = rows.slice(hd.row + 1).filter((r) => r && r.some((c) => clean(c) !== ''));
     const strCells = body.map((r) => (typeof r[hd.pi] === 'number' ? '' : clean(r[hd.pi])));
-    const dc = columnDecimalComma(strCells.filter(Boolean), ',');
+    // Las tasas no llevan separador de miles: «10.500» es 10,5 %, y «10,5» también
+    const dc = hd.rate ? strCells.some((c) => /,\d/.test(c) && !/\./.test(c)) : columnDecimalComma(strCells.filter(Boolean), ',');
     const spanish = hd.head.some((h) => /fecha|cierre|ultimo|apertura|precio/.test(norm(h)));
     const strDates = parseDates(body.map((r) => (cellDate(r[hd.di]) || clean(r[hd.di]))), spanish);
     // Días sin negociación: la BVC repite un precio de referencia con cantidad vacía.
@@ -410,6 +425,7 @@
     const skipNoTrade = qi >= 0 && withQty >= 0.5 * body.length;
     let noTrade = 0;
     const groups = new Map();
+    const durs = [];
     body.forEach((r, k) => {
       if (skipNoTrade && !(qty(r) > 0) && clean(r[hd.pi]) !== '') {
         noTrade++;
@@ -418,15 +434,29 @@
       const raw = r[hd.pi];
       const v = typeof raw === 'number' ? raw : parseNumber(clean(raw), dc);
       const d = strDates[k];
-      if (!d || !Number.isFinite(v) || v <= 0) return;
+      if (!d || !Number.isFinite(v) || (hd.rate ? v < -50 : v <= 0)) return;
+      if (hd.rate && hd.ui >= 0) {
+        const u = typeof r[hd.ui] === 'number' ? r[hd.ui] : parseNumber(clean(r[hd.ui]), dc);
+        if (u > 0 && u < 60) durs.push(u);
+      }
       const key = hd.ti >= 0 && clean(r[hd.ti]) ? clean(r[hd.ti]).toUpperCase() : '';
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push([d, v]);
     });
     const out = [];
     for (const [key, pts] of groups) {
-      const s = finishSeries(pts, key || nameFromFile(fileName), hd.head[hd.pi]);
-      if (s) out.push(Object.assign(s, { noTrade, rank: 2 }));
+      const name = key || nameFromFile(fileName);
+      if (hd.rate) {
+        // Tasas en porcentaje (10,25) o en decimal (0,1025): se guardan en decimal
+        const med = pts.map((p) => Math.abs(p[1])).sort((a, b) => a - b)[Math.floor(pts.length / 2)];
+        if (med > 1) pts.forEach((p) => (p[1] /= 100));
+      }
+      const s = finishSeries(pts, name, hd.head[hd.pi]);
+      if (!s) continue;
+      const cls = classify(name, hd.head);
+      const extra = { noTrade, rank: 2, cls };
+      if (hd.rate) Object.assign(extra, { kind: 'tasa', dur: durs.length ? durs.sort((a, b) => a - b)[Math.floor(durs.length / 2)] : DEFAULT_DUR[cls] || DEFAULT_DUR.bono });
+      out.push(Object.assign(s, extra));
     }
     if (!out.length) throw new Error(`No se reconocieron fechas y precios en «${fileName}».`);
     return out;
@@ -532,18 +562,64 @@
     return seriesFromRows(csvRows(text), fileName);
   }
 
-  /* Junta los tramos del mismo activo (la BVC descarga como máximo 6 meses por archivo). */
+  /* Junta los tramos del mismo activo (la BVC descarga como máximo 6 meses por archivo).
+   * Las series de tasa (renta fija) se convierten, ya unidas, en un índice de rendimiento total. */
   function combineSeries(list) {
     const by = new Map();
     for (const s of list) {
       const k = s.name.toUpperCase();
-      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0, noTrade: 0 });
+      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur });
       const g = by.get(k);
       g.parts++;
       g.noTrade += s.noTrade || 0;
+      if (!g.cls && s.cls) g.cls = s.cls;
+      if (s.kind === 'tasa') {
+        g.kind = 'tasa';
+        g.dur = g.dur || s.dur;
+      }
       s.dates.forEach((d, i) => g.pts.push([d, s.prices[i], s.rank || 0]));
     }
-    return [...by.values()].map((g) => Object.assign(finishSeries(g.pts, g.name, g.column), { parts: g.parts, noTrade: g.noTrade }));
+    return [...by.values()].map((g) => {
+      const f = finishSeries(g.pts, g.name, g.column);
+      const out = Object.assign(f, { parts: g.parts, noTrade: g.noTrade, cls: g.cls || classify(g.name) });
+      if (g.kind !== 'tasa') return out;
+      const dur = g.dur || DEFAULT_DUR[out.cls] || DEFAULT_DUR.bono;
+      const rates = f.prices;
+      return Object.assign(out, { prices: rateIndex(f.dates, rates, dur), rates, dur, kind: 'tasa', column: `${g.column}: índice de rendimiento total con duración ${String(+dur.toFixed(2)).replace('.', ',')}` });
+    });
+  }
+
+  /* Índice de rendimiento total de una serie de tasas efectivas anuales y:
+   *   Rₜ = [(1 + yₜ₋₁)^Δt − 1]  −  D / (1 + yₜ₋₁) · (yₜ − yₜ₋₁)
+   * causación de la tasa del periodo anterior menos el efecto precio (duración modificada).
+   * Δt en años (días / 365). Base 100. */
+  function rateIndex(dates, rates, dur) {
+    const out = [100];
+    for (let t = 1; t < rates.length; t++) {
+      const dt = (Date.parse(dates[t]) - Date.parse(dates[t - 1])) / (365 * 864e5);
+      const y0 = rates[t - 1];
+      const r = Math.pow(1 + y0, dt) - 1 - (dur / (1 + y0)) * (rates[t] - y0);
+      out.push(out[t - 1] * (1 + r));
+    }
+    return out;
+  }
+
+  /* Tipo de instrumento, por el nombre y los encabezados del archivo. */
+  const CLASSES = { accion: 'Acción', etf: 'ETF', tes: 'TES', bono: 'Bono', cdt: 'CDT', divisa: 'Divisa', futuro: 'Futuro', opcion: 'Opción', indice: 'Índice' };
+  const DEFAULT_DUR = { cdt: 0.5, tes: 6, bono: 4 };
+  function classify(name, head) {
+    const n = norm(name);
+    const h = (head || []).map(norm).join(' | ');
+    if (/(^| )(icolcap|hcolsel|icolrisk|gxtescol|ietf)|etf/.test(n)) return 'etf';
+    if (/(opcion|option|(^| )(call|put)( |$))/.test(n)) return 'opcion';
+    if (/(futur|(^| )fut( |$))/.test(n) || /liquidacion/.test(h)) return 'futuro';
+    if (/(coltes|colibr|colcap|coleqty|colir|colsc|msci|(^| )(indice|index)( |$))/.test(n)) return 'indice';
+    if (/(^| )cdt/.test(n)) return 'cdt';
+    if (/(^| )(tes|tfit|tuvt|tcop|tfi|tco)/.test(n)) return 'tes';
+    if (/(usd|eur|cop x|copx|trm|dolar|divisa|(^| )fx( |$))/.test(n) || FX_PRICE.test(h)) return 'divisa';
+    if (/(bono|bond)/.test(n) || FI_PRICE.test(h) || RATE_HDR.test(h)) return 'bono';
+    if (MARKET_RE.test(name)) return 'indice';
+    return 'accion';
   }
 
   /* Clave de periodo para agrupar precios diarios en la frecuencia elegida. */
@@ -627,8 +703,15 @@
     const gaps = dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(dates[i])) / 864e5).sort((a, b) => a - b);
     if (gaps[Math.floor(gaps.length / 2)] > 4) return []; // solo datos diarios
     const idx = new Map(dates.map((d, i) => [d, i]));
-    const R = list.map((s) => {
+    // Solo series diarias de precios: las de tasa (renta fija) y las semanales o mensuales no se evalúan
+    const daily = list.map((s) => {
+      if (s.kind === 'tasa' || s.dates.length < 40) return false;
+      const g = s.dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(s.dates[i])) / 864e5).sort((a, b) => a - b);
+      return g[Math.floor(g.length / 2)] <= 4;
+    });
+    const R = list.map((s, k) => {
       const r = new Array(dates.length).fill(NaN);
+      if (!daily[k]) return r;
       for (let i = 1; i < s.dates.length; i++) {
         const a = idx.get(s.dates[i - 1]);
         const b = idx.get(s.dates[i]);
@@ -650,6 +733,7 @@
     };
     const out = [];
     list.forEach((s, k) => {
+      if (!daily[k]) return;
       const cons = dates.map((_, t) => {
         const v = R.filter((_, j) => j !== k).map((r) => r[t]).filter(Number.isFinite);
         return v.length >= 2 ? v.reduce((q, x) => q + x, 0) / v.length : NaN;
@@ -701,12 +785,15 @@
 
   const isMarketName = (n) => MARKET_RE.test(n);
   function guessMarket(names) {
-    const i = names.findIndex((n) => MARKET_RE.test(n));
+    // Primero el MSCI COLCAP (no el ETF ICOLCAP), luego cualquier índice de renta variable
+    const c = names.findIndex((n) => /(^|[^i])colcap/i.test(n));
+    if (c >= 0) return c;
+    const i = names.findIndex((n) => MARKET_RE.test(n) && !/(coltes|colibr)/i.test(n));
     return i >= 0 ? i : names.length - 1;
   }
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

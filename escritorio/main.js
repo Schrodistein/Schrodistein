@@ -250,7 +250,7 @@ function registerIpc() {
   ipcMain.handle('ajustes:guardar', (e, patch) => {
     const s = store.data.settings;
     for (const k of Object.keys(patch || {})) if (k in s && typeof patch[k] === typeof s[k]) s[k] = patch[k];
-    s.intervalHours = Math.min(24, Math.max(1, Math.round(s.intervalHours)));
+    s.intervalHours = Math.min(168, Math.max(1, Math.round(s.intervalHours)));
     store.save();
     applyLogin();
     schedule();

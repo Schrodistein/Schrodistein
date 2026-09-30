@@ -19,13 +19,19 @@ const DEFAULT_ASSETS = [
   { name: 'GEB', yahoo: 'GEB.CL', news: 'Grupo Energía Bogotá acción', index: false },
   { name: 'ISA', yahoo: 'ISA.CL', news: 'ISA Interconexión Eléctrica acción', index: false },
   { name: 'GRUPOARGOS', yahoo: 'GRUPOARGOS.CL', news: 'Grupo Argos acción', index: false },
+  // Divisas: el dólar se descarga solo; es también el índice de referencia del segmento
+  { name: 'USD/COP', yahoo: 'COP=X', news: 'dólar peso colombiano TRM', index: false },
+  // Índices de referencia de renta fija: se importan desde la BVC (no hay fuente automática)
+  { name: 'COLTES LP', yahoo: '', news: 'TES Colombia tasas deuda pública', index: true },
+  { name: 'COLIBR', yahoo: '', news: 'IBR tasa interbancaria Colombia', index: true },
 ];
+const DEFAULTS_VERSION = 2; // sube cuando se agregan activos predeterminados
 
 const DEFAULT_SETTINGS = {
   auto: true, // actualizar solo
   yahoo: true, // usar la fuente automática de cierres
   news: true,
-  intervalHours: 3,
+  intervalHours: 168, // semanal
   background: true, // seguir en la bandeja al cerrar la ventana
   openAtLogin: false,
   notify: true,
@@ -38,7 +44,7 @@ function emptyData() {
     assets: DEFAULT_ASSETS.map((a) => Object.assign({ enabled: true }, a)),
     prices: {},
     news: [],
-    meta: { lastPrices: null, lastNews: null, errors: {} },
+    meta: { lastPrices: null, lastNews: null, errors: {}, defaults: DEFAULTS_VERSION },
     settings: Object.assign({}, DEFAULT_SETTINGS),
   };
 }
@@ -54,6 +60,11 @@ class Store {
         this.data = Object.assign(emptyData(), raw);
         this.data.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings);
         this.data.meta = Object.assign({ errors: {} }, raw.meta);
+        // Activos predeterminados nuevos (divisas e índices de renta fija) para quien ya usaba la app
+        if ((this.data.meta.defaults || 1) < DEFAULTS_VERSION) {
+          for (const a of DEFAULT_ASSETS) if (!this.asset(a.name)) this.data.assets.push(Object.assign({ enabled: true }, a));
+          this.data.meta.defaults = DEFAULTS_VERSION;
+        }
       }
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
@@ -71,11 +82,19 @@ class Store {
   }
 
   /* Agrega el activo si no está en la lista (p. ej. al importar un CSV de otra acción). */
-  ensureAsset(name, isIndex) {
+  ensureAsset(name, isIndex, info) {
     let a = this.asset(name);
     if (!a) {
-      a = { name, yahoo: '', news: name + ' acción', index: !!isIndex, enabled: true };
+      a = { name, yahoo: '', news: name + (isIndex ? '' : ' acción'), index: !!isIndex, enabled: true };
       this.data.assets.push(a);
+    }
+    // Tipo de instrumento y, en renta fija por tasas, la duración (los precios guardados son tasas)
+    if (info) {
+      if (info.cls) a.cls = info.cls;
+      if (info.kind === 'tasa') {
+        a.kind = 'tasa';
+        a.dur = info.dur;
+      }
     }
     return a;
   }
@@ -118,7 +137,11 @@ class Store {
         const keep = full.sources.map((s) => !onlyLoaded || s === 'bvc');
         const h = { dates: full.dates.filter((_, i) => keep[i]), prices: full.prices.filter((_, i) => keep[i]), sources: full.sources.filter((_, i) => keep[i]) };
         const bvc = h.sources.filter((s) => s === 'bvc').length;
-        return { name: a.name, dates: h.dates, prices: h.prices, column: bvc === h.dates.length ? 'BVC' : bvc ? 'BVC + automática' : 'automática', rank: 2, parts: 1 };
+        const out = { name: a.name, dates: h.dates, prices: h.prices, column: bvc === h.dates.length ? 'BVC' : bvc ? 'BVC + automática' : 'automática', rank: 2, parts: 1 };
+        if (a.cls) out.cls = a.cls;
+        else if (a.index) out.cls = 'indice';
+        if (a.kind === 'tasa') Object.assign(out, { kind: 'tasa', dur: a.dur });
+        return out;
       })
       .filter((s) => s.dates.length >= 3);
   }
@@ -156,7 +179,10 @@ class Store {
     for (const a of d.assets) {
       if (!a || !a.name) continue;
       if (!this.asset(a.name)) {
-        this.data.assets.push({ name: String(a.name).toUpperCase().slice(0, 40), yahoo: String(a.yahoo || ''), news: String(a.news || a.name), index: !!a.index, enabled: a.enabled !== false });
+        const na = { name: String(a.name).toUpperCase().slice(0, 40), yahoo: String(a.yahoo || ''), news: String(a.news || a.name), index: !!a.index, enabled: a.enabled !== false };
+        if (a.cls) na.cls = String(a.cls).slice(0, 12);
+        if (a.kind === 'tasa' && a.dur > 0) Object.assign(na, { kind: 'tasa', dur: +a.dur });
+        this.data.assets.push(na);
         assets++;
       }
     }

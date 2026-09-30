@@ -157,6 +157,39 @@ test('respaldo: exportar e importar en otro equipo sin perder la prioridad de la
 });
 
 
+test('renta fija por tasas: se guarda la tasa y el análisis recibe el índice de rendimiento total', () => {
+  const st = new Store(tmp());
+  const d = tmp();
+  fs.writeFileSync(path.join(d, 'TFIT16240728_20260915.csv'), 'Fecha;Nemotécnico;Tasa de negociación;Precio limpio\n2026-08-13;TFIT16240728;10.500;98,500.000\n2026-08-14;TFIT16240728;10.600;98,100.000\n2026-08-18;TFIT16240728;10.400;98,900.000\n');
+  fs.writeFileSync(path.join(d, 'COLIBR_20260915_1.csv'), 'Fecha;Valor hoy;Valor ayer\n2026/08/13;119.10;119.07\n2026/08/14;119.13;119.10\n2026/08/18;119.20;119.13\n');
+  const r = updater.importFiles(st, [path.join(d, 'TFIT16240728_20260915.csv'), path.join(d, 'COLIBR_20260915_1.csv')], null);
+  assert(r.assets.TFIT16240728 === 3 && r.assets.COLIBR === 3, JSON.stringify(r));
+  const a = st.asset('TFIT16240728');
+  assert(a.kind === 'tasa' && a.cls === 'tes' && a.dur === 6 && st.history('TFIT16240728').prices[0] === 0.105, JSON.stringify(a));
+  assert(st.asset('COLIBR').index, 'COLIBR es índice');
+  const PF = updater.loadPF();
+  const ser = st.series('cargados');
+  const tes = PF.data.combineSeries(ser).find((x) => x.name === 'TFIT16240728');
+  assert(tes.kind === 'tasa' && tes.prices[0] === 100 && tes.prices[1] < 100 && tes.prices[2] > tes.prices[1], 'índice: ' + tes.prices);
+  assert(ser.find((x) => x.name === 'COLIBR').cls === 'indice');
+  // El respaldo conserva el tipo y la duración
+  const st2 = new Store(tmp());
+  st2.importData(JSON.parse(JSON.stringify(st.exportData())));
+  assert(st2.asset('TFIT16240728').kind === 'tasa' && st2.asset('TFIT16240728').dur === 6);
+});
+
+test('quien ya usaba la app recibe los activos predeterminados nuevos (dólar, COLTES, COLIBR)', () => {
+  const dir = tmp();
+  const old = new Store(dir);
+  old.data.assets = old.data.assets.filter((a) => !['USD/COP', 'COLTES LP', 'COLIBR'].includes(a.name));
+  delete old.data.meta.defaults;
+  old.save();
+  const st = new Store(dir);
+  assert(st.asset('USD/COP') && st.asset('USD/COP').yahoo === 'COP=X' && st.asset('COLIBR').index && st.asset('COLTES LP').index);
+  assert(st.data.settings.intervalHours === 168 || typeof st.data.settings.intervalHours === 'number');
+});
+
+
 Promise.all(pending).then(() => {
   console.log(`${passed} pruebas correctas, ${failed} fallidas`);
   if (failed) process.exit(1);

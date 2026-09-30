@@ -177,9 +177,9 @@ test('carteras de referencia respetan límites y ordenan bien', () => {
 test('confirmación: la tangente es eficiente y 1/N no', () => {
   const m = sampleModel();
   const P = PF.model.portfolios(m, 0, 0.2);
-  const c1 = PF.model.confirm(m, P.tangency.w, 0, 0.2);
+  const c1 = PF.model.confirm(m, P.tangency.w, 0, P.cap);
   assert(c1.verdict === 'eficiente', 'tangente: ' + c1.verdict + ' ' + c1.retGap);
-  const c2 = PF.model.confirm(m, P.equal.w, 0, 0.2);
+  const c2 = PF.model.confirm(m, P.equal.w, 0, P.cap);
   assert(c2.verdict === 'ineficiente' && c2.retGap > 0.01 && c2.volGap > 0);
   assert(near(c2.sameRisk.vol, c2.me.vol, 1e-6), 'misma volatilidad');
   assert(near(c2.sameRet.ret, c2.me.ret, 1e-6), 'mismo rendimiento');
@@ -439,7 +439,8 @@ test('plan recomendado: con poco presupuesto las comisiones llevan a menos activ
   const pl = small.best.plan;
   assert(near(ev.netRet, (pl.invested * ev.e.ret - pl.buyFees - pl.sellFees) / pl.budget, 1e-12));
   assert(near(ev.breakEven, (pl.buyFees + pl.sellFees) / pl.invested, 1e-12));
-  assert(small.tries.every((t) => !t.ev || t.ev.netSharpe <= small.best.ev.netSharpe + 1e-12), 'elige el mejor Sharpe neto');
+  assert(small.tries.every((t) => !t.eligible || t.score <= small.best.score + 1e-12), 'elige el mejor Sharpe neto por comisiones');
+  assert(big.best === big.full, 'con presupuesto grande se queda con todos los activos');
 });
 
 test('xlsx: ZIP válido con CRC32 correcto y las partes de Office Open', () => {
@@ -464,11 +465,154 @@ test('libro de cálculos: hojas, fórmulas y resultados iguales a los de la app'
   assert(cells('Covarianza').some((c) => /CORREL|Correlacion!/.test(c.f)));
   const port = rep.sheets.find((x) => x.name === 'Portafolios').rows;
   const eRow = port.find((r) => r && r[0] === 'Rendimiento esperado E(Rp)');
-  assert(eRow && near(eRow[1].v, P.tangency.ret, 1e-12) && /^SUMPRODUCT/.test(eRow[1].f));
+  assert(eRow && near(eRow[1].v, P.recommended.ret, 1e-12) && /^SUMPRODUCT/.test(eRow[1].f));
   const bytes = rep.bytes();
   assert(bytes.length > 50000 && bytes[0] === 0x50);
 });
 
+
+test('recomendado: máximo rendimiento eficiente que conserva la diversificación', () => {
+  const m = sampleModel({ muModel: 'mix' });
+  const n = m.mu.length;
+  let prevTarget = Infinity;
+  for (const div of ['alta', 'media', 'baja']) {
+    const target = Math.max(1, PF.model.DIV_LEVELS[div].frac * n);
+    assert(target < prevTarget);
+    prevTarget = target;
+    const P = PF.model.portfolios(m, 0, 1, { div });
+    const r = P.recommended;
+    assert(near(sumOf(r.w), 1, 1e-8), 'suma 1');
+    assert(r.effN >= target - 1e-6, div + ': N efectivo ' + r.effN + ' < ' + target);
+    assert(Math.max(...r.w) <= P.cap + 1e-9 && P.hi.every((h) => h === P.cap), div + ': tope común a todos los portafolios');
+    // Eficiente sobre la frontera que se dibuja y se confirma
+    const f = PF.optim.frontier(m.Sigma, m.mu, P.lo, P.hi);
+    assert(PF.optim.frontierAtRet(m.Sigma, m.mu, P.lo, P.hi, f, r.ret).vol >= r.vol - 1e-6, div + ': sobre la frontera');
+    assert(PF.model.confirm(m, r.w, 0, P.cap, 0.001).verdict === 'eficiente', div + ': la confirmación lo da por eficiente');
+    // Máximo: ningún punto de esa frontera con la misma diversificación rinde más
+    for (const p of f) if (1 / p.w.reduce((a, x) => a + x * x, 0) >= target) assert(p.ret <= r.ret + 1e-7, div + ': hay un punto eficiente más rentable');
+    // El tope es el más holgado posible: con 5 puntos más, la frontera ya no alcanza N*
+    if (P.cap < 1) {
+      const hi2 = new Array(n).fill(Math.min(1, P.cap + 0.05));
+      const f2 = PF.optim.frontier(m.Sigma, m.mu, P.lo, hi2, { points: 80 });
+      assert(f2.every((p) => 1 / p.w.reduce((a, x) => a + x * x, 0) < target + 0.05), div + ': había un tope más holgado');
+    }
+  }
+  // Sin tope fijo: con 5 activos el recomendado no queda en 20 % cada uno
+  const d = PF.data.parseCSV(PF.sample.csv());
+  const R = PF.data.toReturns(d.values, 'prices', true);
+  const mi = PF.data.guessMarket(d.names);
+  const keep = d.names.map((_, i) => i).filter((i) => i !== mi).slice(0, 5);
+  const m5 = PF.model.build({ names: keep.map((i) => d.names[i]), returns: keep.map((i) => R[i]), market: R[mi], marketName: d.names[mi], dates: d.dates }, { freq: 'mensual', rf: 0.04, muModel: 'mix', covModel: 'sample', history: 'all' });
+  const r5 = PF.model.portfolios(m5, 0, 1, { div: 'media' });
+  assert(Math.max(...r5.recommended.w) > 0.25, 'algún activo pesa más de 20 %');
+  assert(r5.recommended.ret > r5.equal.ret, 'rinde más que pesos iguales');
+  // Un tope del usuario se respeta
+  const capped = PF.model.portfolios(m, 0, 0.3, { div: 'baja' });
+  assert(capped.cap <= 0.3 + 1e-12 && Math.max(...capped.recommended.w) <= 0.3 + 1e-9);
+});
+
+test('renta fija, divisas y derivados: tasas, índice de rendimiento total y tipo', () => {
+  const tes = 'Fecha;Nemotécnico;Tasa de negociación;Precio limpio;Cantidad\n2026-01-02;TFIT16240728;10.500;98,500.000;1,000\n2026-01-05;TFIT16240728;10.600;98,100.000;1,000\n2026-01-06;TFIT16240728;10.400;98,900.000;1,000';
+  const s = PF.data.combineSeries(PF.data.readText(tes, 'tes.csv').series)[0];
+  assert(s.kind === 'tasa' && s.cls === 'tes' && s.dur === 6, `${s.kind} ${s.cls} ${s.dur}`);
+  assert(near(s.rates[0], 0.105, 1e-12) && near(s.rates[1], 0.106, 1e-12), 'tasas en decimal: ' + s.rates);
+  // Rₜ = (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁)·Δy
+  const r1 = Math.pow(1.105, 3 / 365) - 1 - (6 / 1.105) * 0.001;
+  assert(near(s.prices[1], 100 * (1 + r1), 1e-9), 'índice ' + s.prices[1]);
+  assert(s.prices[2] > s.prices[1], 'si la tasa baja, el precio sube');
+  // Duración leída del archivo y tasa con coma decimal
+  const cdt = PF.data.combineSeries(PF.data.readText('Fecha;Tasa;Duración\n2026-01-02;11,2;0,40\n2026-01-09;11,0;0,38\n2026-01-16;10,9;0,36', 'CDT 180.csv').series)[0];
+  assert(cdt.cls === 'cdt' && near(cdt.rates[0], 0.112, 1e-12) && near(cdt.dur, 0.38, 1e-12), `${cdt.cls} ${cdt.rates} ${cdt.dur}`);
+  // Tramos del mismo TES en archivos distintos: se unen antes de armar el índice (sin saltos)
+  const a = PF.data.readText('Fecha;Nemotécnico;Tasa\n2026-01-02;TFIT1;10.5\n2026-01-05;TFIT1;10.6', 'a.csv').series;
+  const b = PF.data.readText('Fecha;Nemotécnico;Tasa\n2026-01-06;TFIT1;10.4\n2026-01-07;TFIT1;10.4', 'b.csv').series;
+  const j = PF.data.combineSeries(a.concat(b))[0];
+  assert(j.dates.length === 4 && j.prices[0] === 100 && Math.abs(j.prices[2] / j.prices[1] - 1) < 0.02, 'unión: ' + j.prices);
+  // Divisas: «TRM» y «Tasa de cambio» son precios, no tasas de interés
+  const trm = PF.data.readText('Fecha;TRM\n2026-01-02;4.100,50\n2026-01-05;4.120,00\n2026-01-06;4.090,00', 'dolar.csv').series[0];
+  assert(!trm.kind && trm.cls === 'divisa' && near(trm.prices[0], 4100.5, 1e-9), `${trm.kind} ${trm.cls} ${trm.prices[0]}`);
+  const fut = PF.data.readText('Fecha;Nemotécnico;Precio de liquidación\n2026-01-02;FUT COLCAP;1,500.00\n2026-01-05;FUT COLCAP;1,510.00', 'f.csv').series[0];
+  assert(fut.cls === 'futuro' && fut.prices[1] === 1510, fut.cls);
+  const C = (n) => PF.data.classify(n);
+  assert(C('MSCI COLCAP') === 'indice' && C('COLTES LP') === 'indice' && C('COLIBR') === 'indice' && C('ICOLCAP') === 'etf' && C('ECOPETROL') === 'accion' && C('OPCION CALL PFBCOLOM') === 'opcion');
+  assert(PF.data.guessMarket(['ICOLCAP', 'COLTES LP', 'MSCI COLCAP', 'ECOPETROL']) === 2, 'el índice principal es el MSCI COLCAP');
+});
+
+test('índice de referencia por segmento: β, CAPM y Jensen frente a su índice; βp frente al principal', () => {
+  const R = rng(11);
+  const T = 120;
+  const mk = Array.from({ length: T }, () => 0.01 + 0.04 * (R() - 0.5));
+  const fi = Array.from({ length: T }, () => 0.006 + 0.01 * (R() - 0.5));
+  const acc = mk.map((x) => 0.002 + 1.2 * x + 0.02 * (R() - 0.5));
+  const acc2 = mk.map((x) => 0.001 + 0.8 * x + 0.03 * (R() - 0.5));
+  const tes = fi.map((x) => 0.001 + 0.9 * x + 0.003 * (R() - 0.5));
+  const datos = { names: ['ACC', 'ACC2', 'TES'], returns: [acc, acc2, tes], market: mk, marketName: 'COLCAP', dates: mk.map((_, i) => String(i)), bench: [null, null, { name: 'COLTES', returns: fi }] };
+  const m = PF.model.build(datos, { freq: 'mensual', rf: 0.05, muModel: 'mix', covModel: 'sample', history: 'all' });
+  const t = m.assets[2];
+  const direct = PF.stats.regress(tes.map((v) => v - m.rfp), fi.map((v) => v - m.rfp));
+  assert(t.bench === 'COLTES' && near(t.beta, direct.beta, 1e-12), 'β frente a COLTES');
+  const Eb = PF.stats.mean(fi) * 12;
+  assert(near(t.capmRet, 0.05 + t.beta * (Eb - 0.05), 1e-12) && near(t.jensen, t.expRet - (0.05 + t.beta * (Eb - 0.05)), 1e-12));
+  const betaM = PF.stats.regress(tes.map((v) => v - m.rfp), mk.map((v) => v - m.rfp)).beta;
+  assert(near(t.betaM, betaM, 1e-12) && m.assets[0].bench === 'COLCAP' && near(m.assets[0].beta, m.assets[0].betaM, 1e-15));
+  const e = PF.model.evaluate(m, [0.3, 0.3, 0.4]);
+  assert(near(e.beta, 0.3 * m.assets[0].betaM + 0.3 * m.assets[1].betaM + 0.4 * betaM, 1e-12), 'βp con β frente al principal');
+});
+
+test('plan: reparto con renta fija por horizonte, monto mínimo, montos y CDT sin comisión', () => {
+  // P(pérdida) en el límite exacto de α
+  const sh = PF.plan.riskyShare(0.14, 0.2, 0.09, 1, 0.1);
+  assert(sh.alpha > 0 && sh.alpha < 1, 'α ' + sh.alpha);
+  const mean = 0.09 + sh.alpha * 0.05;
+  assert(near(PF.stats.normalCdf(-mean / (sh.alpha * 0.2)), 0.1, 1e-6), 'P(pérdida) = 10 %');
+  assert(PF.plan.riskyShare(0.14, 0.2, 0.09, 5, 0.1).alpha === 1, 'a 5 años todo al portafolio');
+  assert(PF.plan.riskyShare(0.14, 0.2, 0.09, 3, 0.1).alpha > sh.alpha, 'más horizonte, más riesgo');
+  assert(PF.plan.riskyShare(0.05, 0.2, 0.09, 1, 0.1).alpha === 0 && PF.plan.riskyShare(0.14, 0.2, 0.09, 1, null).alpha === 1);
+  assert(PF.plan.autoMin(15000, 15000, 1, 1e9) === 3e6 && PF.plan.autoMin(15000, 15000, 3, 1e9) === 1e6 && PF.plan.autoMin(15000, 15000, 1, 2e6) === 1e6 && PF.plan.autoMin(0, 0, 1, 1e6) === 0);
+  const items = [
+    { name: 'A', w: 0.5, price: 10000, unit: 'acciones' },
+    { name: 'TES', w: 0.3, price: 0, unit: 'monto' },
+    { name: 'CDT', w: 0.15, price: 0, unit: 'monto', noFee: true },
+    { name: 'B', w: 0.05, price: 5000, unit: 'acciones' },
+  ];
+  const p = PF.plan.allocate(items, 10e6, { feeBuy: 15000, feeSell: 12000, minAmt: 1e6 });
+  assert(p.rows.length === 3 && p.dropped.some((d) => d.name === 'B'), 'B no llega al mínimo');
+  assert(p.rows.every((r) => r.amount >= 1e6 - 1), 'todos pasan el mínimo');
+  const cdt = p.rows.find((r) => r.name === 'CDT');
+  const tesR = p.rows.find((r) => r.name === 'TES');
+  assert(cdt.feeBuy === 0 && cdt.feeSell === 0 && tesR.shares === null && tesR.amount % 1000 === 0);
+  assert(p.buyFees === 30000 && p.sellFees === 24000 && near(p.invested + p.buyFees + p.cash, 10e6, 1e-6));
+  // Plan completo: con límite de pérdida y horizonte corto, parte a renta fija segura
+  const m = sampleModel();
+  const P = PF.model.portfolios(m, 0, 0.3);
+  const prices = m.names.map((_, i) => [3000, 20000, 9000, 1500, 60000, 4000, 25000, 12000, 100, 180000][i]);
+  const r1 = PF.plan.recommend(m, P.recommended.w, prices, 5e7, { feeBuy: 15000, feeSell: 15000, years: 1, maxLoss: 0.05, safeRate: 0.09, optimizeK: false });
+  const r5 = PF.plan.recommend(m, P.recommended.w, prices, 5e7, { feeBuy: 15000, feeSell: 15000, years: 5, maxLoss: 0.05, safeRate: 0.09, optimizeK: false });
+  const pl = r1.best.plan;
+  assert(pl.safe > 0 && r5.best.plan.safe < pl.safe, `renta fija ${pl.safe} vs ${r5.best.plan.safe}`);
+  assert(near(pl.invested + pl.buyFees + pl.cash + pl.safe, 5e7, 1e-6), 'cuadra el presupuesto');
+  const pj = PF.plan.project(pl, r1.best.ev.e, 0.09, 1);
+  assert(near(pj.value, pl.invested * (1 + r1.best.ev.e.ret) + pl.safe * 1.09 + pl.cash - pl.sellFees, 1e-6) && near(r1.best.ev.netRet, pj.value / 5e7 - 1, 1e-12));
+  // Sin comisiones (promoción), el monto mínimo automático es 0
+  assert(PF.plan.recommend(m, P.recommended.w, prices, 5e6, { feeBuy: 0, feeSell: 0 }).minAmt === 0);
+});
+
+test('desfase de fechas: no se evalúan series semanales ni de tasas', () => {
+  const d0 = Date.UTC(2025, 0, 1);
+  const days = Array.from({ length: 200 }, (_, i) => new Date(d0 + i * 864e5).toISOString().slice(0, 10));
+  const R = rng(5);
+  const base = days.map(() => R() - 0.5);
+  const mkS = (name, lag, noise) => {
+    let v = 100;
+    return { name, dates: days, prices: days.map((_, i) => (v *= Math.exp(0.01 * (base[Math.max(0, i - lag)] + noise * (R() - 0.5))))) };
+  };
+  const list = [mkS('A', 0, 0.3), mkS('B', 0, 0.3), mkS('C', 0, 0.3)];
+  const weekly = mkS('W', 3, 0.1);
+  weekly.dates = weekly.dates.filter((_, i) => i % 7 === 0);
+  weekly.prices = weekly.prices.filter((_, i) => i % 7 === 0);
+  assert(!PF.data.detectLags(list.concat([weekly])).some((x) => x.name === 'W'), 'la semanal no se marca');
+  assert(PF.data.detectLags(list.concat([mkS('D', 5, 0.1)])).some((x) => x.name === 'D'), 'la diaria corrida sí');
+});
 
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);
 if (failed) process.exit(1);

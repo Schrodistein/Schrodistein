@@ -777,13 +777,15 @@
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     const opts = { body, tag, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', renotify: true, data: { url: location.href } };
     try {
-      const reg = navigator.serviceWorker && (await navigator.serviceWorker.getRegistration());
+      const reg = !window.radarDesktop && navigator.serviceWorker && (await navigator.serviceWorker.getRegistration());
       if (reg) return reg.showNotification(title, opts);
     } catch (e) {
       /* sin service worker */
     }
     try {
-      new Notification(title, opts);
+      const n = new Notification(title, opts);
+      // En la app de escritorio, pulsar el aviso trae la ventana al frente (aunque esté en la bandeja).
+      n.onclick = () => (window.radarDesktop ? window.radarDesktop.show() : window.focus());
     } catch (e) {
       /* el navegador no permite notificaciones aquí */
     }
@@ -807,6 +809,7 @@
     const title = `${word} · ${sym} · ${IV[iv] || iv}${state.demo ? ' (demo)' : ''}`;
     const body = `Entrada ${U.fmtPrice(r.entry, dec)} · Stop ${U.fmtPrice(r.stop, dec)} · Objetivo ${U.fmtPrice(r.target, dec)}. ${a.reasons[0] || ''}`;
     toast(title, ' ' + body, r.dir);
+    if (window.radarDesktop) window.radarDesktop.alert(title);
     beep(r.dir);
     if (navigator.vibrate) navigator.vibrate(r.dir > 0 ? [80, 60, 80] : [200]);
     notify(title, body, key);
@@ -823,7 +826,7 @@
 
   function renderAlerts() {
     const perm = !('Notification' in window) ? 'Este navegador no admite notificaciones: los avisos se mostrarán dentro de la app.' : Notification.permission === 'granted' ? 'Notificaciones activadas.' : Notification.permission === 'denied' ? 'Has bloqueado las notificaciones para esta web: actívalas en los ajustes del navegador.' : 'Pulsa «Activar avisos» para recibir notificaciones del sistema.';
-    $('#notif-state').textContent = perm + ' Los avisos solo llegan mientras la app esté abierta (aunque esté en segundo plano).';
+    $('#notif-state').textContent = perm + (window.radarDesktop ? ' Si cierras la ventana, la app sigue en la bandeja del sistema y te sigue avisando.' : ' Los avisos solo llegan mientras la app esté abierta (aunque esté en segundo plano).');
     const L = state.alerts;
     $('#alerts-list').innerHTML = !L.length ? '<p class="muted">Todavía no hay avisos. Aparecerán aquí cuando el análisis detecte una entrada en el par del gráfico o en tu lista del escáner.</p>' : L.map((a) => `
       <div class="alert-item">
@@ -1377,7 +1380,9 @@
       scanAll();
     };
     $('#scan-now').onclick = scanAll;
-    $('#watch-form').addEventListener('submit', () => {
+    $('#toolbar').addEventListener('submit', (e) => e.preventDefault());
+    $('#watch-form').addEventListener('submit', (e) => {
+      e.preventDefault();
       const s = normalizeSymbol($('#watch-add').value);
       if (s && !settings.watch.includes(s) && settings.watch.length < 25) {
         settings.watch.push(s);
@@ -1426,7 +1431,7 @@
     $$('.countdown').forEach((el) => (el.textContent = t));
   }, 1000);
 
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 
   bindControls();
   syncIntervals(feedFor(settings.symbol));

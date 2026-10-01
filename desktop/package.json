@@ -1,0 +1,109 @@
+{
+  "name": "radar-de-divisas",
+  "productName": "Radar de Divisas",
+  "version": "1.0.0",
+  "description": "Análisis técnico y cuantitativo de divisas y de Binance, con proyección del precio y avisos de entrada.",
+  "main": "main.js",
+  "author": "Schrodistein",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Schrodistein/Schrodistein.git"
+  },
+  "desktopName": "radar-de-divisas.desktop",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "com.schrodistein.radardivisas",
+    "productName": "Radar de Divisas",
+    "artifactName": "Radar-de-Divisas-${version}-${os}-${arch}.${ext}",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../trading",
+        "to": "trading",
+        "filter": [
+          "**/*",
+          "!sw.js"
+        ]
+      }
+    ],
+    "icon": "build/icon.png",
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "Radar-de-Divisas-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Radar de Divisas",
+      "installerLanguages": [
+        "es_ES"
+      ],
+      "language": "3082"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "category": "public.app-category.finance"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Finance",
+      "synopsis": "Análisis de divisas y avisos de entrada",
+      "syncDesktopName": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Schrodistein",
+        "repo": "Schrodistein",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

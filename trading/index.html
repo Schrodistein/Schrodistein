@@ -35,7 +35,7 @@
     <button class="btn small" type="button" id="notice-ok">Entendido</button>
   </div>
 
-  <form class="toolbar" id="toolbar" autocomplete="off" onsubmit="return false">
+  <form class="toolbar" id="toolbar" autocomplete="off">
     <label class="fld sym">
       <span>Par</span>
       <input id="symbol" list="symbols" spellcheck="false" autocapitalize="characters" placeholder="EUR/USD o BTCUSDT">
@@ -137,7 +137,7 @@
       <button class="btn small" type="button" id="scan-now">Escanear ahora</button>
     </div>
     <p class="small muted">Revisa tu lista al cierre de cada vela y te avisa de las señales nuevas. Funciona mientras la app esté abierta (aunque esté en segundo plano). Para avisos 24/7 usa el escáner de consola (<code>npm run scan</code>), que puede enviarlos a Telegram.</p>
-    <form class="row" id="watch-form" onsubmit="return false">
+    <form class="row" id="watch-form">
       <input id="watch-add" list="symbols" placeholder="Añadir par, p. ej. GBPUSDT" spellcheck="false" autocapitalize="characters">
       <button class="btn small" type="submit" id="watch-add-btn">Añadir</button>
     </form>

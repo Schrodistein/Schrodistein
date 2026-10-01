@@ -87,6 +87,27 @@ npm run scan -- --watch                                            # avisos 24/7
 npm run scan -- --symbols EURUSDT --interval 4h --backtest --bars 5000
 ```
 
+## Aplicación de escritorio (`desktop/`)
+
+Versión para Windows, macOS y Linux hecha con Electron. Es la misma app, con ventajas de escritorio:
+
+- **Sigue en la bandeja del sistema** al cerrar la ventana: el escáner y los avisos continúan mientras el ordenador esté encendido (opción «Iniciar con el sistema» en Windows y macOS).
+- Notificaciones del sistema que, al pulsarlas, abren la ventana; parpadeo en la barra de tareas con cada aviso.
+- El calendario económico funciona aunque el proveedor no admita peticiones desde el navegador.
+- Seguridad: la página se sirve desde un protocolo propio con una política de contenidos estricta, sin acceso a Node; los enlaces se abren en el navegador.
+
+**Descargar**: los instaladores se compilan en GitHub Actions (flujo «Aplicación de escritorio»), en la sección *Artifacts* de cada ejecución: `.exe` instalable y portable para Windows, `.dmg` para macOS (Intel y Apple Silicon) y `.AppImage` para Linux. Al publicar una etiqueta `v1.0.0` se crea una *Release* con los tres.
+
+Los instaladores no están firmados: en Windows, SmartScreen avisará («Más información» → «Ejecutar de todas formas»); en macOS, abre la app con clic derecho → «Abrir» la primera vez; en Linux, `chmod +x` al `.AppImage`.
+
+**Compilar o ejecutar en local**:
+
+```bash
+cd desktop && npm install
+npm start              # ejecutar sin instalar
+npm run dist           # instaladores para tu sistema en desktop/dist
+```
+
 Para velas intradía de divisas en el escáner de consola, define `TWELVEDATA_API_KEY`. Para recibir los avisos en Telegram, `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
 
 ## Qué analiza
@@ -141,6 +162,8 @@ trading/js/chart.js         gráfico de velas en canvas
 trading/js/guide.js         contenido de la guía
 trading/js/app.js           controlador de la interfaz
 trading/sw.js               service worker (uso sin conexión y notificaciones)
+desktop/main.js             aplicación de escritorio (Electron): ventana, bandeja, protocolo y seguridad
+desktop/preload.js          puente mínimo entre la página y el escritorio
 scripts/scan.js             escáner de consola con avisos por Telegram
 tests/trading.js            pruebas
 ```

@@ -8,6 +8,8 @@
     "test": "node tests/run.js && node tests/trading.js",
     "e2e": "node scripts/e2e.js",
     "e2e:trading": "node scripts/e2e-trading.js",
+    "e2e:desktop": "node scripts/e2e-desktop.js",
+    "desktop": "npm --prefix desktop start",
     "scan": "node scripts/scan.js",
     "build:single": "node scripts/build-single.js"
   },

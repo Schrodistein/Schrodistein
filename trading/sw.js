@@ -1,11 +1,11 @@
 /* Service worker: la interfaz funciona sin conexión tras la primera visita
  * (los datos de mercado siempre se piden a Binance) y las notificaciones
  * abren la app al pulsarlas. */
-const CACHE = 'radar-fx-v1';
+const CACHE = 'radar-fx-v2';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest', './css/styles.css',
   './js/core.js', './js/indicators.js', './js/patterns.js', './js/stats.js', './js/signals.js', './js/backtest.js',
-  './js/binance.js', './js/chart.js', './js/guide.js', './js/app.js',
+  './js/binance.js', './js/forex.js', './js/feeds.js', './js/chart.js', './js/guide.js', './js/app.js',
   './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png',
 ];
 

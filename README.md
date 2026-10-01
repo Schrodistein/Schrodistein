@@ -65,18 +65,29 @@ tests/run.js          pruebas
 
 # Radar de Divisas (`trading/`)
 
-Aplicación web instalable (PWA) que analiza los mercados de Binance, reconoce patrones, proyecta el comportamiento del precio y avisa de entradas de compra y venta. Sin dependencias y sin claves: usa solo los datos públicos de Binance y **no envía órdenes** (tú decides y ejecutas).
+Aplicación web instalable (PWA) que analiza divisas y los mercados de Binance, reconoce patrones, proyecta el comportamiento del precio y avisa de entradas de compra y venta. Sin dependencias y **sin enviar órdenes** (tú decides y ejecutas).
+
+| Fuente | Qué aporta | Clave |
+|---|---|---|
+| Binance | Criptos y pares tipo divisa (EURUSDT, USDTTRY, PAXGUSDT…) en directo; sentimiento de futuros | No |
+| Twelve Data | Velas intradía de cualquier par de divisas y del oro/plata (EUR/USD, USD/JPY, XAU/USD…) | Gratuita (800 consultas/día) |
+| BCE (Frankfurter) | Tipos de referencia diarios de ~30 divisas desde 1999; fuerza relativa y correlaciones | No |
+| Forex Factory | Calendario económico semanal; aviso de datos de alto impacto en las próximas 24 h | No |
+
+La pestaña **Divisas** reúne las sesiones (Sídney, Tokio, Londres, Nueva York con horario de verano), el calendario, la fuerza de las 8 divisas principales y la matriz de correlaciones. La calculadora de riesgo da el tamaño en **lotes**, el stop en **pips** y el valor del pip en la divisa de la cuenta.
 
 ```bash
 npm start              # abre http://localhost:8080/trading/
 npm test               # pruebas de las dos apps (Node, sin dependencias)
 npm run e2e:trading    # extremo a extremo con Binance simulado (Playwright)
-npm run scan -- --symbols EURUSDT,BTCUSDT --interval 1h            # escáner de consola
+npm run scan -- --symbols EUR/USD,USD/JPY,BTCUSDT --interval 1h   # escáner de consola
+npm run scan -- --calendar --currencies USD,EUR                    # calendario económico
+npm run scan -- --strength                                         # fuerza de las divisas
 npm run scan -- --watch                                            # avisos 24/7 (Telegram opcional)
 npm run scan -- --symbols EURUSDT --interval 4h --backtest --bars 5000
 ```
 
-Para recibir los avisos del escáner de consola en Telegram, define `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
+Para velas intradía de divisas en el escáner de consola, define `TWELVEDATA_API_KEY`. Para recibir los avisos en Telegram, `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
 
 ## Qué analiza
 
@@ -124,6 +135,8 @@ trading/js/stats.js         Hurst, ratio de varianzas, GARCH, simulación y tasa
 trading/js/signals.js       motor de confluencia y temporalidad superior
 trading/js/backtest.js      tamaño de posición y backtest
 trading/js/binance.js       datos públicos de Binance (REST, WebSocket, futuros)
+trading/js/forex.js         pares, pips y lotes, sesiones, fuerza relativa, correlaciones, calendario
+trading/js/feeds.js         fuentes con interfaz común: Binance, Twelve Data, BCE y Forex Factory
 trading/js/chart.js         gráfico de velas en canvas
 trading/js/guide.js         contenido de la guía
 trading/js/app.js           controlador de la interfaz

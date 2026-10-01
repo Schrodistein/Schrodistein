@@ -38,7 +38,7 @@
   <form class="toolbar" id="toolbar" autocomplete="off" onsubmit="return false">
     <label class="fld sym">
       <span>Par</span>
-      <input id="symbol" list="symbols" spellcheck="false" autocapitalize="characters" placeholder="EURUSDT">
+      <input id="symbol" list="symbols" spellcheck="false" autocapitalize="characters" placeholder="EUR/USD o BTCUSDT">
       <datalist id="symbols"></datalist>
     </label>
     <label class="fld">
@@ -66,7 +66,10 @@
         <label class="fld"><span>Stop (múltiplo del ATR)</span><input type="number" id="atrStop" min="0.5" max="6" step="0.25"></label>
         <label class="fld"><span>Capital</span><input type="number" id="capital" min="1" step="any"></label>
         <label class="fld"><span>Riesgo por operación (%)</span><input type="number" id="riskPct" min="0.1" max="10" step="0.1"></label>
-        <label class="fld"><span>Comisión por lado (%)</span><input type="number" id="fee" min="0" max="1" step="0.01"></label>
+        <label class="fld"><span>Comisión por lado en Binance (%)</span><input type="number" id="fee" min="0" max="1" step="0.01"></label>
+        <label class="fld"><span>Coste por lado en divisas (spread, %)</span><input type="number" id="fxFee" min="0" max="1" step="0.001"></label>
+        <label class="fld"><span>Divisa de la cuenta (forex)</span><select id="account"><option>USD</option><option>EUR</option><option>GBP</option><option>JPY</option><option>CHF</option><option>CAD</option><option>AUD</option><option>MXN</option></select></label>
+        <label class="fld wide"><span>Clave de Twelve Data (velas intradía de divisas y oro) · <a href="https://twelvedata.com/pricing" target="_blank" rel="noopener">gratis aquí</a></span><input type="password" id="tdKey" autocomplete="off" spellcheck="false" placeholder="Opcional: sin clave se usan los tipos diarios del BCE"></label>
         <label class="fld"><span>Horizonte de proyección (velas)</span><input type="number" id="horizon" min="4" max="96" step="1"></label>
         <label class="check"><input type="checkbox" id="sound"> <span>Sonido en los avisos</span></label>
       </div>
@@ -109,6 +112,7 @@
 
   <nav class="tabs" role="tablist" aria-label="Secciones">
     <button role="tab" type="button" data-tab="projection" aria-selected="true">Proyección</button>
+    <button role="tab" type="button" data-tab="forex">Divisas</button>
     <button role="tab" type="button" data-tab="analysis">Análisis</button>
     <button role="tab" type="button" data-tab="patterns">Patrones</button>
     <button role="tab" type="button" data-tab="scanner">Escáner</button>
@@ -119,6 +123,7 @@
   </nav>
 
   <section class="tab panel" id="tab-projection" role="tabpanel"></section>
+  <section class="tab panel" id="tab-forex" role="tabpanel" hidden></section>
   <section class="tab panel" id="tab-analysis" role="tabpanel" hidden></section>
   <section class="tab panel" id="tab-patterns" role="tabpanel" hidden></section>
 
@@ -182,7 +187,7 @@
   <section class="tab panel prose" id="tab-guide" role="tabpanel" hidden></section>
 
   <footer class="foot small muted">
-    <p>Datos públicos de Binance. La app no tiene acceso a tu cuenta ni envía órdenes: tú decides y ejecutas. Señales probabilísticas con fines educativos; no constituyen asesoramiento financiero.</p>
+    <p>Datos públicos de Binance, Twelve Data, el Banco Central Europeo y Forex Factory. La app no tiene acceso a tu cuenta ni envía órdenes: tú decides y ejecutas. Señales probabilísticas con fines educativos; no constituyen asesoramiento financiero.</p>
   </footer>
 </main>
 
@@ -195,6 +200,8 @@
 <script src="js/signals.js"></script>
 <script src="js/backtest.js"></script>
 <script src="js/binance.js"></script>
+<script src="js/forex.js"></script>
+<script src="js/feeds.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/app.js"></script>

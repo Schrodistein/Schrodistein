@@ -35,15 +35,33 @@
 <p>La pestaña <em>Proyección</em> no adivina el futuro: describe el abanico de precios plausibles. La volatilidad se estima con un modelo GARCH(1,1) y se simulan 2 000 trayectorias remuestreando los movimientos reales del par (simulación histórica filtrada), lo que respeta las colas gruesas de los mercados. El resultado es un cono: el precio debería quedar dentro de la banda del 90 % unas 9 de cada 10 veces.</p>
 <p>Con esas trayectorias se calcula también la probabilidad de tocar el objetivo antes que el stop, y se compara con la <strong>tasa base empírica</strong>: qué ocurrió realmente en este par las veces que el análisis tuvo el mismo sesgo que ahora, con su intervalo de confianza. Si ese intervalo se solapa con el de «cualquier momento», el análisis no está aportando ventaja en este par.</p>
 
+<h3>Fuentes de datos</h3>
+<dl>
+  <dt>Binance (sin clave)</dt><dd>Criptomonedas y pares de monedas estables frente a monedas nacionales (EURUSDT, USDTTRY…), en directo por WebSocket, con el sentimiento de los futuros.</dd>
+  <dt>Twelve Data (clave gratuita)</dt><dd>Divisas de verdad: velas intradía de cualquier par (EUR/USD, GBP/JPY, USD/MXN…) y del oro y la plata (XAU/USD, XAG/USD). El plan gratuito da 800 consultas al día, de sobra si usas temporalidades de 15 min o más. Pega la clave en Ajustes.</dd>
+  <dt>Banco Central Europeo (sin clave)</dt><dd>Tipos de referencia diarios de unas 30 divisas desde 1999. Sin clave de Twelve Data, los pares de divisas se analizan con estos datos en diario y semanal. Son fijaciones (un precio al día, a las 14:15 CET): no tienen mechas ni volumen.</dd>
+  <dt>Forex Factory</dt><dd>Calendario económico de la semana. La app avisa en la tarjeta de señal cuando hay un dato de alto impacto para las divisas del par en las próximas 24 horas.</dd>
+</dl>
+<p>Escribe los pares de divisas con barra o sin ella (<code>EUR/USD</code> o <code>eurusd</code>); los de Binance, como siempre (<code>EURUSDT</code>).</p>
+
+<h3>Herramientas de divisas (pestaña «Divisas»)</h3>
+<dl>
+  <dt>Sesiones</dt><dd>Sídney, Tokio, Londres y Nueva York, con su horario de verano. El solapamiento Londres–Nueva York concentra la liquidez; la sesión asiática suele moverse en rangos estrechos. El mercado cierra el fin de semana.</dd>
+  <dt>Calendario económico</dt><dd>Empleo, inflación, PIB, decisiones de tipos… con previsión y dato anterior. Una sorpresa frente a la previsión mueve la divisa más que cualquier indicador técnico.</dd>
+  <dt>Fuerza de las divisas</dt><dd>Cambio medio de cada una de las 8 principales frente a las otras siete. Enfrentar la más fuerte con la más débil suele dar las tendencias más limpias.</dd>
+  <dt>Correlaciones</dt><dd>Comprar EUR/USD y GBP/USD a la vez es casi la misma apuesta: la matriz te evita duplicar el riesgo sin darte cuenta.</dd>
+  <dt>Lotes y pips</dt><dd>En «Riesgo» y en la tarjeta de señal, el tamaño en lotes (estándar 100 000, mini 0.1, micro 0.01), el stop en pips y el valor del pip en la divisa de tu cuenta.</dd>
+</dl>
+
 <h3>Qué no incluye</h3>
 <ul>
-  <li><strong>Análisis fundamental y noticias.</strong> Binance solo ofrece precio, volumen y datos de derivados. Los tipos de interés, la inflación, el empleo o las decisiones de los bancos centrales mueven las divisas con fuerza: consulta un calendario económico antes de operar y evita abrir posiciones justo antes de datos importantes.</li>
+  <li><strong>Interpretación de noticias.</strong> El calendario te dice cuándo llega un dato y qué se espera, pero la app no lee titulares ni discursos. Los tipos de interés, la inflación, el empleo y los bancos centrales mueven las divisas con fuerza: evita abrir posiciones justo antes de datos importantes.</li>
   <li><strong>Ondas de Elliott y patrones armónicos.</strong> Su recuento es subjetivo y no se puede automatizar de forma fiable; se han dejado fuera a propósito.</li>
   <li><strong>Ejecución de órdenes.</strong> La app no se conecta a tu cuenta ni opera por ti. Tú decides y ejecutas en Binance.</li>
 </ul>
 
 <h3>Binance y las divisas</h3>
-<p>Binance es un exchange de criptomonedas, no un bróker de forex. Los pares más parecidos a divisas son los de monedas estables frente a monedas nacionales, como <code>EURUSDT</code> (euro/dólar), <code>USDTTRY</code> (lira turca), <code>USDTBRL</code> (real brasileño) o <code>USDTARS</code> (peso argentino), y el oro tokenizado <code>PAXGUSDT</code>. La oferta cambia con el tiempo y según el país. Para pares clásicos como EUR/USD o USD/JPY con apalancamiento se necesita un bróker de forex regulado; el análisis de esta app sirve igual con cualquier serie de precios.</p>
+<p>Binance es un exchange de criptomonedas, no un bróker de forex. Allí los pares más parecidos a divisas son los de monedas estables frente a monedas nacionales, como <code>EURUSDT</code> (euro/dólar), <code>USDTTRY</code> (lira turca) o <code>USDTBRL</code> (real brasileño), y el oro tokenizado <code>PAXGUSDT</code>. La app analiza también los pares de divisas reales (EUR/USD, USD/JPY…) con datos de Twelve Data o del BCE, pero para operarlos necesitas un bróker de forex regulado en tu país. En forex el coste principal es el diferencial (spread): ajústalo en «Coste por lado en divisas».</p>
 <p>En <strong>spot</strong> solo se puede comprar lo que se paga: las señales de venta sirven para cerrar o reducir compras. Para vender en corto hacen falta futuros o margen, que implican apalancamiento y riesgo de liquidación.</p>
 
 <h3>Expectativas realistas</h3>

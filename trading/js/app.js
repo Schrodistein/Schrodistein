@@ -2,7 +2,7 @@
  * escáner, proyección, backtest y calculadora de riesgo. */
 (function () {
   'use strict';
-  const { util: U, signals: SG, backtest: BT, risk: RK, binance: API, stats: ST } = FX;
+  const { util: U, signals: SG, backtest: BT, risk: RK, binance: API, stats: ST, feeds: FEEDS, forex: F } = FX;
 
   const $ = (s, el) => (el || document).querySelector(s);
   const $$ = (s, el) => Array.from((el || document).querySelectorAll(s));
@@ -38,13 +38,13 @@
   };
 
   /* ---------- Ajustes ---------- */
-  const DEFAULT_WATCH = ['EURUSDT', 'PAXGUSDT', 'USDTTRY', 'USDTBRL', 'BTCUSDT', 'ETHUSDT'];
+  const DEFAULT_WATCH = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'EURUSDT', 'PAXGUSDT', 'BTCUSDT'];
   const DEFAULT_LAYERS = { ema: true, bb: false, ich: false, levels: true, fib: false, proj: true };
   const saved = store.get('fx.settings', {});
   const settings = Object.assign(
     {
-      symbol: 'EURUSDT', interval: '1h', profile: 'equilibrado', market: 'spot', trendFilter: true, mtfFilter: false,
-      rr: 2, atrStop: 1.5, capital: 1000, riskPct: 1, fee: 0.1, horizon: 24, sound: true, lower: 'rsi',
+      symbol: 'EUR/USD', interval: '1d', profile: 'equilibrado', market: 'spot', trendFilter: true, mtfFilter: false, tdKey: '', account: 'USD',
+      rr: 2, atrStop: 1.5, capital: 1000, riskPct: 1, fee: 0.1, fxFee: 0.01, horizon: 24, sound: true, lower: 'rsi',
       scanOn: true, scanInterval: '1h', watch: DEFAULT_WATCH.slice(), tab: 'projection',
     },
     saved
@@ -52,17 +52,23 @@
   settings.layers = Object.assign({}, DEFAULT_LAYERS, saved.layers || {});
   const save = () => store.set('fx.settings', settings);
   const futures = () => settings.market === 'futures';
-  const sigOpts = (dec) => ({
+  // En divisas siempre se puede vender en corto (con un bróker de forex).
+  const sigOpts = (dec, sym) => ({
     profile: settings.profile, trendFilter: settings.trendFilter, mtfFilter: settings.mtfFilter,
-    rr: settings.rr, atrStop: settings.atrStop, allowShort: futures(), decimals: dec == null ? state.dec : dec,
+    rr: settings.rr, atrStop: settings.atrStop, allowShort: futures() || F.isForex(sym || settings.symbol), decimals: dec == null ? state.dec : dec,
   });
+  // Coste por lado: comisión de Binance o diferencial (spread) del bróker de divisas.
+  const feeFor = (sym) => (F.isForex(sym || settings.symbol) ? settings.fxFee : settings.fee);
 
   const state = {
     candles: [], ctx: null, evals: [], evalFrom: 0, cur: null, markers: [], proj: null, info: null, dec: 4,
     stream: null, pollTimer: null, demoTimer: null, demo: false, token: 0, lastTick: 0, ticker: null, sentiment: null,
     alerts: store.get('fx.alerts', []), alertKeys: new Set(store.get('fx.alertKeys', [])), unseen: 0,
     scan: {}, scanning: false, scanTimer: null, scanNext: 0, tab: settings.tab, lightTimer: null,
+    feed: null, rates: store.get('fx.rates', null), calendar: null, calendarErr: null, ecbSeries: null, ecbErr: null,
   };
+  const isFx = () => F.isForex(settings.symbol);
+  const feedFor = (sym) => FEEDS.pick(sym, { tdKey: settings.tdKey });
 
   const chart = new FX.Chart($('#chart'));
   chart.lower = settings.lower;
@@ -85,8 +91,11 @@
     state.pollTimer = state.demoTimer = null;
   }
 
-  function normalizeSymbol(s) {
-    return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizeSymbol = (s) => F.normalize(s).symbol;
+
+  // Temporalidades que admite la fuente: las demás se desactivan en el selector.
+  function syncIntervals(feed) {
+    $$('#interval option').forEach((o) => (o.disabled = !!feed && !feed.intervals.includes(o.value)));
   }
 
   async function load() {
@@ -96,19 +105,33 @@
     state.ticker = null;
     state.sentiment = null;
     $('#load-error').hidden = true;
-    setConn('connecting', 'Cargando…');
     $('#q-sym').textContent = settings.symbol;
+    const feed = feedFor(settings.symbol);
+    state.feed = feed;
+    syncIntervals(feed);
+    if (!feed) {
+      showLoadError(new Error(`${settings.symbol} no está entre los tipos del BCE. Para analizarlo (y para tener velas intradía en cualquier par de divisas u oro) añade una clave gratuita de Twelve Data en Ajustes.`));
+      return;
+    }
+    if (!feed.intervals.includes(settings.interval)) {
+      const iv = feed.intervals.includes('1d') ? '1d' : feed.intervals[0];
+      toast('Temporalidad ajustada', ` ${feed.label} solo ofrece datos ${feed.id === 'ecb' ? 'diarios y semanales' : 'en otras temporalidades'}: se usa ${IV[iv]}.${feed.id === 'ecb' ? ' Para velas intradía de divisas añade una clave gratuita de Twelve Data en Ajustes.' : ''}`, 0);
+      settings.interval = iv;
+      $('#interval').value = iv;
+      save();
+    }
+    setConn('connecting', 'Cargando de ' + feed.label + '…');
     chart.set({ message: 'Cargando ' + settings.symbol + '…' });
     try {
       const [info, kl] = await Promise.all([
-        API.symbolInfo(settings.symbol).catch((e) => {
+        feed.info(settings.symbol).catch((e) => {
           if (e.code === -1121) throw e;
           return null;
         }),
-        API.klines(settings.symbol, settings.interval, 1000),
+        feed.klines(settings.symbol, settings.interval, 1000),
       ]);
       if (token !== state.token) return;
-      if (!kl.length) throw new Error('Binance no devolvió velas para este par.');
+      if (!kl.length) throw new Error(feed.label + ' no devolvió velas para este par.');
       state.info = info;
       state.dec = info && info.decimals != null ? info.decimals : U.autoDecimals(kl[kl.length - 1].c);
       state.candles = kl;
@@ -144,8 +167,9 @@
   function demoCandles(sym, interval, n) {
     const step = U.INTERVALS[interval];
     const now = Date.now();
-    const fx = /^(EUR|GBP|AUD|USDT?TRY|USDTBRL)/.test(sym);
-    const C = U.synthetic(n, { seed: hashSeed(sym + interval), intervalMs: step, end: now, start: fx ? 1.08 : 100, vol: 0.004 * Math.sqrt(step / 3600e3) });
+    const start = /JPY$/.test(sym) ? 150 : /^XAU/.test(sym) ? 2400 : F.isForex(sym) || /^(EUR|GBP|AUD)/.test(sym) ? 1.1 : 100;
+    const vol = (F.isForex(sym) ? 0.0015 : 0.004) * Math.sqrt(step / 3600e3);
+    const C = U.synthetic(n, { seed: hashSeed(sym + interval), intervalMs: step, end: now, start, vol });
     const last = C[C.length - 1];
     C.push({ t: last.t + step, o: last.c, h: last.c, l: last.c, c: last.c, v: 0, T: last.t + 2 * step - 1, closed: false });
     return C;
@@ -184,9 +208,11 @@
 
   function startLive(token) {
     let retried = false;
-    state.stream = API.stream(settings.symbol, settings.interval, onKline, (s) => {
+    const feed = state.feed;
+    state.stream = feed.stream(settings.symbol, settings.interval, onKline, (s) => {
       if (token !== state.token) return;
-      if (s === 'live') {
+      if (s === 'poll') setConn('poll', feed.id === 'ecb' ? 'BCE · fijación diaria' : F.marketOpen(new Date()) ? feed.label + ' · sondeo periódico' : 'Mercado de divisas cerrado');
+      else if (s === 'live') {
         setConn('live', 'En directo');
         if (retried) {
           retried = false;
@@ -197,7 +223,8 @@
         setConn('retry', 'Reconectando…');
       } else setConn('connecting', 'Conectando…');
     });
-    // Red de seguridad: si el flujo calla, se piden las velas por REST.
+    if (!feed.live) return;
+    // Red de seguridad (Binance): si el flujo calla, se piden las velas por REST.
     state.pollTimer = setInterval(() => {
       if (token !== state.token) return;
       if (Date.now() - state.lastTick > 45000) {
@@ -212,7 +239,7 @@
     if (state.demo) return;
     const token = state.token;
     try {
-      const kl = await API.klines(settings.symbol, settings.interval, 1000);
+      const kl = await state.feed.klines(settings.symbol, settings.interval, 1000);
       if (token !== state.token || !kl.length) return;
       const prevClosed = state.cur ? state.cur.t : 0;
       state.candles = kl;
@@ -291,10 +318,10 @@
   }
 
   async function refreshTicker(token) {
-    if (state.demo) return;
+    if (state.demo || !state.feed || !state.feed.ticker) return;
     try {
-      const t = await API.ticker24(settings.symbol);
-      if (token === state.token) {
+      const t = await state.feed.ticker(settings.symbol);
+      if (token === state.token && t) {
         state.ticker = t;
         renderQuote();
       }
@@ -304,7 +331,7 @@
   }
 
   async function refreshSentiment(token) {
-    if (state.demo) return;
+    if (state.demo || !state.feed || state.feed.id !== 'binance') return;
     const s = await API.sentiment(settings.symbol);
     if (token !== state.token) return;
     state.sentiment = s;
@@ -338,8 +365,12 @@
     el.className = 'chip num ' + (chg >= 0 ? 'up' : 'down');
     $('#q-price').className = 'num big ' + (last.c >= last.o ? 'up' : 'down');
     const meta = [];
-    if (t) meta.push('Máx 24 h ' + fp(t.high), 'Mín 24 h ' + fp(t.low), 'Vol ' + compact(t.quoteVolume) + (info ? ' ' + info.quote : ''));
-    meta.push(IV[settings.interval] + ' · cierre en <span class="countdown">' + countdown() + '</span>');
+    if (t) meta.push('Máx ' + fp(t.high), 'Mín ' + fp(t.low));
+    if (t && ok(t.quoteVolume)) meta.push('Vol ' + compact(t.quoteVolume) + (info ? ' ' + info.quote : ''));
+    const feed = state.feed;
+    if (feed && feed.id === 'ecb') meta.push('Fijación diaria del BCE (14:15 CET) · sin mechas ni volumen');
+    else meta.push(IV[settings.interval] + ' · cierre en <span class="countdown">' + countdown() + '</span>');
+    if (feed && feed.id !== 'binance' && !state.demo) meta.push('Fuente: ' + feed.label + (F.marketOpen(new Date()) ? '' : ' · mercado cerrado'));
     $('#q-meta').innerHTML = meta.join(' · ');
     document.title = fp(last.c) + ' ' + settings.symbol + ' · Radar de Divisas';
   }
@@ -377,15 +408,21 @@
     });
   }
 
+  // Tamaño en lotes para divisas (con la divisa de la cuenta y los tipos del BCE).
+  function fxSizing(entry, stop) {
+    if (!isFx()) return null;
+    return F.lotSize({ symbol: settings.symbol, capital: settings.capital, riskPct: settings.riskPct, entry, stop, account: settings.account, rates: state.rates });
+  }
+
   function sizing(entry, stop, target) {
     return RK.positionSize({
-      capital: settings.capital, riskPct: settings.riskPct, entry, stop, target, feePct: settings.fee,
+      capital: settings.capital, riskPct: settings.riskPct, entry, stop, target, feePct: feeFor(),
       maxLeverage: futures() ? 3 : 1, stepSize: state.info ? state.info.stepSize : 0, minNotional: state.info ? state.info.minNotional : 0,
     });
   }
 
   function feeWarning(riskPct) {
-    const rt = 2 * settings.fee;
+    const rt = 2 * feeFor();
     if (!(riskPct > 0) || rt / riskPct < 0.2) return '';
     return `<div class="callout">Las comisiones (${nf(rt)} % ida y vuelta) equivalen al ${ppc(rt / riskPct)} de lo que arriesgas por operación: con tan poca volatilidad es muy difícil ganar. Prueba una temporalidad mayor o un par más volátil.</div>`;
   }
@@ -407,14 +444,16 @@
     const bar = (v, col) => `<div class="track"><b style="width:${Math.max(0, Math.min(100, (v / maxS) * 100))}%;background:${col}"></b><i class="thr" style="left:${(thr / maxS) * 100}%"></i></div>`;
     const cls = cur.dir > 0 ? 'buy' : cur.dir < 0 ? 'sell' : '';
     let word = dirWord(cur.dir);
-    if (cur.dir < 0 && !futures()) word = 'VENDER / CERRAR';
+    if (cur.dir < 0 && !futures() && !isFx()) word = 'VENDER / CERRAR';
     let html = `<div class="verdict ${cls}"><div class="k">Señal · vela de ${IV[settings.interval]} cerrada ${when(cur.t)}</div><div class="v">${word}</div>`;
     html += cur.dir ? `<div class="small">Confluencia ${cur.strength} · ${nf(cur.score)} puntos (umbral ${nf(thr, 1)})</div>` : `<div class="small">${biasText(cur.bias)}</div>`;
     html += '</div>';
     html += `<div class="meter"><span>Compra</span>${bar(cur.long.score, 'var(--up)')}<span class="num">${nf(cur.long.score)}</span><span>Venta</span>${bar(cur.short.score, 'var(--down)')}<span class="num">${nf(cur.short.score)}</span></div>`;
     if (state.demo) html += '<div class="callout info">Modo demostración: precios simulados, no reales. No operes con estas señales.</div>';
+    html += eventWarning(settings.symbol);
     if (cur.dir) {
-      const ps = sizing(cur.entry, cur.stop, cur.target);
+      const fx = isFx() ? fxSizing(cur.entry, cur.stop) : null;
+      const ps = fx ? null : sizing(cur.entry, cur.stop, cur.target);
       const hit = state.proj && state.proj.hit;
       const base = state.info ? state.info.base : '';
       const quote = state.info ? state.info.quote : '';
@@ -423,6 +462,13 @@
       html += `<dt>Stop <span class="small">(${esc(cur.stopKind)})</span></dt><dd class="down">${fp(cur.stop)} <span class="small">${pct(((cur.stop / cur.entry) - 1) * 100)}</span></dd>`;
       html += `<dt>Objetivo (R:R ${nf(cur.rr, 1)})</dt><dd class="up">${fp(cur.target)} <span class="small">${pct(((cur.target / cur.entry) - 1) * 100)}</span></dd>`;
       if (hit) html += `<dt>Prob. objetivo antes que stop</dt><dd>${ppc(hit.target)} <span class="small">(mín. rentable ${ppc(hit.breakeven)})</span></dd>`;
+      if (fx && !fx.error) {
+        html += `<dt>Tamaño (${nf(settings.riskPct, 1)} % de ${nf(settings.capital, 0)} ${esc(fx.account)})</dt><dd>${nf(fx.lots, 2)} lotes</dd>`;
+        html += `<dt>Unidades</dt><dd>${Math.round(fx.units).toLocaleString('es-ES')} ${esc(base)}</dd>`;
+        html += `<dt>Stop</dt><dd>${nf(fx.pips, 1)} pips</dd>`;
+        html += `<dt>Valor del pip</dt><dd>${nf(fx.pipValue)} ${esc(fx.account)}</dd>`;
+        html += `<dt>Pérdida si salta el stop</dt><dd class="down">−${nf(fx.riskAcc)} ${esc(fx.account)}</dd>`;
+      }
       if (ps) {
         html += `<dt>Tamaño (${nf(settings.riskPct, 1)} % de ${nf(settings.capital, 0)})</dt><dd>${nf(ps.qty, state.info && state.info.qtyDecimals != null ? state.info.qtyDecimals : 6)} ${esc(base)}</dd>`;
         html += `<dt>Valor de la posición</dt><dd>${nf(ps.notional)} ${esc(quote)}${ps.leverage > 1.01 ? ' · ' + nf(ps.leverage, 1) + '×' : ''}</dd>`;
@@ -431,7 +477,12 @@
       html += '</dl>';
       if (ps && ps.capped) html += '<div class="callout">El stop está tan cerca que para arriesgar ese porcentaje harías falta más capital del que tienes: el tamaño se ha limitado' + (futures() ? ' a 3× de apalancamiento.' : ' a tu capital (spot).') + '</div>';
       if (ps && ps.belowMin) html += `<div class="callout">La posición es menor que el mínimo de Binance para este par (${nf(state.info.minNotional)} ${esc(quote)}).</div>`;
-      if (!state.demo) html += `<a class="btn primary" href="${API.tradeUrl(state.info, settings.symbol, futures())}" target="_blank" rel="noopener">Abrir en Binance ↗</a>`;
+      if (fx && fx.error) html += `<div class="callout">${esc(fx.error)} Abre la pestaña «Divisas» para cargar los tipos del BCE.</div>`;
+      if (!state.demo && state.feed) {
+        const url = state.feed.tradeUrl(state.info, settings.symbol, futures());
+        if (isFx()) html += `<a class="btn" href="${url}" target="_blank" rel="noopener">Ver el par en TradingView ↗</a><p class="small muted">Las divisas se operan con un bróker de forex regulado. En Binance, el equivalente más cercano es EURUSDT.</p>`;
+        else html += `<a class="btn primary" href="${url}" target="_blank" rel="noopener">Abrir en Binance ↗</a>`;
+      }
       if (cur.spotNote) html += `<div class="callout">${esc(cur.spotNote)}</div>`;
       html += feeWarning(cur.riskPct);
       html += '<h3>Por qué</h3>' + reasonList(cur.dir > 0 ? cur.long : cur.short);
@@ -450,8 +501,18 @@
       const move = ((cur.price / lastSig.entry) - 1) * 100 * lastSig.dir;
       html += `<p class="small muted">Última señal: <strong class="${lastSig.dir > 0 ? 'up' : 'down'}">${dirWord(lastSig.dir)}</strong> hace ${ago} velas a ${fp(lastSig.entry)} (${pct(move)} a su favor desde entonces).</p>`;
     }
-    html += `<p class="small muted">Próximo cierre en <span class="countdown num">${countdown()}</span>. Señal probabilística, no asesoramiento financiero.</p>`;
+    const next = state.feed && state.feed.id === 'ecb' ? 'Se actualiza con la fijación diaria del BCE (14:15 CET, días laborables)' : `Próximo cierre en <span class="countdown num">${countdown()}</span>`;
+    html += `<p class="small muted">${next}. Señal probabilística, no asesoramiento financiero.</p>`;
     el.innerHTML = html;
+  }
+
+  // Aviso de noticias de alto impacto para las divisas del par en las próximas 24 h.
+  function eventWarning(sym) {
+    if (!state.calendar) return '';
+    const ev = F.eventRisk(state.calendar, F.currenciesOf(sym), Date.now(), 24);
+    if (!ev) return '';
+    const list = ev.slice(0, 3).map((e) => `${esc(e.country)} · ${esc(e.title)} (${when(e.t)})`).join('<br>');
+    return `<div class="callout"><strong>Noticia de alto impacto en menos de 24 h:</strong><br>${list}<br>Los datos macro pueden mover el precio varias veces su rango normal en segundos y saltarse los stops. Considera esperar a que se publiquen.</div>`;
   }
 
   function biasText(b) {
@@ -482,6 +543,7 @@
     else if (t === 'scanner') renderScanner();
     else if (t === 'alerts') renderAlerts();
     else if (t === 'risk') renderRisk();
+    else if (t === 'forex') renderForex();
     else if (t === 'guide' && !$('#tab-guide').innerHTML) $('#tab-guide').innerHTML = FX.guide;
   }
 
@@ -547,6 +609,7 @@
     html += '<h3>Sentimiento en futuros</h3>';
     const s = state.sentiment;
     if (state.demo) html += '<p class="small muted">No disponible en modo demostración.</p>';
+    else if (state.feed && state.feed.id !== 'binance') html += '<p class="small muted">Solo para pares de Binance con futuros perpetuos. En divisas, consulta el informe COT de la CFTC (posicionamiento semanal de los grandes especuladores).</p>';
     else if (!s) html += '<p class="small muted">Este par no tiene futuros perpetuos en Binance (o no se pudieron consultar).</p>';
     else {
       html += '<div class="cards">';
@@ -803,8 +866,9 @@
       if (r.err) return `<tr><td class="num"><strong>${esc(sym)}</strong></td><td colspan="6" class="down small">${esc(r.err)}</td><td><button class="btn icon" data-del="${esc(sym)}" aria-label="Quitar ${esc(sym)}">×</button></td></tr>`;
       const e = r.r;
       const sig = e.dir ? `<span class="chip ${e.dir > 0 ? 'up' : 'down'}">${dirWord(e.dir)}${r.fresh ? ' · nueva' : ''}</span>` : `<span class="small muted">${e.bias >= 1 ? 'sesgo alcista' : e.bias <= -1 ? 'sesgo bajista' : 'esperar'}</span>`;
+      const src = r.iv !== settings.scanInterval || r.feedId !== 'binance' ? `<br><span class="small muted">${IV[r.iv]} · ${esc(r.source)}</span>` : '';
       return `<tr class="click" data-sym="${esc(sym)}">
-        <td class="num"><strong>${esc(sym)}</strong></td>
+        <td class="num"><strong>${esc(sym)}</strong>${src}</td>
         <td class="num">${U.fmtPrice(r.price, r.dec)}</td>
         <td class="num ${r.chg >= 0 ? 'up' : 'down'}">${pct(r.chg)}</td>
         <td>${e.trend > 0 ? '<span class="up">alcista</span>' : e.trend < 0 ? '<span class="down">bajista</span>' : 'lateral'}</td>
@@ -816,24 +880,42 @@
     $('#scan-table').innerHTML = '<thead><tr><th>Par</th><th class="num">Precio</th><th class="num">24 h</th><th>Tendencia</th><th class="num">RSI</th><th class="num">Compra / venta</th><th>Señal</th><th></th></tr></thead><tbody>' + rows.join('') + '</tbody>';
   }
 
+  /* Binance se consulta en cada pasada; las fuentes de divisas solo cuando
+   * cierra una vela nueva (el plan gratuito de Twelve Data tiene pocos créditos). */
+  function scanDue(sym, feed, iv) {
+    const prev = state.scan[sym];
+    if (!feed || feed.live || !prev || prev.err || prev.iv !== iv || prev.feedId !== feed.id) return true;
+    if (feed.id === 'ecb') return Date.now() - prev.at > 30 * 60e3;
+    return Date.now() >= prev.nextClose + 8000;
+  }
+
   async function scanAll() {
     if (state.scanning) return;
     state.scanning = true;
-    const iv = settings.scanInterval;
     $('#scan-status').textContent = 'Escaneando…';
     for (const sym of settings.watch.slice()) {
+      const feed = state.demo ? null : feedFor(sym);
+      let iv = settings.scanInterval;
       try {
-        const kl = state.demo ? demoCandles(sym, iv, 400) : await API.klines(sym, iv, 400);
+        if (!state.demo && !feed) throw new Error('Para este par hace falta una clave de Twelve Data (no está entre los tipos del BCE).');
+        if (feed && !feed.intervals.includes(iv)) iv = '1d';
+        if (!scanDue(sym, feed, iv)) continue;
+        const kl = state.demo ? demoCandles(sym, iv, 400) : await feed.klines(sym, iv, 400);
+        if (kl.length < SG.MIN_BARS + 5) throw new Error('Pocas velas para analizar.');
         const ctx = SG.analyze(kl, { interval: iv });
         const li = U.lastClosed(kl);
-        const dec = U.autoDecimals(kl[li].c);
-        const evs = SG.evaluateRange(ctx, sigOpts(dec), li - SG.COOLDOWN, li);
+        const dec = F.isForex(sym) ? F.decimals(sym) : U.autoDecimals(kl[li].c);
+        const evs = SG.evaluateRange(ctx, sigOpts(dec, sym), li - SG.COOLDOWN, li);
         const r = evs[evs.length - 1];
         const fresh = SG.isFresh(evs, evs.length - 1);
         const lastK = kl[kl.length - 1];
         let k0 = kl.length - 1;
         while (k0 > 0 && kl[k0].t > lastK.t - 86400e3) k0--;
-        state.scan[sym] = { price: lastK.c, chg: (lastK.c / kl[k0].c - 1) * 100, r, fresh, dec };
+        const step = U.INTERVALS[iv];
+        state.scan[sym] = {
+          price: lastK.c, chg: (lastK.c / kl[k0].c - 1) * 100, r, fresh, dec, iv, feedId: feed ? feed.id : 'demo',
+          source: feed ? feed.label : 'demo', at: Date.now(), nextClose: lastK.closed === false ? lastK.T + 1 : lastK.T + 1 + step,
+        };
         if (fresh) alertSignal(sym, iv, r, dec, 'escáner');
       } catch (e) {
         state.scan[sym] = { err: e.message || String(e) };
@@ -870,14 +952,17 @@
       if (state.demo) C = demoCandles(settings.symbol, settings.interval, bars);
       else {
         out.innerHTML = '<p class="muted">Descargando histórico…</p>';
-        C = await API.history(settings.symbol, settings.interval, bars, (got, tot) => (out.innerHTML = `<p class="muted">Descargando histórico… ${got} / ${tot} velas</p>`));
+        if (!state.feed) throw new Error('No hay fuente de datos para este par.');
+        C = await state.feed.history(settings.symbol, settings.interval, bars, (got, tot) => (out.innerHTML = `<p class="muted">Descargando histórico… ${got} / ${tot} velas</p>`));
       }
       C = C.filter((k) => k.closed !== false);
       if (C.length < 300) throw new Error('Hacen falta al menos 300 velas cerradas para un backtest.');
       out.innerHTML = `<p class="muted">Analizando ${C.length} velas…</p>`;
       await sleep(30);
       const ctx = SG.analyze(C, { interval: settings.interval });
-      const res = BT.run(ctx, Object.assign(sigOpts(U.autoDecimals(C[C.length - 1].c)), { capital: settings.capital, riskPct: settings.riskPct, feePct: settings.fee, maxBars, maxLeverage: futures() ? 3 : 1 }));
+      // Apalancamiento máximo: 1× en spot, 3× en futuros de Binance y 10× en divisas (bróker de forex).
+      const lev = isFx() ? 10 : futures() ? 3 : 1;
+      const res = BT.run(ctx, Object.assign(sigOpts(U.autoDecimals(C[C.length - 1].c)), { capital: settings.capital, riskPct: settings.riskPct, feePct: feeFor(), maxBars, maxLeverage: lev }));
       renderBacktest(res, C.length);
     } catch (e) {
       out.innerHTML = `<div class="error">${esc(e.message || e)}</div>`;
@@ -902,7 +987,7 @@
     if (feePct > 5) verdict.push(`Las comisiones se llevaron un ${nf(feePct, 1)} % del capital inicial: en este par y temporalidad pesan mucho.`);
     verdict.push('Si cambias los ajustes hasta que el backtest salga bien, estarás sobreajustando al pasado y el resultado real será peor.');
     const pf = s.profitFactor === Infinity ? '∞' : nf(s.profitFactor, 2);
-    let html = `<p class="small muted">${nBars} velas · ${when(s.from)} – ${when(s.to)} · ${settings.symbol} ${IV[settings.interval]} · perfil ${SG.PROFILES[settings.profile].label.toLowerCase()} · ${futures() ? 'largos y cortos (máx. 3×)' : 'solo largos (spot)'}${state.demo ? ' · datos simulados' : ''}</p>`;
+    let html = `<p class="small muted">${nBars} velas · ${when(s.from)} – ${when(s.to)} · ${settings.symbol} ${IV[settings.interval]} · perfil ${SG.PROFILES[settings.profile].label.toLowerCase()} · ${isFx() ? 'largos y cortos (máx. 10×) · coste ' + nf(feeFor()) + ' % por lado · ' + (state.feed ? state.feed.label : '') : futures() ? 'largos y cortos (máx. 3×)' : 'solo largos (spot)'}${state.demo ? ' · datos simulados' : ''}</p>`;
     html += '<div class="cards">';
     html += card('Operaciones', s.trades, `${s.longs} compras · ${s.shorts} ventas · ${nf(s.avgBars, 1)} velas de media`);
     html += card('Acierto', ppc(s.winRate, 1), `necesario para no perder con R:R ${nf(settings.rr, 1)}: ${ppc(s.breakevenWinRate, 1)} + comisiones`, s.winRate > s.breakevenWinRate ? 'up' : 'down');
@@ -940,7 +1025,7 @@
       out.innerHTML = '<p class="small muted">Introduce entrada y stop (o pulsa «Usar la señal actual»).</p>';
       return;
     }
-    const r = RK.positionSize({ capital, riskPct, entry, stop, target: target > 0 ? target : null, feePct: settings.fee, maxLeverage: lev, stepSize: state.info ? state.info.stepSize : 0, minNotional: state.info ? state.info.minNotional : 0 });
+    const r = RK.positionSize({ capital, riskPct, entry, stop, target: target > 0 ? target : null, feePct: feeFor(), maxLeverage: lev, stepSize: state.info ? state.info.stepSize : 0, minNotional: state.info ? state.info.minNotional : 0 });
     if (!r) {
       out.innerHTML = '<p class="small muted">Datos no válidos.</p>';
       return;
@@ -957,7 +1042,153 @@
     if (r.capped) html += '<div class="callout">El tamaño está limitado por el apalancamiento máximo: arriesgas menos de lo indicado.</div>';
     if (r.belowMin) html += `<div class="callout">La posición es menor que el mínimo de Binance para este par (${nf(state.info.minNotional)} ${esc(quote)}).</div>`;
     if (r.leverage > 3) html += '<div class="callout">Apalancamiento alto: un movimiento brusco o un hueco de precio puede hacerte perder bastante más de lo previsto.</div>';
+    if (isFx()) {
+      const L = F.lotSize({ symbol: settings.symbol, capital, riskPct, entry, stop, account: settings.account, rates: state.rates });
+      if (L && L.error) html += `<div class="callout">${esc(L.error)}</div>`;
+      else if (L) {
+        const a = esc(settings.account);
+        html += `<h3>En lotes (${esc(settings.symbol)}, cuenta en ${a})</h3><div class="cards">`;
+        html += card('Lotes', nf(L.lots, 2), `${Math.round(L.units).toLocaleString('es-ES')} ${esc(base)} · 1 lote estándar = 100 000 · mini 0.1 · micro 0.01`);
+        html += card('Stop', nf(L.pips, 1) + ' pips', `1 pip = ${F.pipSize(settings.symbol)}`);
+        html += card('Valor del pip', nf(L.pipValue) + ' ' + a, `${nf(L.pipValueLot)} ${a} por lote estándar`);
+        html += card('Exposición', nf(L.notional, 0) + ' ' + a, `apalancamiento ${nf(L.notional / capital, 1)}× sobre el capital`);
+        html += '</div>';
+      }
+    }
     out.innerHTML = html;
+  }
+
+  /* ---------- Divisas: sesiones, calendario, fuerza y correlaciones ---------- */
+  const CORR_PAIRS = ['EUR/USD', 'GBP/USD', 'AUD/USD', 'NZD/USD', 'USD/JPY', 'USD/CHF', 'USD/CAD', 'EUR/GBP'];
+
+  async function loadForexData(force) {
+    if (force || !state.ecbSeries || Date.now() - state.ecbAt > 3 * 3600e3) {
+      try {
+        state.ecbSeries = await FEEDS.ecb.series(Date.now() - 140 * 86400e3, null, F.MAJORS.filter((c) => c !== 'EUR'));
+        state.rates = await FEEDS.ecb.latest();
+        store.set('fx.rates', state.rates);
+        state.ecbAt = Date.now();
+        state.ecbErr = null;
+      } catch (e) {
+        state.ecbErr = e.message || String(e);
+      }
+    }
+    if (force || !state.calendar || Date.now() - state.calAt > 3600e3) {
+      try {
+        state.calendar = await FEEDS.calendar.week();
+        state.calAt = Date.now();
+        state.calendarErr = null;
+      } catch (e) {
+        state.calendarErr = e.message || String(e);
+      }
+    }
+    renderSignal();
+    if (state.tab === 'forex') renderForex();
+  }
+
+  function mins(m) {
+    if (m == null) return '—';
+    const d = Math.floor(m / 1440);
+    const h = Math.floor((m % 1440) / 60);
+    const mm = m % 60;
+    return (d ? d + ' d ' : '') + (h ? h + ' h ' : '') + (d ? '' : mm + ' min');
+  }
+
+  function renderSessions() {
+    const box = $('#fx-sessions');
+    if (!box) return;
+    const S = F.sessions(new Date());
+    let html = `<p class="small">${esc(S.note)}</p><div class="table-wrap"><table class="table"><thead><tr><th>Sesión</th><th>Horario local de la plaza</th><th>Estado</th><th>Cambia en</th></tr></thead><tbody>`;
+    for (const x of S.list) html += `<tr><td>${x.name}</td><td class="num">${String(x.open).padStart(2, '0')}:00–${x.close}:00</td><td><span class="chip ${x.isOpen ? 'up' : ''}">${x.isOpen ? 'abierta' : 'cerrada'}</span></td><td class="num">${x.isOpen ? 'cierra en ' : 'abre en '}${mins(x.changeIn)}</td></tr>`;
+    box.innerHTML = html + '</tbody></table></div>';
+  }
+
+  function renderForex() {
+    const el = $('#tab-forex');
+    const sym = settings.symbol;
+    const mine = F.currenciesOf(sym);
+    let html = '<h2>Mercado de divisas</h2>';
+    html += '<h3>Sesiones</h3><div id="fx-sessions"></div>';
+
+    // Calendario económico
+    const onlyMine = settings.fxCalMine !== false;
+    const minLevel = settings.fxImpact == null ? 2 : settings.fxImpact;
+    html += `<h3>Calendario económico (esta semana)</h3><div class="row"><label class="check"><input type="checkbox" id="fx-cal-mine" ${onlyMine ? 'checked' : ''}> <span>Solo ${mine.length ? mine.join(' y ') : 'las divisas del par'}</span></label><label class="fld inline"><span>Impacto</span><select id="fx-impact"><option value="3">Alto</option><option value="2">Medio y alto</option><option value="0">Todos</option></select></label></div>`;
+    if (state.calendarErr) html += `<div class="callout">No se pudo cargar el calendario: ${esc(state.calendarErr)} Algunos navegadores bloquean este servicio; consúltalo en <a href="https://www.forexfactory.com/calendar" target="_blank" rel="noopener">forexfactory.com/calendar</a>.</div>`;
+    else if (!state.calendar) html += '<p class="small muted">Cargando calendario…</p>';
+    else {
+      const now = Date.now();
+      const evs = F.upcoming(state.calendar, onlyMine ? mine : null, now, { minLevel, pastMs: 12 * 3600e3 });
+      if (!evs.length) html += '<p class="small muted">Sin eventos con esos filtros en lo que queda de semana.</p>';
+      else {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>Fecha (tu hora)</th><th>Divisa</th><th>Impacto</th><th>Evento</th><th class="num">Previsión</th><th class="num">Anterior</th></tr></thead><tbody>';
+        for (const e of evs) {
+          const past = e.t < now;
+          const soon = !past && e.t - now < 24 * 3600e3;
+          const chip = e.level >= 3 ? 'down' : e.level === 2 ? 'warn' : '';
+          html += `<tr style="${past ? 'opacity:.5' : soon ? 'font-weight:600' : ''}"><td>${when(e.t)}</td><td class="num">${esc(e.country)}</td><td><span class="chip ${chip}">${{ 3: 'alto', 2: 'medio', 1: 'bajo', 0: 'festivo' }[e.level]}</span></td><td>${esc(e.title)}</td><td class="num">${esc(e.forecast || '—')}</td><td class="num">${esc(e.previous || '—')}</td></tr>`;
+        }
+        html += '</tbody></table></div><p class="small muted">Fuente: Forex Factory. En negrita, lo que llega en menos de 24 h.</p>';
+      }
+    }
+
+    // Fuerza relativa
+    const n = settings.fxStrN || 5;
+    html += `<h3>Fuerza de las divisas</h3><div class="row"><label class="fld inline"><span>Periodo</span><select id="fx-str-n"><option value="1">1 día</option><option value="5">1 semana</option><option value="20">1 mes</option><option value="60">3 meses</option></select></label></div>`;
+    if (state.ecbErr) html += `<div class="callout">No se pudieron cargar los tipos del BCE: ${esc(state.ecbErr)}</div>`;
+    else if (!state.ecbSeries) html += '<p class="small muted">Cargando tipos del BCE…</p>';
+    else {
+      const st = F.strength(state.ecbSeries, n);
+      if (st) {
+        const max = Math.max(...st.map((x) => Math.abs(x.pct)), 0.01);
+        html += '<div class="strength">' + st.map((x) => {
+          const w = (Math.abs(x.pct) / max) * 50;
+          return `<div class="srow${mine.includes(x.currency) ? ' mine' : ''}"><span class="num">${x.currency}</span><div class="strack"><b style="${x.pct >= 0 ? 'left:50%' : 'right:50%'};width:${w}%;background:var(${x.pct >= 0 ? '--up' : '--down'})"></b></div><span class="num ${x.pct >= 0 ? 'up' : 'down'}">${pct(x.pct)}</span></div>`;
+        }).join('') + '</div>';
+        const top = st[0];
+        const bot = st[st.length - 1];
+        html += `<p class="small muted">Cambio medio de cada divisa frente a las otras siete (tipos de referencia del BCE, ${state.ecbSeries[state.ecbSeries.length - 1].date}). Las tendencias más limpias suelen aparecer al enfrentar una divisa fuerte con una débil: ahora, ${top.currency} frente a ${bot.currency}.</p>`;
+      }
+      // Correlaciones
+      const M = F.correlations(state.ecbSeries, CORR_PAIRS, 60);
+      html += '<h3>Correlaciones (60 días, rentabilidades diarias)</h3><div class="table-wrap"><table class="table corr"><thead><tr><th></th>' + CORR_PAIRS.map((p) => `<th class="num">${p.replace('/', '')}</th>`).join('') + '</tr></thead><tbody>';
+      M.forEach((row, i) => {
+        html += `<tr><th>${CORR_PAIRS[i].replace('/', '')}</th>` + row.map((v, j) => {
+          const a = Math.min(1, Math.abs(v));
+          const bg = i === j ? 'var(--cell)' : `color-mix(in srgb, var(${v >= 0 ? '--up' : '--down'}) ${Math.round(a * 55)}%, transparent)`;
+          return `<td class="num" style="background:${bg}">${nf(v, 2)}</td>`;
+        }).join('') + '</tr>';
+      });
+      html += '</tbody></table></div><p class="small muted">Cerca de +1: se mueven juntos (comprar ambos duplica el riesgo). Cerca de −1: se mueven al revés (comprar uno y vender el otro también lo duplica).</p>';
+    }
+
+    // Fuentes
+    const td = settings.tdKey ? 'clave configurada' : 'sin clave (añádela en Ajustes para velas intradía de divisas y oro)';
+    html += '<h3>Fuentes de datos</h3><ul class="rules">';
+    html += `<li><strong>Binance</strong>: criptomonedas y pares de monedas estables frente a monedas nacionales (EURUSDT, USDTTRY…), en directo.</li>`;
+    html += `<li><strong>Twelve Data</strong>: velas intradía de cualquier par de divisas y del oro (XAU/USD) — ${td}. <a href="https://twelvedata.com/pricing" target="_blank" rel="noopener">Clave gratuita</a>: 800 consultas al día.</li>`;
+    html += `<li><strong>BCE (Frankfurter)</strong>: tipos de referencia diarios de ~30 divisas desde 1999, sin clave — ${state.ecbErr ? 'no disponible' : state.ecbSeries ? 'conectado' : 'cargando'}.</li>`;
+    html += `<li><strong>Forex Factory</strong>: calendario económico de la semana — ${state.calendarErr ? 'no disponible' : state.calendar ? 'conectado' : 'cargando'}.</li>`;
+    html += '</ul>';
+    el.innerHTML = html;
+    renderSessions();
+    $('#fx-impact').value = String(minLevel);
+    $('#fx-str-n') && ($('#fx-str-n').value = String(n));
+    $('#fx-cal-mine').onchange = (e) => {
+      settings.fxCalMine = e.target.checked;
+      save();
+      renderForex();
+    };
+    $('#fx-impact').onchange = (e) => {
+      settings.fxImpact = +e.target.value;
+      save();
+      renderForex();
+    };
+    if ($('#fx-str-n')) $('#fx-str-n').onchange = (e) => {
+      settings.fxStrN = +e.target.value;
+      save();
+      renderForex();
+    };
   }
 
   function fillRiskFromSignal() {
@@ -991,7 +1222,7 @@
         list = (cached && cached.list) || DEFAULT_WATCH;
       }
     }
-    $('#symbols').innerHTML = list.map((s) => `<option value="${esc(s)}">`).join('');
+    $('#symbols').innerHTML = F.PAIRS.concat(list).map((s) => `<option value="${esc(s)}">`).join('');
   }
 
   /* ---------- Controles ---------- */
@@ -1006,6 +1237,9 @@
     val('#capital', settings.capital);
     val('#riskPct', settings.riskPct);
     val('#fee', settings.fee);
+    val('#fxFee', settings.fxFee);
+    val('#tdKey', settings.tdKey);
+    val('#account', settings.account);
     val('#horizon', settings.horizon);
     val('#lower', settings.lower);
     val('#scan-interval', settings.scanInterval);
@@ -1077,6 +1311,20 @@
     num('#capital', 'capital', 1, 1e12, false);
     num('#riskPct', 'riskPct', 0.1, 10, false);
     num('#fee', 'fee', 0, 1, false);
+    num('#fxFee', 'fxFee', 0, 1, false);
+    $('#tdKey').addEventListener('change', (e) => {
+      settings.tdKey = e.target.value.trim();
+      save();
+      state.scan = {};
+      if (isFx()) load();
+      if (state.tab === 'forex') renderForex();
+    });
+    $('#account').onchange = (e) => {
+      settings.account = e.target.value;
+      save();
+      renderSignal();
+      if (state.tab === 'risk') renderRisk();
+    };
     $('#sound').onchange = (e) => {
       settings.sound = e.target.checked;
       save();
@@ -1181,6 +1429,7 @@
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
 
   bindControls();
+  syncIntervals(feedFor(settings.symbol));
   renderBell();
   renderBadge();
   showTab(state.tab && $('#tab-' + state.tab) ? state.tab : 'projection');
@@ -1188,6 +1437,9 @@
   load();
   loadSymbols();
   setTimeout(() => (settings.scanOn ? scanAll() : scheduleScan()), 2500);
+  loadForexData();
+  setInterval(() => loadForexData(), 30 * 60e3);
+  setInterval(() => state.tab === 'forex' && renderSessions(), 30e3);
 
   // Acceso para las pruebas de extremo a extremo.
   window.__radar = { state, settings, chart, recompute, startDemo };

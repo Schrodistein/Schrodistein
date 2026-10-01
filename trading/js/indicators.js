@@ -350,7 +350,7 @@
       const tp = (h[i] + l[i] + c[i]) / 3;
       pv += tp * v[i];
       vv += v[i];
-      out[i] = vv ? pv / vv : tp;
+      out[i] = vv ? pv / vv : NaN; // sin volumen (divisas del BCE) no hay VWAP
     }
     return out;
   }

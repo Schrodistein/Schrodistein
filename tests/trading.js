@@ -1,11 +1,11 @@
 /* Pruebas de Radar de Divisas, sin dependencias: node tests/trading.js */
 'use strict';
 const path = require('path');
-for (const f of ['core', 'indicators', 'patterns', 'stats', 'signals', 'backtest', 'binance']) {
+for (const f of ['core', 'indicators', 'patterns', 'stats', 'signals', 'backtest', 'binance', 'forex', 'feeds']) {
   require(path.join(__dirname, '..', 'trading', 'js', f + '.js'));
 }
 const FX = globalThis.FX;
-const { util: U, ind: I, patterns: P, stats: ST, signals: SG, backtest: BT, risk: RK, binance: API } = FX;
+const { util: U, ind: I, patterns: P, stats: ST, signals: SG, backtest: BT, risk: RK, binance: API, forex: F, feeds: FEEDS } = FX;
 
 let failed = 0;
 let passed = 0;
@@ -308,6 +308,120 @@ test('Binance: formato de velas y decimales', () => {
   assert(w.c === 1.5 && w.closed === false);
   assert(U.decimalsFromTick('0.00010000') === 4 && U.decimalsFromTick('1.00000000') === 0 && U.decimalsFromTick('0.01') === 2);
   assert(API.tradeUrl({ base: 'EUR', quote: 'USDT' }, 'EURUSDT', false).endsWith('/trade/EUR_USDT?type=spot'));
+});
+
+
+/* ---------- Divisas ---------- */
+test('Divisas: símbolos, pips y fuente de datos', () => {
+  assert(F.normalize('eurusd').symbol === 'EUR/USD' && F.normalize('eur-usd').forex && F.normalize(' usd/jpy ').symbol === 'USD/JPY');
+  assert(F.normalize('EURUSDT').symbol === 'EURUSDT' && !F.normalize('btcusdt').forex, 'los pares de Binance no se tocan');
+  assert(F.pipSize('EUR/USD') === 0.0001 && F.pipSize('USD/JPY') === 0.01 && F.pipSize('XAU/USD') === 0.1);
+  assert(F.decimals('EUR/USD') === 5 && F.decimals('GBP/JPY') === 3);
+  assert(FEEDS.pick('EURUSDT').id === 'binance');
+  assert(FEEDS.pick('EUR/USD').id === 'ecb' && FEEDS.pick('EUR/USD', { tdKey: 'x' }).id === 'twelvedata');
+  assert(FEEDS.pick('XAU/USD') === null && FEEDS.pick('XAU/USD', { tdKey: 'x' }).id === 'twelvedata', 'el oro necesita Twelve Data');
+  assert(F.currenciesOf('EURUSDT').join() === 'USD,EUR' && F.currenciesOf('PAXGUSDT').includes('XAU') && F.currenciesOf('USD/JPY').join() === 'USD,JPY');
+});
+
+test('Divisas: lotes y valor del pip en cualquier divisa de cuenta', () => {
+  const a = F.lotSize({ symbol: 'EUR/USD', capital: 10000, riskPct: 1, entry: 1.1, stop: 1.095, account: 'USD' });
+  assert(near(a.pips, 50, 1e-9) && near(a.units, 20000, 1e-6) && near(a.lots, 0.2, 1e-9) && near(a.pipValue, 2, 1e-9) && near(a.pipValueLot, 10, 1e-9));
+  const b = F.lotSize({ symbol: 'USD/JPY', capital: 10000, riskPct: 1, entry: 150, stop: 149.5, account: 'USD' });
+  assert(near(b.units, 30000, 1e-6) && near(b.pipValue, 2, 1e-9), 'cuenta en la divisa base');
+  const rates = { USD: 1.1, GBP: 0.85, JPY: 165 };
+  for (const [sym, e, st, acc] of [['EUR/USD', 1.1, 1.095, 'GBP'], ['GBP/JPY', 194, 193, 'EUR'], ['EUR/USD', 1.1, 1.104, 'EUR']]) {
+    const r = F.lotSize({ symbol: sym, capital: 5000, riskPct: 2, entry: e, stop: st, account: acc, rates });
+    assert(!r.error && near(r.pipValue * r.pips, 100, 1e-6), `${sym} en ${acc}: pip × pips = riesgo`);
+  }
+  assert(F.lotSize({ symbol: 'EUR/USD', capital: 1, riskPct: 1, entry: 1.1, stop: 1.0, account: 'MXN' }).error, 'sin tipos no hay conversión');
+});
+
+test('Divisas: sesiones con horario de verano', () => {
+  const S = F.sessions(new Date(Date.UTC(2026, 9, 7, 14, 0)));
+  const open = (id) => S.list.find((x) => x.id === id).isOpen;
+  assert(open('london') && open('newyork') && !open('tokyo') && !open('sydney') && /Londres–Nueva York/.test(S.note));
+  assert(!F.marketOpen(new Date(Date.UTC(2026, 9, 10, 12))), 'sábado cerrado');
+  assert(!F.marketOpen(new Date(Date.UTC(2026, 9, 11, 20))) && F.marketOpen(new Date(Date.UTC(2026, 9, 11, 22))), 'reabre el domingo a las 17:00 de Nueva York');
+  const sun = F.sessions(new Date(Date.UTC(2026, 9, 11, 22, 30)));
+  assert(sun.list.find((x) => x.id === 'sydney').isOpen, 'Sídney abre el lunes a las 7:00 locales (domingo en UTC)');
+  const l = S.list.find((x) => x.id === 'london');
+  assert(l.changeIn === 120, 'Londres cierra a las 17:00 BST: ' + l.changeIn);
+});
+
+test('Divisas: fuerza relativa y correlaciones', () => {
+  const day = (rates, k) => ({ date: 'd' + k, t: k, rates: Object.assign({ USD: 1.1, JPY: 160, GBP: 0.85, CHF: 0.95, CAD: 1.5, AUD: 1.65, NZD: 1.8 }, rates) });
+  const series = [day({}, 0), day({ USD: 1.1 / 1.02 }, 1)];
+  const st = F.strength(series, 1);
+  assert(st[0].currency === 'USD' && near(st[0].pct, 2, 0.01), 'el dólar sube un 2 % frente a todas: ' + JSON.stringify(st[0]));
+  const sumLog = st.reduce((a, x) => a + Math.log1p(x.pct / 100), 0);
+  assert(near(sumLog, 0, 1e-9), 'la fuerza total suma cero');
+  const R = U.rng(4);
+  const ser = [];
+  let usd = 1.1;
+  for (let k = 0; k < 80; k++) ser.push(day({ USD: (usd *= Math.exp(0.004 * R.normal())), GBP: 0.85 * Math.exp(0.003 * R.normal()) }, k));
+  const M = F.correlations(ser, ['EUR/USD', 'USD/CHF', 'EUR/GBP'], 60);
+  assert(M[0][0] === 1 && near(M[0][1], -1, 1e-9), 'EUR/USD y USD/CHF (con EUR/CHF fijo) se mueven al revés');
+  assert(near(M[0][2], M[2][0], 1e-12) && Math.abs(M[0][2]) <= 1);
+});
+
+test('Divisas: calendario económico', () => {
+  const now = Date.UTC(2026, 9, 1, 12);
+  const ev = [
+    { title: 'Non-Farm Employment Change', country: 'USD', date: '2026-10-02T08:30:00-04:00', impact: 'High', forecast: '90K', previous: '162K' },
+    { title: 'CPI Flash Estimate y/y', country: 'EUR', date: '2026-10-02T05:00:00-04:00', impact: 'High' },
+    { title: 'BOJ Gov Speaks', country: 'JPY', date: '2026-10-02T02:00:00-04:00', impact: 'Medium' },
+    { title: 'ISM Manufacturing PMI', country: 'USD', date: '2026-10-01T06:00:00-04:00', impact: 'High' },
+  ];
+  const up = F.upcoming(ev, ['USD', 'JPY'], now, {});
+  assert(up.length === 2 && up[0].country === 'JPY' && up[1].title.startsWith('Non-Farm'), 'filtra por divisa, quita lo pasado y ordena');
+  const r24 = F.eventRisk(ev, ['EUR', 'USD'], now, 24);
+  assert(r24 && r24.length === 1 && r24[0].country === 'EUR', 'en 24 h solo el IPC europeo (el NFP llega a las 24,5 h)');
+  const r36 = F.eventRisk(ev, ['EUR', 'USD'], now, 36);
+  assert(r36.length === 2 && r36.every((e) => e.level === 3), 'solo alto impacto');
+  assert(F.eventRisk(ev, ['JPY'], now, 24) === null);
+});
+
+test('Fuentes: Twelve Data y BCE', () => {
+  const now = Date.UTC(2026, 9, 1, 12, 30);
+  const body = { status: 'ok', values: [
+    { datetime: '2026-10-01 12:00:00', open: '1.1330', high: '1.1340', low: '1.1320', close: '1.1335' },
+    { datetime: '2026-10-01 11:00:00', open: '1.1320', high: '1.1335', low: '1.1310', close: '1.1330' },
+  ] };
+  const C = FEEDS.parseTwelve(body, '1h', now);
+  assert(C.length === 2 && C[0].t === Date.UTC(2026, 9, 1, 11) && C[1].c === 1.1335 && C[0].closed && !C[1].closed);
+  const D = FEEDS.parseTwelve({ status: 'ok', values: [{ datetime: '2026-09-30', open: '1', high: '1', low: '1', close: '1' }] }, '1d', now);
+  assert(D[0].t === Date.UTC(2026, 8, 30) && D[0].closed);
+  for (const [b, re] of [[{ status: 'error', code: 401, message: '**apikey** parameter is incorrect' }, /clave/], [{ status: 'error', code: 429, message: 'run out of API credits' }, /créditos/]]) {
+    let msg = '';
+    try {
+      FEEDS.parseTwelve(b, '1h');
+    } catch (e) {
+      msg = e.message;
+    }
+    assert(re.test(msg), msg);
+  }
+  const ser = [
+    { t: Date.UTC(2026, 8, 28), rates: { USD: 1.14, GBP: 0.86 } },
+    { t: Date.UTC(2026, 8, 29), rates: { USD: 1.13, GBP: 0.855 } },
+    { t: Date.UTC(2026, 8, 30), rates: { USD: 1.135, GBP: 0.857 } },
+    { t: Date.UTC(2026, 9, 5), rates: { USD: 1.12, GBP: 0.85 } },
+  ];
+  const K = FEEDS.ecb.fixingsToCandles(ser, 'GBP/USD');
+  assert(near(K[1].c, 1.13 / 0.855, 1e-12) && K[1].o === K[0].c && K[1].h === Math.max(K[1].o, K[1].c), 'cruce GBP/USD desde base EUR');
+  const W = FEEDS.ecb.weekly(K, Date.UTC(2026, 9, 6));
+  assert(W.length === 2 && W[0].t === Date.UTC(2026, 8, 28) && W[0].c === K[2].c && W[0].closed && !W[1].closed, 'semanas de lunes a domingo');
+});
+
+test('Análisis con datos del BCE (sin mechas ni volumen)', () => {
+  const syn = U.synthetic(900, { seed: 31, intervalMs: 86400e3 });
+  const ser = syn.map((k) => ({ t: k.t, rates: { USD: k.c } }));
+  const C = FEEDS.ecb.fixingsToCandles(ser, 'EUR/USD');
+  const ctx = SG.analyze(C, { interval: '1d' });
+  assert(ctx.vwap.every((x) => Number.isNaN(x)), 'sin volumen no hay VWAP');
+  const ev = SG.evaluateRange(ctx, { allowShort: true }, 0, ctx.n - 1);
+  assert(ev.every((e) => Number.isFinite(e.long.score) && Number.isFinite(e.short.score)), 'puntuaciones finitas');
+  assert(ev.some((e) => e.dir), 'hay señales también con datos diarios');
+  assert(!ev.some((e) => e.long.reasons.concat(e.short.reasons).some((r) => r.group === 'volumen' && r.w > 0 && !/OBV|Chaikin|MFI|VWAP|Volumen/.test(r.text))), 'sin factores de volumen espurios');
 });
 
 console.log(`${passed} pruebas superadas${failed ? `, ${failed} fallidas` : ''}`);

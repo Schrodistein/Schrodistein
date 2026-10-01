@@ -1,11 +1,11 @@
 /* Pruebas de Radar de Divisas, sin dependencias: node tests/trading.js */
 'use strict';
 const path = require('path');
-for (const f of ['core', 'indicators', 'patterns', 'stats', 'signals', 'backtest', 'binance', 'forex', 'feeds']) {
+for (const f of ['core', 'indicators', 'patterns', 'stats', 'signals', 'backtest', 'binance', 'forex', 'feeds', 'universe', 'prospect']) {
   require(path.join(__dirname, '..', 'trading', 'js', f + '.js'));
 }
 const FX = globalThis.FX;
-const { util: U, ind: I, patterns: P, stats: ST, signals: SG, backtest: BT, risk: RK, binance: API, forex: F, feeds: FEEDS } = FX;
+const { util: U, ind: I, patterns: P, stats: ST, signals: SG, backtest: BT, risk: RK, binance: API, forex: F, feeds: FEEDS, universe: UNI, prospect: PR } = FX;
 
 let failed = 0;
 let passed = 0;
@@ -422,6 +422,121 @@ test('Análisis con datos del BCE (sin mechas ni volumen)', () => {
   assert(ev.every((e) => Number.isFinite(e.long.score) && Number.isFinite(e.short.score)), 'puntuaciones finitas');
   assert(ev.some((e) => e.dir), 'hay señales también con datos diarios');
   assert(!ev.some((e) => e.long.reasons.concat(e.short.reasons).some((r) => r.group === 'volumen' && r.w > 0 && !/OBV|Chaikin|MFI|VWAP|Volumen/.test(r.text))), 'sin factores de volumen espurios');
+});
+
+
+/* ---------- Universo de divisas ---------- */
+const ecbFake = (n, seed) => {
+  const R = U.rng(seed || 3);
+  const lv = { USD: 1.13, JPY: 178, GBP: 0.86, CHF: 0.94, CAD: 1.58, AUD: 1.72, NZD: 1.95, MXN: 21, TRY: 47, BRL: 6.2 };
+  const cur = Object.assign({}, lv);
+  return Array.from({ length: n }, (_, k) => {
+    for (const c in cur) cur[c] *= Math.exp(0.004 * R.normal());
+    return { t: Date.UTC(2025, 0, 1) + k * 86400e3, date: 'd' + k, rates: Object.assign({}, cur) };
+  });
+};
+
+test('Mercados: monedas nacionales de Binance y su par en USD', () => {
+  const syms = [
+    { symbol: 'EURUSDT', base: 'EUR', quote: 'USDT' }, { symbol: 'EURUSDC', base: 'EUR', quote: 'USDC' }, { symbol: 'BTCEUR', base: 'BTC', quote: 'EUR' },
+    { symbol: 'USDTTRY', base: 'USDT', quote: 'TRY' }, { symbol: 'USDTARS', base: 'USDT', quote: 'ARS' }, { symbol: 'BTCUSDT', base: 'BTC', quote: 'USDT' },
+    { symbol: 'PAXGUSDT', base: 'PAXG', quote: 'USDT' },
+  ];
+  const f = UNI.binanceFiat(syms);
+  assert(Object.keys(f.currencies).sort().join() === 'ARS,EUR,TRY', 'solo monedas nacionales: ' + Object.keys(f.currencies));
+  assert(f.currencies.EUR.usdPair.symbol === 'EURUSDT' && !f.currencies.EUR.usdPair.inverse, 'prefiere USDT');
+  assert(f.currencies.TRY.usdPair.symbol === 'USDTTRY' && f.currencies.TRY.usdPair.inverse, 'par invertido');
+  assert(f.currencies.EUR.pairs.length === 3 && f.pairs.length === 5);
+});
+
+test('Mercados: índice con métricas de comportamiento', () => {
+  const ecb = ecbFake(300);
+  const hist = U.synthetic(120, { seed: 4, intervalMs: 86400e3, start: 1300 }).map((k) => Object.assign(k, { c: k.c }));
+  const idx = UNI.buildIndex({
+    ecb,
+    binance: { symbols: [{ symbol: 'USDTARS', base: 'USDT', quote: 'ARS' }, { symbol: 'EURUSDT', base: 'EUR', quote: 'USDT' }], histories: { ARS: hist } },
+    twelve: ['EUR/USD', 'USD/JPY', 'USD/SEK', 'XAU/USD'],
+  });
+  const by = Object.fromEntries(idx.list.map((x) => [x.code, x]));
+  assert(idx.counts.ecb === 11 && by.EUR.sources.binance && by.SEK && by.SEK.sources.td && !by.SEK.m, 'fuentes combinadas');
+  assert(by.XAU.type === 'metal' && by.ARS.region === 'Latinoamérica' && by.ARS.src === 'Binance', 'catálogo y fuente de precios');
+  const eurUsd = ecb[ecb.length - 1].rates.USD;
+  assert(near(by.EUR.m.last, eurUsd, 1e-12) && near(by.JPY.m.last, eurUsd / ecb[ecb.length - 1].rates.JPY, 1e-15), '1 unidad en USD');
+  assert(near(by.ARS.m.last, 1 / hist[hist.length - 1].c, 1e-15), 'par invertido de Binance');
+  assert(['alcista', 'bajista', 'lateral'].includes(by.GBP.m.trend) && by.GBP.m.vol > 0 && Number.isFinite(by.GBP.strength));
+  assert(by.USD.m.last === 1 && by.USD.sources.td && by.USD.pairs.td === 4, 'USD aparece en los 4 pares de Twelve Data');
+});
+
+test('Mercados: construcción de pares con la convención del mercado', () => {
+  assert(UNI.orderPair('USD', 'EUR') === 'EUR/USD' && UNI.orderPair('JPY', 'GBP') === 'GBP/JPY' && UNI.orderPair('MXN', 'USD') === 'USD/MXN' && UNI.orderPair('USD', 'XAU') === 'XAU/USD');
+  assert(UNI.orderPair('TRY', 'MXN') === 'MXN/TRY', 'exóticas en orden alfabético');
+  const codes = ['EUR', 'USD', 'JPY', 'GBP', 'CHF', 'CAD', 'AUD', 'NZD', 'MXN', 'TRY', 'BRL'];
+  const majors = UNI.buildPairs('majors', codes);
+  assert(majors.length === 28 && majors.includes('EUR/USD') && majors.includes('AUD/NZD') && majors.includes('CHF/JPY'));
+  const mu = UNI.buildPairs('majors+usd', codes);
+  assert(mu.length === 28 + 6 && mu.includes('USD/MXN') && mu.includes('EUR/TRY'));
+  assert(UNI.buildPairs('all', codes).length === (11 * 10) / 2);
+  const one = UNI.buildPairs('currency', codes, 'MXN');
+  assert(one.length === 10 && one.every((p) => p.includes('MXN')));
+});
+
+test('Mercados: mapa de calor antisimétrico', () => {
+  const H = UNI.heatmap(ecbFake(30), ['EUR', 'USD', 'JPY'], 5);
+  assert(Number.isNaN(H[0][0]) && near(H[0][1], -H[1][0], 1e-12) && near(H[0][1] + H[1][2], H[0][2], 1e-9), 'consistencia de cruces');
+});
+
+test('Señales: seguimiento hasta objetivo, stop o caducidad', () => {
+  const rec = { id: 'x', sym: 'EUR/USD', iv: '1d', dir: 1, t: 0, entry: 1.1, stop: 1.09, target: 1.12, status: 'activa', r: 0 };
+  const K = (t, o, h, l, c) => ({ t, o, h, l, c, closed: true });
+  const win = UNI.trackSignal(rec, [K(0, 1, 1, 1, 1.1), K(1, 1.1, 1.105, 1.095, 1.1), K(2, 1.1, 1.125, 1.099, 1.12)], 48);
+  assert(win.status === 'objetivo' && near(win.r, 2, 1e-9) && win.closedT === 2);
+  const both = UNI.trackSignal(rec, [K(1, 1.1, 1.13, 1.08, 1.1)], 48);
+  assert(both.status === 'stop' && both.r === -1, 'si toca ambos en la misma vela, cuenta el stop');
+  const exp = UNI.trackSignal(rec, [K(1, 1.1, 1.105, 1.095, 1.104), K(2, 1.1, 1.105, 1.095, 1.105)], 2);
+  assert(exp.status === 'caducada' && near(exp.r, 0.5, 1e-9));
+  const open = UNI.trackSignal(Object.assign({}, rec, { dir: -1, stop: 1.11, target: 1.08 }), [K(1, 1.1, 1.105, 1.095, 1.095), Object.assign(K(2, 1.095, 1.1, 1.09, 1.092), { closed: false })], 48);
+  assert(open.status === 'activa' && near(open.r, 0.8, 1e-9) && open.last === 1.092, 'venta abierta con resultado latente');
+  const st = UNI.boardStats([win, both, exp, open]);
+  assert(st.active === 1 && st.activeShort === 1 && st.wins === 1 && st.losses === 1 && st.expired === 1 && near(st.winRate, 0.5, 1e-12) && near(st.avgR, (2 - 1 + 0.5) / 3, 1e-9));
+});
+
+/* ---------- Prospecto ---------- */
+test('Prospecto: velas, probabilidades y planes', () => {
+  const C = U.synthetic(700, { seed: 8, intervalMs: 86400e3 });
+  const ctx = SG.analyze(C, { interval: '1d' });
+  const cur = SG.evaluate(ctx, ctx.n - 1, { allowShort: true });
+  const proj = ST.project(ctx, ctx.n - 1, { horizon: 10, paths: 600 });
+  const row = proj.cone[9];
+  assert(PR.probAbove(row, row.q50) > 0.49 && PR.probAbove(row, row.q50) < 0.51 && PR.probAbove(row, row.q25) > PR.probAbove(row, row.q75), 'probabilidades coherentes con el cono');
+  assert(PR.probAbove(row, row.q5 * 0.5) === 0.97 && PR.probAbove(row, row.q95 * 2) === 0.03);
+  const story = PR.candleStory(ctx.S, ctx.n - 1, cur.atr, 5);
+  assert(story.rows.length === 5 && story.bulls + story.bears <= 5 && /Últimas 5 velas/.test(story.summary));
+  const now = Date.now();
+  const p = PR.build({
+    sym: 'EUR/USD', ctx, cur, proj, rr: 2,
+    events: [{ title: 'Non-Farm Employment Change', country: 'USD', t: now + 3600e3, level: 3 }],
+    news: PR.tagNews([{ title: 'ECB keeps rates on hold', link: 'https://x', t: now, source: 'BCE', ccy: ['EUR'] }]),
+    strength: { EUR: { pct: -0.5, rank: 6, of: 8 }, USD: { pct: 0.8, rank: 1, of: 8 } },
+  });
+  assert(['alcista', 'bajista', 'neutral'].includes(p.word) && ['alta', 'media', 'baja'].includes(p.conf));
+  assert(p.conf !== 'alta', 'un dato de alto impacto en < 24 h rebaja la confianza');
+  assert(p.risks.some((r) => /alto impacto/.test(r)));
+  assert(p.plans.some((x) => x.dir > 0) && p.plans.some((x) => x.dir < 0));
+  for (const pl of p.plans) assert(pl.dir * (pl.target - pl.entry) > 0 && pl.dir * (pl.entry - pl.stop) > 0, 'stop y objetivo en el lado correcto: ' + pl.title);
+  assert(p.factors.some((f) => /Fuerza EUR/.test(f.name) && f.value < 0), 'la fuerza relativa entra en el sesgo');
+  assert(/PROSPECTO EUR\/USD/.test(p.text) && /PLANES/.test(p.text));
+  const tagged = PR.tagNews([{ title: 'Yen slides as BoJ holds; gold climbs', link: 'x', ccy: [] }])[0].tags;
+  assert(tagged.includes('JPY') && tagged.includes('XAU'));
+});
+
+test('Noticias: lector de RSS y Atom', () => {
+  const rss = '<rss><channel><item><title><![CDATA[Fed raises rates &amp; more]]></title><link>https://www.federalreserve.gov/a</link><pubDate>Wed, 16 Sep 2026 18:00:00 GMT</pubDate></item><item><title>Sin enlace</title></item></channel></rss>';
+  const a = FEEDS.news.parseFeed(rss, { name: 'Fed', ccy: ['USD'] });
+  assert(a.length === 1 && a[0].title === 'Fed raises rates & more' && a[0].t === Date.UTC(2026, 8, 16, 18));
+  const atom = '<feed><entry><title type="html">BoJ &lt;b&gt;keeps&lt;/b&gt; policy</title><link rel="alternate" href="https://www.boj.or.jp/x"/><updated>2026-09-30T00:00:00Z</updated></entry></feed>';
+  const b = FEEDS.news.parseFeed(atom, { name: 'BoJ', ccy: ['JPY'] });
+  assert(b[0].title === 'BoJ keeps policy' && b[0].link === 'https://www.boj.or.jp/x');
+  assert(FEEDS.news.parseFeed('<rss><item><title>x</title><link>javascript:alert(1)</link></item></rss>', { name: 'x' }).length === 0, 'solo enlaces http(s)');
 });
 
 console.log(`${passed} pruebas superadas${failed ? `, ${failed} fallidas` : ''}`);

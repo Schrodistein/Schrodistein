@@ -241,6 +241,82 @@
     fixingsToCandles, weekly, CURRENCIES: ECB_CCY,
   };
 
+  // Serie larga del BCE (todas las divisas si symbols es null), pedida por tramos de menos de un año.
+  async function ecbRange(days, symbols, endT) {
+    endT = endT || Date.now();
+    const start = endT - days * 86400e3;
+    const out = [];
+    for (let to = endT; to > start; to -= 361 * 86400e3) {
+      const from = Math.max(start, to - 360 * 86400e3);
+      const part = await ecbSeries(from, to, symbols);
+      out.unshift(...part.filter((d) => !out.length || d.t < out[0].t));
+    }
+    return out;
+  }
+  ecb.range = ecbRange;
+
+  // Catálogo de pares de divisas de Twelve Data (datos de referencia).
+  async function tdForexPairs(key) {
+    const body = await getJSON(TD_URL + '/forex_pairs' + query({ apikey: key || null }), 'Twelve Data');
+    if (!body || !Array.isArray(body.data)) throw new ApiError((body && body.message) || 'Twelve Data no devolvió la lista de pares.', (body && body.code) || 0);
+    return body.data.map((d) => d.symbol).filter((x) => /^[A-Z]{3}\/[A-Z]{3}$/.test(x));
+  }
+
+  /* ---------- Noticias (RSS/Atom) ---------- */
+  const NEWS = [
+    { id: 'fed', name: 'Reserva Federal', url: 'https://www.federalreserve.gov/feeds/press_all.xml', ccy: ['USD'] },
+    { id: 'ecb', name: 'BCE', url: 'https://www.ecb.europa.eu/rss/press.html', ccy: ['EUR'] },
+    { id: 'boe', name: 'Banco de Inglaterra', url: 'https://www.bankofengland.co.uk/rss/news', ccy: ['GBP'] },
+    { id: 'boj', name: 'Banco de Japón', url: 'https://www.boj.or.jp/en/rss/whatsnew.xml', ccy: ['JPY'] },
+    { id: 'fxstreet', name: 'FXStreet', url: 'https://www.fxstreet.com/rss/news', ccy: [] },
+  ];
+  const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  const decode = (s) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, '').replace(/&(#x?[0-9a-f]+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10));
+    return ENT[e.toLowerCase()] != null ? ENT[e.toLowerCase()] : m;
+  }).replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+  // Lee RSS 2.0, RSS 1.0 (RDF) y Atom sin depender del navegador.
+  function parseFeed(xml, src) {
+    const items = [];
+    const blocks = xml.match(/<(item|entry)[\s>][\s\S]*?<\/(item|entry)>/gi) || [];
+    for (const b of blocks.slice(0, 40)) {
+      const tag = (name) => {
+        const m = b.match(new RegExp('<' + name + '(?:\\s[^>]*)?>([\\s\\S]*?)<\\/' + name + '>', 'i'));
+        return m ? decode(m[1]) : '';
+      };
+      const title = tag('title');
+      let link = tag('link');
+      if (!link) {
+        const m = b.match(/<link[^>]*href="([^"]+)"/i);
+        link = m ? m[1] : '';
+      }
+      const date = Date.parse(tag('pubDate') || tag('dc:date') || tag('updated') || tag('published'));
+      if (title && /^https?:\/\//.test(link)) items.push({ title, link, t: Number.isFinite(date) ? date : null, source: src.name, ccy: src.ccy });
+    }
+    return items;
+  }
+  const news = {
+    SOURCES: NEWS,
+    parseFeed,
+    async load() {
+      const status = {};
+      const lists = await Promise.all(NEWS.map(async (src) => {
+        try {
+          const res = await root.fetch(src.url);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const items = parseFeed(await res.text(), src);
+          status[src.id] = items.length ? 'ok' : 'vacío';
+          return items;
+        } catch (e) {
+          status[src.id] = 'error';
+          return [];
+        }
+      }));
+      const items = [].concat(...lists).sort((a, b) => (b.t || 0) - (a.t || 0));
+      return { items, status };
+    },
+  };
+
   /* ---------- Calendario económico ---------- */
   const CAL_URLS = ['https://nfs.faireconomy.media/ff_calendar_thisweek.json'];
   const calendar = {
@@ -268,5 +344,5 @@
     return null;
   }
 
-  FX.feeds = { binance, twelvedata, ecb, calendar, pick, parseTwelve, poll, TD_IV };
+  FX.feeds = { binance, twelvedata, ecb, calendar, news, pick, parseTwelve, poll, tdForexPairs, TD_IV };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

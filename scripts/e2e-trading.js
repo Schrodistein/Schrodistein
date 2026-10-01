@@ -48,8 +48,40 @@ const { market, mockBinance } = require('./mock-markets');
   await page.waitForSelector('#signal .verdict', { timeout: 20000 });
   await page.click('#notice-ok');
 
+  // 0) Señales, Mercados y Prospecto
+  check('pestaña de señales por defecto', !(await page.$eval('#tab-signals', (e) => e.hidden)));
+  await page.click('.tabs [data-tab="markets"]');
+  await page.waitForFunction(() => document.querySelectorAll('#uni-idx tbody tr').length >= 20 && !window.__radar.state.uni.running && window.__radar.state.uni.results.length >= 28, null, { timeout: 40000 }).catch(() => {});
+  const uni = await page.evaluate(() => ({ idx: document.querySelectorAll('#uni-idx tbody tr').length, pairs: window.__radar.state.uni.results.filter((r) => !r.err).length, heat: document.querySelectorAll('#uni-heat tbody tr').length, counts: window.__radar.state.uni.index && window.__radar.state.uni.index.counts }));
+  check('índice de divisas de las tres fuentes', uni.idx >= 20 && uni.counts && uni.counts.ecb >= 18 && uni.counts.binance >= 6 && uni.counts.td >= 8);
+  check('pares analizados (principales + resto frente a USD y EUR)', uni.pairs >= 28 + 20);
+  check('mapa de calor', uni.heat === 8);
+  await page.fill('#uni-q', 'peso');
+  await page.waitForTimeout(150);
+  const pesos = await page.$$eval('#uni-idx tbody tr', (rows) => rows.map((r) => r.querySelector('strong').textContent));
+  check('buscador del índice', pesos.includes('MXN') && pesos.includes('ARS') && !pesos.includes('EUR'));
+  await page.fill('#uni-q', '');
+  if (shots) await page.screenshot({ path: shots + '/mercados.png', fullPage: true });
+  await page.click('.tabs [data-tab="signals"]');
+  await page.waitForTimeout(200);
+  const board = await page.evaluate(() => window.__radar.state.board.length);
+  check('tablero de señales con señales de los pares', board >= 1 && (await page.$$('#tab-signals tbody tr')).length >= 1);
+  if (shots) await page.screenshot({ path: shots + '/senales.png', fullPage: true });
+  await page.click('.tabs [data-tab="markets"]');
+  await page.click('#uni-pairs [data-prospect="GBP/JPY"]');
+  await page.waitForFunction(() => /Prospecto de GBP\/JPY/.test(document.querySelector('#tab-prospect').textContent) && document.querySelectorAll('#tab-prospect .card').length >= 2, null, { timeout: 20000 }).catch(() => {});
+  check('prospecto del par elegido', /Prospecto de GBP\/JPY/.test(await page.textContent('#tab-prospect')));
+  check('planes de operación', (await page.$$('#tab-prospect .card')).length >= 2);
+  await page.waitForFunction(() => document.querySelectorAll('#tab-prospect .news li').length >= 1, null, { timeout: 8000 }).catch(() => {});
+  check('titulares en el prospecto', (await page.$$('#tab-prospect .news li')).length >= 1);
+  if (shots) await page.screenshot({ path: shots + '/prospecto.png', fullPage: true });
+  await page.fill('#symbol', 'EUR/USD');
+  await page.press('#symbol', 'Enter');
+  await page.waitForFunction(() => document.querySelector('#q-sym').textContent === 'EUR/USD', null, { timeout: 10000 }).catch(() => {});
+
   // 1) Divisas sin clave: EUR/USD diario con los tipos del BCE
   check('EUR/USD con datos del BCE', (await page.evaluate(() => window.__radar.state.feed.id)) === 'ecb' && (await page.textContent('#q-sym')) === 'EUR/USD');
+  await page.waitForFunction(() => document.querySelector('#conn').dataset.state === 'poll', null, { timeout: 10000 }).catch(() => {});
   check('fuente por sondeo', (await page.getAttribute('#conn', 'data-state')) === 'poll');
   check('intradía desactivado sin clave', await page.$eval('#interval option[value="1h"]', (o) => o.disabled));
   await page.waitForFunction(() => /alto impacto/.test(document.querySelector('#signal').textContent), null, { timeout: 8000 }).catch(() => {});

@@ -166,6 +166,16 @@ input[type='checkbox'] { min-height: 0; width: 18px; height: 18px; accent-color:
 .strack b { position: absolute; top: 0; bottom: 0; border-radius: 99px; }
 .table.corr td, .table.corr th { padding: 6px; text-align: center; }
 
+.progress-bar { position: relative; height: 22px; background: var(--cell); border-radius: 6px; overflow: hidden; margin: 8px 0; }
+.progress-bar i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--brand) 45%, transparent); transition: width 0.2s; }
+.progress-bar span { position: relative; font-size: 0.8rem; padding: 0 10px; line-height: 22px; }
+.card.pref { outline: 2px solid var(--brand); }
+.srow.wide { grid-template-columns: minmax(150px, 260px) 1fr 64px; }
+.news { padding-left: 1.1em; font-size: 0.9rem; }
+.news li { margin: 4px 0; }
+#tab-prospect p { max-width: 900px; }
+#uni-q { min-width: 240px; }
+
 /* Tarjeta de señal */
 .signal { display: flex; flex-direction: column; gap: 10px; align-self: start; }
 @media (min-width: 1000px) { .signal { position: sticky; top: 70px; max-height: calc(100vh - 84px); overflow: auto; } }

@@ -62,6 +62,16 @@ const shots = process.argv[2];
   await page.waitForTimeout(300);
   check('el aviso trae la ventana al frente', await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].isVisible()));
   check('menú en español', await app.evaluate(({ Menu }) => Menu.getApplicationMenu().items.map((i) => i.label).join(',').includes('Archivo')));
+  const goto = await app.evaluate(({ Menu }) => {
+    const m = Menu.getApplicationMenu().items.find((i) => i.label === 'Ir a');
+    const it = m && m.submenu.items.find((i) => i.label === 'Mercados');
+    if (it) it.click();
+    return !!it;
+  });
+  await page.waitForFunction(() => !document.querySelector('#tab-markets').hidden, null, { timeout: 5000 }).catch(() => {});
+  check('menú «Ir a» cambia de pestaña', goto && !(await page.$eval('#tab-markets', (e) => e.hidden)));
+  await page.waitForFunction(() => document.querySelectorAll('#tab-prospect').length && window.__radar.state.news && window.__radar.state.news.items.length > 0, null, { timeout: 15000 }).catch(() => {});
+  check('noticias en escritorio (CSP y CORS permiten los canales)', await page.evaluate(() => !!(window.__radar.state.news && window.__radar.state.news.items.length)));
 
   await app.close();
   fs.rmSync(userData, { recursive: true, force: true });

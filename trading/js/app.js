@@ -45,7 +45,8 @@
     {
       symbol: 'EUR/USD', interval: '1d', profile: 'equilibrado', market: 'spot', trendFilter: true, mtfFilter: false, tdKey: '', account: 'USD',
       rr: 2, atrStop: 1.5, capital: 1000, riskPct: 1, fee: 0.1, fxFee: 0.01, horizon: 24, sound: true, lower: 'rsi',
-      scanOn: true, scanInterval: '1h', watch: DEFAULT_WATCH.slice(), tab: 'projection',
+      scanOn: true, scanInterval: '1h', watch: DEFAULT_WATCH.slice(), tab: 'signals',
+      uniMode: 'majors+usd', uniBinance: true, sigFilter: { dir: 'all', status: 'activa', market: 'all' },
     },
     saved
   );
@@ -66,7 +67,10 @@
     alerts: store.get('fx.alerts', []), alertKeys: new Set(store.get('fx.alertKeys', [])), unseen: 0,
     scan: {}, scanning: false, scanTimer: null, scanNext: 0, tab: settings.tab, lightTimer: null,
     feed: null, rates: store.get('fx.rates', null), calendar: null, calendarErr: null, ecbSeries: null, ecbErr: null,
+    board: store.get('fx.board', []), news: null, newsAt: 0,
+    uni: { series: null, binSymbols: null, binUsd: null, binHist: {}, tdPairs: null, index: null, results: [], running: false, loading: false, progress: [0, 0], at: 0, resultsAt: 0, err: {}, focus: null, sort: { key: 'opp', dir: -1 }, idxSort: { key: 'strength', dir: -1 } },
   };
+  const UNI = FX.universe;
   const isFx = () => F.isForex(settings.symbol);
   const feedFor = (sym) => FEEDS.pick(sym, { tdKey: settings.tdKey });
 
@@ -301,6 +305,7 @@
     state.markers = state.evals.filter((e, k) => SG.isFresh(state.evals, k)).map((e) => ({ i: e.i, dir: e.dir }));
     state.proj = projection();
     if (o.alert && state.cur && SG.isFresh(state.evals, state.evals.length - 1)) alertSignal(settings.symbol, settings.interval, state.cur, state.dec, 'gráfico');
+    if (!state.demo) recordSignals(settings.symbol, settings.interval, C, state.evals.slice(-12), 'gráfico', state.dec, 3);
     renderAll();
   }
 
@@ -540,10 +545,16 @@
     if (t === 'projection') renderProjection();
     else if (t === 'analysis') renderAnalysis();
     else if (t === 'patterns') renderPatterns();
-    else if (t === 'scanner') renderScanner();
+    else if (t === 'scanner') {
+      renderScanner();
+      if (!Object.keys(state.scan).length && !state.scanning) scanAll();
+    }
     else if (t === 'alerts') renderAlerts();
     else if (t === 'risk') renderRisk();
     else if (t === 'forex') renderForex();
+    else if (t === 'signals') renderSignals();
+    else if (t === 'markets') renderMarkets();
+    else if (t === 'prospect') renderProspect();
     else if (t === 'guide' && !$('#tab-guide').innerHTML) $('#tab-guide').innerHTML = FX.guide;
   }
 
@@ -791,20 +802,26 @@
     }
   }
 
-  function alertSignal(sym, iv, r, dec, src) {
+  // quiet: solo se anota en el historial (el análisis de mercados agrupa sus avisos en uno).
+  function alertSignal(sym, iv, r, dec, src, quiet) {
     const key = [sym, iv, r.t, r.dir].join('|');
-    if (state.alertKeys.has(key)) return;
+    if (state.alertKeys.has(key)) return false;
     state.alertKeys.add(key);
     store.set('fx.alertKeys', Array.from(state.alertKeys).slice(-300));
     const side = r.dir > 0 ? r.long : r.short;
     const a = {
       id: key, at: Date.now(), sym, iv, dir: r.dir, t: r.t, price: r.entry, stop: r.stop, target: r.target, score: r.score,
-      strength: r.strength, dec, src, spot: !futures(), demo: state.demo,
+      strength: r.strength, dec, src, spot: !futures() && !F.isForex(sym), demo: state.demo,
       reasons: side.reasons.filter((x) => x.trigger).sort((x, y) => y.w - x.w).slice(0, 4).map((x) => x.text),
     };
     state.alerts.unshift(a);
     state.alerts = state.alerts.slice(0, 200);
     store.set('fx.alerts', state.alerts);
+    if (state.tab !== 'alerts') state.unseen++;
+    if (quiet) {
+      renderBadge();
+      return true;
+    }
     const word = r.dir > 0 ? 'COMPRA' : a.spot ? 'VENTA (cerrar compras)' : 'VENTA';
     const title = `${word} · ${sym} · ${IV[iv] || iv}${state.demo ? ' (demo)' : ''}`;
     const body = `Entrada ${U.fmtPrice(r.entry, dec)} · Stop ${U.fmtPrice(r.stop, dec)} · Objetivo ${U.fmtPrice(r.target, dec)}. ${a.reasons[0] || ''}`;
@@ -813,9 +830,9 @@
     beep(r.dir);
     if (navigator.vibrate) navigator.vibrate(r.dir > 0 ? [80, 60, 80] : [200]);
     notify(title, body, key);
-    if (state.tab !== 'alerts') state.unseen++;
     renderBadge();
     if (state.tab === 'alerts') renderAlerts();
+    return true;
   }
 
   function renderBadge() {
@@ -920,6 +937,7 @@
           source: feed ? feed.label : 'demo', at: Date.now(), nextClose: lastK.closed === false ? lastK.T + 1 : lastK.T + 1 + step,
         };
         if (fresh) alertSignal(sym, iv, r, dec, 'escáner');
+        if (!state.demo) recordSignals(sym, iv, kl, evs, 'escáner', dec, 0);
       } catch (e) {
         state.scan[sym] = { err: e.message || String(e) };
       }
@@ -1213,6 +1231,527 @@
     renderRisk();
   }
 
+  /* ---------- Tablero de señales ---------- */
+  const BOARD_MAX = 400;
+  function saveBoard() {
+    const act = state.board.filter((r) => r.status === 'activa');
+    const done = state.board.filter((r) => r.status !== 'activa');
+    state.board = act.concat(done).sort((a, b) => b.t - a.t || b.at - a.at).slice(0, BOARD_MAX);
+    store.set('fx.board', state.board);
+  }
+
+  /* Anota las señales nuevas de las últimas `recent` velas de un par y
+   * actualiza el estado de sus señales abiertas con las velas recibidas. */
+  function recordSignals(sym, iv, candles, evals, source, dec, recent) {
+    if (!evals.length) return;
+    const minI = evals[evals.length - 1].i - (recent || 0);
+    let changed = false;
+    evals.forEach((e, k) => {
+      if (!e.dir || e.i < minI || !SG.isFresh(evals, k)) return;
+      const id = UNI.signalId(sym, iv, e.t, e.dir);
+      if (state.board.some((r) => r.id === id)) return;
+      const side = e.dir > 0 ? e.long : e.short;
+      state.board.unshift({
+        id, sym, iv, dir: e.dir, t: e.t, entry: e.entry, stop: e.stop, target: e.target, rr: e.rr, score: e.score, strength: e.strength,
+        reasons: side.reasons.filter((x) => x.trigger).sort((a, b) => b.w - a.w).slice(0, 3).map((x) => x.text),
+        source, at: Date.now(), dec, status: 'activa', r: 0, last: e.price,
+      });
+      changed = true;
+    });
+    state.board = state.board.map((r) => {
+      if (r.sym !== sym || r.iv !== iv || r.status !== 'activa') return r;
+      changed = true;
+      return Object.assign(UNI.trackSignal(r, candles, 48), { upd: Date.now() });
+    });
+    if (!changed) return;
+    saveBoard();
+    if (state.tab === 'signals') renderSignals();
+  }
+
+  // Abre un par en el gráfico (y opcionalmente una pestaña).
+  function openPair(sym, iv, tab) {
+    settings.symbol = sym;
+    $('#symbol').value = sym;
+    const feed = feedFor(sym);
+    if (iv && (!feed || feed.intervals.includes(iv))) {
+      settings.interval = iv;
+      $('#interval').value = iv;
+    }
+    save();
+    if (tab) showTab(tab);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (state.demo) startDemo();
+    else load();
+  }
+
+  function ago(t) {
+    const m = Math.round((Date.now() - t) / 60e3);
+    if (m < 60) return `hace ${Math.max(1, m)} min`;
+    const h = Math.round(m / 60);
+    if (h < 48) return `hace ${h} h`;
+    return `hace ${Math.round(h / 24)} días`;
+  }
+
+  function renderSignals() {
+    const el = $('#tab-signals');
+    const f = settings.sigFilter;
+    const st = UNI.boardStats(state.board);
+    let list = state.board.slice();
+    if (f.dir !== 'all') list = list.filter((r) => String(r.dir) === f.dir);
+    if (f.status === 'activa') list = list.filter((r) => r.status === 'activa');
+    else if (f.status === 'cerradas') list = list.filter((r) => r.status !== 'activa');
+    if (f.market === 'forex') list = list.filter((r) => F.isForex(r.sym));
+    else if (f.market === 'binance') list = list.filter((r) => !F.isForex(r.sym));
+    const running = state.uni.running || state.scanning;
+    let html = `<div class="row wrap-row"><h2>Señales de compra y venta</h2><button class="btn small primary" type="button" id="sig-refresh" ${running ? 'disabled' : ''}>${running ? 'Analizando…' : 'Analizar todo ahora'}</button><button class="btn small" type="button" id="sig-clear">Borrar cerradas</button></div>`;
+    html += '<p class="small muted">Todas las señales detectadas en el gráfico, en tu lista del escáner y en el análisis de pares de la pestaña Mercados. Cada señal se sigue sola: sigue activa hasta que toca el objetivo, el stop o pasan 48 velas.</p>';
+    html += '<div class="cards">';
+    html += card('Activas', `${st.active}`, `<span class="up">${st.activeLong} de compra</span> · <span class="down">${st.activeShort} de venta</span>`);
+    html += card('Cerradas', `${st.resolved}`, `${st.wins} en objetivo · ${st.losses} en stop · ${st.expired} caducadas`);
+    html += card('Acierto', ppc(st.winRate), st.wins + st.losses ? `objetivo frente a stop (con R:R ${nf(settings.rr, 1)} basta un ${ppc(1 / (1 + settings.rr))})` : 'aún sin señales cerradas', st.winRate > 1 / (1 + settings.rr) ? 'up' : st.wins + st.losses ? 'down' : '');
+    html += card('Resultado medio', ok(st.avgR) ? (st.avgR > 0 ? '+' : '') + nf(st.avgR, 2) + ' R' : '—', st.first ? 'por señal cerrada, desde ' + when(st.first) : '', st.avgR > 0 ? 'up' : st.avgR < 0 ? 'down' : '');
+    html += '</div>';
+    html += `<div class="row"><label class="fld inline"><span>Sentido</span><select id="sig-dir"><option value="all">Todas</option><option value="1">Compra</option><option value="-1">Venta</option></select></label>
+      <label class="fld inline"><span>Estado</span><select id="sig-status"><option value="activa">Activas</option><option value="cerradas">Cerradas</option><option value="all">Todas</option></select></label>
+      <label class="fld inline"><span>Mercado</span><select id="sig-market"><option value="all">Todos</option><option value="forex">Divisas</option><option value="binance">Binance</option></select></label></div>`;
+    if (!list.length) html += `<p class="muted">${state.board.length ? 'Ninguna señal con esos filtros.' : 'Todavía no hay señales registradas. Pulsa «Analizar todo ahora» o abre la pestaña Mercados para analizar todos los pares.'}</p>`;
+    else {
+      const chipSt = { activa: '', objetivo: 'up', stop: 'down', caducada: 'warn' };
+      html += '<div class="table-wrap"><table class="table"><thead><tr><th>Vela de la señal</th><th>Par</th><th>Sentido</th><th class="num">Entrada</th><th class="num">Stop</th><th class="num">Objetivo</th><th class="num">Último</th><th class="num">Resultado</th><th>Estado</th><th>Confluencia</th><th>Origen</th><th></th></tr></thead><tbody>';
+      for (const r of list.slice(0, 200)) {
+        const d = r.dec;
+        html += `<tr class="click" data-open="${esc(r.sym)}" data-iv="${esc(r.iv)}" title="${esc(r.reasons.join(' · '))}">
+          <td>${when(r.t)}<br><span class="small muted">${ago(r.at)}</span></td>
+          <td class="num"><strong>${esc(r.sym)}</strong><br><span class="small muted">${IV[r.iv] || esc(r.iv)}</span></td>
+          <td><span class="chip ${r.dir > 0 ? 'up' : 'down'}">${r.dir > 0 ? 'COMPRA' : 'VENTA'}</span></td>
+          <td class="num">${U.fmtPrice(r.entry, d)}</td><td class="num down">${U.fmtPrice(r.stop, d)}</td><td class="num up">${U.fmtPrice(r.target, d)}</td>
+          <td class="num">${U.fmtPrice(r.last, d)}</td>
+          <td class="num ${r.r > 0 ? 'up' : r.r < 0 ? 'down' : ''}">${(r.r > 0 ? '+' : '') + nf(r.r, 2)} R</td>
+          <td><span class="chip ${chipSt[r.status]}">${r.status === 'objetivo' ? 'objetivo' : r.status}</span></td>
+          <td>${esc(r.strength || '')} <span class="small muted">${nf(r.score, 1)}</span></td>
+          <td class="small">${esc(r.source)}</td>
+          <td><button class="btn small" type="button" data-prospect="${esc(r.sym)}" data-iv="${esc(r.iv)}">Prospecto</button></td></tr>`;
+      }
+      html += '</tbody></table></div>';
+    }
+    html += '<p class="small muted">«Resultado» en R: múltiplos de lo arriesgado (−1 R = stop). En las activas es el resultado latente al último precio. Las señales son probabilísticas; el historial te dice cuánto aciertan de verdad.</p>';
+    el.innerHTML = html;
+    $('#sig-dir').value = f.dir;
+    $('#sig-status').value = f.status;
+    $('#sig-market').value = f.market;
+    for (const [id, key] of [['#sig-dir', 'dir'], ['#sig-status', 'status'], ['#sig-market', 'market']]) {
+      $(id).onchange = (e) => {
+        settings.sigFilter[key] = e.target.value;
+        save();
+        renderSignals();
+      };
+    }
+    $('#sig-refresh').onclick = () => {
+      scanAll();
+      if (state.uni.series) analyzePairs();
+      else loadUniverse(true);
+      renderSignals();
+    };
+    $('#sig-clear').onclick = () => {
+      state.board = state.board.filter((r) => r.status === 'activa');
+      saveBoard();
+      renderSignals();
+    };
+    el.querySelector('tbody') && el.querySelector('tbody').addEventListener('click', (e) => {
+      const pr = e.target.closest('[data-prospect]');
+      if (pr) return openPair(pr.dataset.prospect, pr.dataset.iv, 'prospect');
+      const row = e.target.closest('tr[data-open]');
+      if (row) openPair(row.dataset.open, row.dataset.iv);
+    });
+  }
+
+  /* ---------- Mercados: índice de divisas y análisis de pares ---------- */
+  async function loadUniverse(force) {
+    const u = state.uni;
+    if (u.loading) return;
+    if (!force && u.index && Date.now() - u.at < 30 * 60e3) return renderMarkets();
+    u.loading = true;
+    u.err = {};
+    renderMarkets();
+    await Promise.all([
+      FEEDS.ecb.range(720, null).then((x) => (u.series = x), (e) => (u.err.ecb = e.message)),
+      (async () => {
+        const syms = await API.exchangeInfoAll();
+        u.binSymbols = syms;
+        const f = UNI.binanceFiat(syms);
+        u.binUsd = Object.keys(f.currencies).filter((c) => f.currencies[c].usdPair).map((c) => Object.assign({ code: c }, f.currencies[c].usdPair));
+        await Promise.all(u.binUsd.map(async (p) => {
+          try {
+            u.binHist[p.code] = await API.klines(p.symbol, '1d', 400);
+          } catch (e) {
+            /* ese par no tiene historia diaria */
+          }
+        }));
+      })().catch((e) => (u.err.binance = e.message || String(e))),
+      FEEDS.tdForexPairs(settings.tdKey).then((x) => (u.tdPairs = x), (e) => (u.err.td = e.message || String(e))),
+    ]);
+    u.index = UNI.buildIndex({ ecb: u.series, binance: u.binSymbols ? { symbols: u.binSymbols, histories: u.binHist } : null, twelve: u.tdPairs });
+    u.at = Date.now();
+    u.loading = false;
+    renderMarkets();
+    if (state.tab === 'prospect') renderProspect();
+    if (!u.running) analyzePairs();
+  }
+
+  async function analyzePairs() {
+    const u = state.uni;
+    if (u.running) return;
+    if (!u.series && !(u.binUsd && u.binUsd.length)) return;
+    const codes = u.series ? ['EUR'].concat(Object.keys(u.series[u.series.length - 1].rates)) : [];
+    const jobs = UNI.buildPairs(settings.uniMode, codes, u.focus).map((p) => ({ sym: p, src: 'BCE' }));
+    if (settings.uniBinance && u.binUsd) u.binUsd.forEach((p) => u.binHist[p.code] && (!u.focus || p.code === u.focus) && jobs.push({ sym: p.symbol, src: 'Binance', code: p.code }));
+    u.running = true;
+    u.results = [];
+    u.progress = [0, jobs.length];
+    renderMarkets();
+    const fresh = [];
+    for (let k = 0; k < jobs.length; k++) {
+      const j = jobs[k];
+      try {
+        const C = j.src === 'BCE' ? FEEDS.ecb.fixingsToCandles(u.series, j.sym) : u.binHist[j.code];
+        if (!C || C.length < SG.MIN_BARS + 10) throw new Error('Pocas velas');
+        const ctx = SG.analyze(C, { interval: '1d' });
+        const li = U.lastClosed(C);
+        const dec = F.isForex(j.sym) ? F.decimals(j.sym) : U.autoDecimals(C[li].c);
+        const evs = SG.evaluateRange(ctx, sigOpts(dec, j.sym), li - 5 - SG.COOLDOWN, li);
+        const r = evs[evs.length - 1];
+        let recent = null;
+        for (let q = evs.length - 1; q >= 0 && !recent; q--) if (SG.isFresh(evs, q) && evs[q].i >= li - 5) recent = evs[q];
+        const cl = (n) => (li - n >= 0 ? (C[li].c / C[li - n].c - 1) * 100 : NaN);
+        u.results.push({ sym: j.sym, src: j.src, price: C[C.length - 1].c, chg1: cl(1), chg5: cl(j.src === 'BCE' ? 5 : 7), trend: r.trend, rsi: r.snap.rsi, long: r.long.score, short: r.short.score, dir: r.dir, bias: r.bias, recent: recent ? { dir: recent.dir, ago: li - recent.i } : null, dec, strength: r.strength });
+        if (!state.demo) recordSignals(j.sym, '1d', C, evs, 'mercados', dec, 5);
+        if (r.dir && SG.isFresh(evs, evs.length - 1) && alertSignal(j.sym, '1d', r, dec, 'mercados', true)) fresh.push(j.sym + ' ' + (r.dir > 0 ? 'compra' : 'venta'));
+      } catch (e) {
+        u.results.push({ sym: j.sym, src: j.src, err: e.message || String(e) });
+      }
+      u.progress[0] = k + 1;
+      if (k % 4 === 3) {
+        renderPairsProgress();
+        await sleep(0);
+      }
+    }
+    u.running = false;
+    u.resultsAt = Date.now();
+    if (fresh.length) {
+      const title = `${fresh.length} señal${fresh.length > 1 ? 'es' : ''} nueva${fresh.length > 1 ? 's' : ''} en Mercados`;
+      const body = fresh.slice(0, 6).join(' · ') + (fresh.length > 6 ? ' …' : '');
+      toast(title, ' ' + body, 0);
+      beep(1);
+      notify(title, body, 'mercados');
+      if (window.radarDesktop) window.radarDesktop.alert(title);
+    }
+    renderMarkets();
+    if (state.tab === 'signals') renderSignals();
+  }
+
+  function renderPairsProgress() {
+    const b = $('#uni-progress');
+    if (!b) return;
+    const [d, t] = state.uni.progress;
+    b.hidden = !state.uni.running;
+    $('i', b).style.width = (t ? (d / t) * 100 : 0) + '%';
+    $('span', b).textContent = `Analizando ${d} de ${t} pares…`;
+  }
+
+  // Esqueleto fijo de la pestaña (el buscador no pierde el foco al refrescar los datos).
+  function marketsSkeleton() {
+    const el = $('#tab-markets');
+    if ($('#uni-head', el)) return;
+    el.innerHTML = `<div class="row wrap-row"><h2>Mercados de divisas</h2><button class="btn small" type="button" id="uni-refresh">Actualizar</button></div>
+      <div id="uni-head"></div>
+      <h3>Índice de divisas</h3>
+      <div class="row"><input id="uni-q" placeholder="Buscar: código, divisa o país" spellcheck="false">
+        <label class="fld inline"><span>Tipo</span><select id="uni-type"><option value="all">Todas</option><option value="majors">Las 8 principales</option><option value="fiat">Monedas nacionales</option><option value="metal">Metales</option><option value="monitor">Con datos de precio</option></select></label>
+        <label class="fld inline"><span>Región</span><select id="uni-region"><option value="all">Todas</option></select></label></div>
+      <div id="uni-idx" class="table-wrap"></div>
+      <h3>Mapa de calor (1 semana)</h3><div id="uni-heat" class="table-wrap"></div>
+      <h3>Pares para operar</h3>
+      <div class="row"><label class="fld inline"><span>Pares</span><select id="uni-mode"><option value="majors">Cruces de las 8 principales (28)</option><option value="majors+usd">Principales + el resto frente a USD y EUR</option><option value="all">Todas las combinaciones</option></select></label>
+        <label class="check"><input type="checkbox" id="uni-bin"> <span>Incluir monedas nacionales de Binance</span></label>
+        <button class="btn small primary" type="button" id="uni-run">Analizar pares</button><span id="uni-focus"></span></div>
+      <div class="progress-bar" id="uni-progress" hidden><i></i><span></span></div>
+      <div id="uni-pairs" class="table-wrap"></div>
+      <p class="small muted">Los pares del BCE se analizan con velas diarias (operaciones de varios días). Para intradía, abre el par con una clave de Twelve Data. Pulsa una fila para verla en el gráfico.</p>`;
+    $('#uni-refresh').onclick = () => loadUniverse(true);
+    $('#uni-q').oninput = () => renderIndexTable();
+    $('#uni-type').onchange = () => renderIndexTable();
+    $('#uni-region').onchange = () => renderIndexTable();
+    $('#uni-mode').value = settings.uniMode;
+    $('#uni-bin').checked = settings.uniBinance;
+    $('#uni-mode').onchange = (e) => {
+      settings.uniMode = e.target.value;
+      state.uni.focus = null;
+      save();
+      analyzePairs();
+    };
+    $('#uni-bin').onchange = (e) => {
+      settings.uniBinance = e.target.checked;
+      save();
+      analyzePairs();
+    };
+    $('#uni-run').onclick = () => analyzePairs();
+    $('#uni-idx').addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (th) {
+        const s = state.uni.idxSort;
+        s.dir = s.key === th.dataset.sort ? -s.dir : -1;
+        s.key = th.dataset.sort;
+        return renderIndexTable();
+      }
+      const b = e.target.closest('[data-focus]');
+      if (b) {
+        state.uni.focus = b.dataset.focus;
+        analyzePairs();
+        $('#uni-pairs').scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+    $('#uni-pairs').addEventListener('click', (e) => {
+      const th = e.target.closest('th[data-sort]');
+      if (th) {
+        const s = state.uni.sort;
+        s.dir = s.key === th.dataset.sort ? -s.dir : -1;
+        s.key = th.dataset.sort;
+        return renderPairsTable();
+      }
+      const add = e.target.closest('[data-watch]');
+      if (add) {
+        if (!settings.watch.includes(add.dataset.watch) && settings.watch.length < 25) settings.watch.push(add.dataset.watch);
+        save();
+        add.disabled = true;
+        add.textContent = '✓';
+        return;
+      }
+      const pr = e.target.closest('[data-prospect]');
+      if (pr) return openPair(pr.dataset.prospect, '1d', 'prospect');
+      const row = e.target.closest('tr[data-open]');
+      if (row) openPair(row.dataset.open, '1d');
+    });
+  }
+
+  function renderMarkets() {
+    marketsSkeleton();
+    const u = state.uni;
+    if (!u.index && !u.loading) {
+      loadUniverse();
+      return;
+    }
+    const c = u.index ? u.index.counts : null;
+    const err = Object.keys(u.err).map((k) => `${{ ecb: 'BCE', binance: 'Binance', td: 'Twelve Data' }[k]}: ${esc(u.err[k])}`);
+    let head = '';
+    if (u.loading) head += '<p class="muted">Buscando e indexando las divisas en el BCE, Binance y Twelve Data…</p>';
+    if (c) head += `<div class="cards"><div class="card"><div class="k">Divisas indexadas</div><div class="v">${c.total}</div><p>en ${[c.ecb && 'BCE', c.binance && 'Binance', c.td && 'Twelve Data'].filter(Boolean).join(', ') || 'ninguna fuente'}</p></div>
+      <div class="card"><div class="k">BCE</div><div class="v">${c.ecb}</div><p>tipos de referencia diarios</p></div>
+      <div class="card"><div class="k">Binance</div><div class="v">${c.binance}</div><p>monedas nacionales en ${c.binancePairs} pares</p></div>
+      <div class="card"><div class="k">Twelve Data</div><div class="v">${c.td}</div><p>${c.tdPairs} pares de divisas</p></div></div>`;
+    if (err.length) head += `<div class="callout">Algunas fuentes no respondieron: ${err.join(' · ')}</div>`;
+    if (u.at) head += `<p class="small muted">Actualizado ${ago(u.at)}. Se vuelve a comprobar cada 30 minutos mientras la app esté abierta.</p>`;
+    $('#uni-head').innerHTML = head;
+    const regions = u.index ? Array.from(new Set(u.index.list.map((x) => x.region))).sort() : [];
+    const rs = $('#uni-region');
+    if (rs.options.length !== regions.length + 1) {
+      const cur = rs.value;
+      rs.innerHTML = '<option value="all">Todas</option>' + regions.map((r) => `<option>${esc(r)}</option>`).join('');
+      rs.value = regions.includes(cur) ? cur : 'all';
+    }
+    renderIndexTable();
+    renderHeatmap();
+    renderPairsTable();
+    renderPairsProgress();
+  }
+
+  function sorter(key, dir, get) {
+    return (a, b) => {
+      const x = get(a, key);
+      const y = get(b, key);
+      if (typeof x === 'string' || typeof y === 'string') return dir * String(x).localeCompare(String(y));
+      const fx = Number.isFinite(x) ? x : -Infinity;
+      const fy = Number.isFinite(y) ? y : -Infinity;
+      return dir * (fx - fy);
+    };
+  }
+
+  function renderIndexTable() {
+    const box = $('#uni-idx');
+    const u = state.uni;
+    if (!box || !u.index) return;
+    const q = $('#uni-q').value.trim().toLowerCase();
+    const type = $('#uni-type').value;
+    const region = $('#uni-region').value;
+    let list = u.index.list.filter((x) => (!q || (x.code + ' ' + x.name + ' ' + x.country).toLowerCase().includes(q)) && (region === 'all' || x.region === region));
+    if (type === 'majors') list = list.filter((x) => F.MAJORS.includes(x.code));
+    else if (type === 'fiat' || type === 'metal') list = list.filter((x) => x.type === type);
+    else if (type === 'monitor') list = list.filter((x) => x.m);
+    const s = u.idxSort;
+    const get = (x, k) => (k === 'code' ? x.code : k === 'strength' ? x.strength : k === 'pairs' ? x.pairs.binance + x.pairs.td : x.m ? x.m[k] : NaN);
+    list.sort(sorter(s.key, s.dir, get));
+    const th = (k, label, cls) => `<th class="${cls || ''}" data-sort="${k}" style="cursor:pointer">${label}${s.key === k ? (s.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+    const cell = (v, d) => `<td class="num ${v > 0 ? 'up' : v < 0 ? 'down' : ''}">${ok(v) ? pct(v, d == null ? 2 : d) : '—'}</td>`;
+    let html = `<table class="table"><thead><tr>${th('code', 'Divisa')}<th>País o zona</th><th>Fuentes</th>${th('pairs', 'Pares', 'num')}${th('last', '1 unidad en USD', 'num')}${th('chg1', '1 día', 'num')}${th('chg5', '1 semana', 'num')}${th('chg21', '1 mes', 'num')}${th('strength', 'Fuerza (sem.)', 'num')}${th('vol', 'Volatilidad', 'num')}<th>Tendencia</th><th></th></tr></thead><tbody>`;
+    for (const x of list) {
+      const m = x.m;
+      const src = [x.sources.ecb && 'BCE', x.sources.binance && 'Binance', x.sources.td && 'TD'].filter(Boolean).map((t) => `<span class="chip">${t}</span>`).join(' ');
+      const usd = m && ok(m.last) ? (m.last >= 1 ? nf(m.last, 4) : m.last >= 0.01 ? nf(m.last, 5) : m.last.toPrecision(3)) : '—';
+      html += `<tr><td><strong class="num">${esc(x.code)}</strong> <span class="small">${esc(x.name)}</span></td><td class="small">${esc(x.country)}</td><td>${src}</td><td class="num">${x.pairs.binance + x.pairs.td || '—'}</td><td class="num">${usd}</td>${cell(m && m.chg1)}${cell(m && m.chg5)}${cell(m && m.chg21)}${cell(x.strength)}<td class="num">${m && m.vol ? nf(m.vol, 1) + ' %' : '—'}</td><td>${m ? `<span class="${m.trend === 'alcista' ? 'up' : m.trend === 'bajista' ? 'down' : ''}">${m.trend}</span>` : '—'}</td><td>${x.sources.ecb || x.sources.binance ? `<button class="btn small" type="button" data-focus="${esc(x.code)}">Pares</button>` : ''}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    box.innerHTML = list.length ? html : '<p class="muted">Sin divisas con esos filtros.</p>';
+  }
+
+  function renderHeatmap() {
+    const box = $('#uni-heat');
+    const u = state.uni;
+    if (!box) return;
+    const series = u.series || state.ecbSeries;
+    const codes = F.MAJORS;
+    const M = series ? UNI.heatmap(series, codes, 5) : null;
+    if (!M) {
+      box.innerHTML = '<p class="small muted">Sin datos del BCE.</p>';
+      return;
+    }
+    const max = Math.max(...M.flat().filter(ok).map(Math.abs), 0.1);
+    let html = '<table class="table corr"><thead><tr><th>Base \\ Cotizada</th>' + codes.map((c) => `<th class="num">${c}</th>`).join('') + '</tr></thead><tbody>';
+    M.forEach((row, a) => {
+      html += `<tr><th>${codes[a]}</th>` + row.map((v, b) => {
+        if (!ok(v)) return '<td style="background:var(--cell)"></td>';
+        const al = Math.round((Math.abs(v) / max) * 60);
+        return `<td class="num" style="background:color-mix(in srgb, var(${v >= 0 ? '--up' : '--down'}) ${al}%, transparent)" title="${codes[a]}/${codes[b]}">${pct(v, 2)}</td>`;
+      }).join('') + '</tr>';
+    });
+    box.innerHTML = html + '</tbody></table><p class="small muted">Cambio de cada divisa de la fila frente a la de la columna en la última semana. Las filas más verdes son las divisas más fuertes.</p>';
+  }
+
+  function renderPairsTable() {
+    const box = $('#uni-pairs');
+    const u = state.uni;
+    if (!box) return;
+    $('#uni-run').disabled = u.running || (!u.series && !(u.binUsd && u.binUsd.length));
+    $('#uni-focus').innerHTML = u.focus ? `<span class="chip">Pares de ${esc(u.focus)} <button class="btn icon" type="button" id="uni-unfocus" aria-label="Quitar filtro" style="min-height:0;height:20px;width:20px">×</button></span>` : '';
+    if ($('#uni-unfocus')) $('#uni-unfocus').onclick = () => {
+      u.focus = null;
+      analyzePairs();
+    };
+    if (!u.results.length) {
+      box.innerHTML = u.running || u.loading ? '' : '<p class="muted">Sin análisis todavía.</p>';
+      return;
+    }
+    const s = u.sort;
+    const get = (x, k) => (k === 'opp' ? (x.err ? -1 : (x.dir ? 100 : 0) + Math.max(x.long, x.short)) : k === 'sym' ? x.sym : x[k]);
+    const rows = u.results.slice().sort(sorter(s.key, s.dir, get));
+    const th = (k, label, cls) => `<th class="${cls || ''}" data-sort="${k}" style="cursor:pointer">${label}${s.key === k ? (s.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`;
+    const withSig = rows.filter((r) => r.dir).length;
+    let html = `<p class="small">${rows.length} pares analizados ${u.resultsAt ? ago(u.resultsAt) : ''}: <strong>${withSig}</strong> con señal en la última vela${withSig ? '' : ''}.</p>`;
+    html += `<table class="table"><thead><tr>${th('sym', 'Par')}<th>Fuente</th>${th('price', 'Precio', 'num')}${th('chg1', '1 día', 'num')}${th('chg5', '1 semana', 'num')}<th>Tendencia</th>${th('rsi', 'RSI', 'num')}${th('opp', 'Compra / venta', 'num')}<th>Señal</th><th></th></tr></thead><tbody>`;
+    for (const r of rows) {
+      if (r.err) {
+        html += `<tr><td class="num"><strong>${esc(r.sym)}</strong></td><td>${r.src}</td><td colspan="8" class="small muted">${esc(r.err)}</td></tr>`;
+        continue;
+      }
+      const sig = r.dir ? `<span class="chip ${r.dir > 0 ? 'up' : 'down'}">${r.dir > 0 ? 'COMPRA' : 'VENTA'}</span>` : r.recent ? `<span class="small ${r.recent.dir > 0 ? 'up' : 'down'}">${r.recent.dir > 0 ? 'compra' : 'venta'} hace ${r.recent.ago} d</span>` : `<span class="small muted">${r.bias >= 1 ? 'sesgo alcista' : r.bias <= -1 ? 'sesgo bajista' : 'esperar'}</span>`;
+      const watched = settings.watch.includes(r.sym);
+      html += `<tr class="click" data-open="${esc(r.sym)}"><td class="num"><strong>${esc(r.sym)}</strong></td><td class="small">${r.src}</td><td class="num">${U.fmtPrice(r.price, r.dec)}</td>
+        <td class="num ${r.chg1 >= 0 ? 'up' : 'down'}">${pct(r.chg1)}</td><td class="num ${r.chg5 >= 0 ? 'up' : 'down'}">${pct(r.chg5)}</td>
+        <td>${r.trend > 0 ? '<span class="up">alcista</span>' : r.trend < 0 ? '<span class="down">bajista</span>' : 'lateral'}</td><td class="num">${nf(r.rsi, 0)}</td>
+        <td class="num"><span class="up">${nf(r.long, 1)}</span> / <span class="down">${nf(r.short, 1)}</span></td><td>${sig}</td>
+        <td class="row tight"><button class="btn small" type="button" data-prospect="${esc(r.sym)}">Prospecto</button><button class="btn icon" type="button" data-watch="${esc(r.sym)}" ${watched ? 'disabled' : ''} aria-label="Añadir ${esc(r.sym)} al escáner" title="Añadir al escáner">${watched ? '✓' : '+'}</button></td></tr>`;
+    }
+    box.innerHTML = html + '</tbody></table>';
+  }
+
+  /* ---------- Prospecto ---------- */
+  async function loadNews(force) {
+    if (!force && state.news && Date.now() - state.newsAt < 20 * 60e3) return;
+    state.news = await FEEDS.news.load();
+    state.news.items = FX.prospect.tagNews(state.news.items);
+    state.newsAt = Date.now();
+    if (state.tab === 'prospect') renderProspect();
+  }
+
+  // Fuerza semanal de cada divisa (BCE) con su puesto, para el prospecto.
+  function strengthMap() {
+    const series = state.uni.series || state.ecbSeries;
+    if (!series) return {};
+    const codes = ['EUR'].concat(Object.keys(series[series.length - 1].rates));
+    const st = F.strength(series, 5, codes) || [];
+    const out = {};
+    st.forEach((x, k) => (out[x.currency] = { pct: x.pct, rank: k + 1, of: st.length }));
+    return out;
+  }
+
+  function renderProspect() {
+    const el = $('#tab-prospect');
+    const cur = state.cur;
+    if (!cur || !cur.snap || !state.ctx) {
+      el.innerHTML = '<p class="muted">Cargando el análisis del par…</p>';
+      return;
+    }
+    const sym = settings.symbol;
+    const curs = F.currenciesOf(sym);
+    const p = FX.prospect.build({
+      sym, ctx: state.ctx, cur, proj: state.proj, rr: settings.rr, atrStop: settings.atrStop,
+      events: state.calendar ? F.upcoming(state.calendar, curs, Date.now(), { minLevel: 0 }) : null,
+      news: state.news ? state.news.items : null, strength: strengthMap(), sentiment: state.sentiment,
+      fmt: (x) => fp(x), when, stepLabel: 'velas de ' + (IV[settings.interval] || settings.interval),
+    });
+    state.prospect = p;
+    const cls = p.lean > 0 ? 'buy' : p.lean < 0 ? 'sell' : '';
+    let html = `<div class="row wrap-row"><h2>Prospecto de ${esc(sym)}</h2><button class="btn small" type="button" id="pr-copy">Copiar informe</button><button class="btn small" type="button" id="pr-news">Actualizar noticias</button></div>`;
+    html += `<p class="small muted">Vela de ${IV[settings.interval]} cerrada ${when(p.t)} · precio ${fp(p.price)}${state.demo ? ' · datos simulados' : ''}</p>`;
+    html += `<div class="verdict ${cls}"><div class="k">Prospecto</div><div class="v">${p.word.toUpperCase()}</div><div class="small">Confianza ${p.conf}. ${esc(p.action)}</div></div>`;
+    html += '<h3>Factores que pesan</h3><div class="strength">' + p.factors.map((f) => {
+      const w = Math.min(50, Math.abs(f.value) * 50);
+      return `<div class="srow wide"><span class="small">${esc(f.name)}</span><div class="strack"><b style="${f.value >= 0 ? 'left:50%' : 'right:50%'};width:${w}%;background:var(${f.value >= 0 ? '--up' : '--down'})"></b></div><span class="num ${f.value >= 0 ? 'up' : 'down'}">${f.value >= 0 ? '+' : ''}${nf(f.value, 2)}</span></div>`;
+    }).join('') + '</div>';
+    for (const sec of p.sections) {
+      html += `<h3>${esc(sec.title)}</h3><p>${esc(sec.text)}</p>`;
+      if (sec.rows) {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>Vela</th><th>Tipo</th><th class="num">Apertura</th><th class="num">Cierre</th><th class="num">Cuerpo / ATR</th><th>Lectura</th></tr></thead><tbody>';
+        for (const r of sec.rows.slice().reverse()) html += `<tr><td>${when(r.t)}</td><td><span class="chip ${r.type === 'alcista' ? 'up' : r.type === 'bajista' ? 'down' : ''}">${r.type}</span></td><td class="num">${fp(r.o)}</td><td class="num">${fp(r.c)}</td><td class="num">${nf(r.bodyAtr, 2)}</td><td class="small">${esc(r.notes.concat(r.patterns).join(' · ') || '—')}</td></tr>`;
+        html += '</tbody></table></div>';
+      }
+      if (sec.groups) {
+        html += '<div class="table-wrap"><table class="table"><thead><tr><th>Escuela</th><th class="num">Compra</th><th class="num">Venta</th></tr></thead><tbody>' + sec.groups.map((g) => `<tr><td>${esc(g.group)}</td><td class="num up">${g.long ? nf(g.long) : '—'}</td><td class="num down">${g.short ? nf(g.short) : '—'}</td></tr>`).join('') + '</tbody></table></div>';
+      }
+      if (sec.id === 'fundamental') {
+        if (sec.events && sec.events.length) html += '<div class="table-wrap"><table class="table"><thead><tr><th>Fecha</th><th>Divisa</th><th>Impacto</th><th>Evento</th><th class="num">Previsión</th><th class="num">Anterior</th></tr></thead><tbody>' + sec.events.map((e) => `<tr><td>${when(e.t)}</td><td class="num">${esc(e.country)}</td><td><span class="chip ${e.level >= 3 ? 'down' : 'warn'}">${e.level >= 3 ? 'alto' : 'medio'}</span></td><td>${esc(e.title)}</td><td class="num">${esc(e.forecast || '—')}</td><td class="num">${esc(e.previous || '—')}</td></tr>`).join('') + '</tbody></table></div>';
+        else if (state.calendarErr) html += `<p class="small muted">Calendario no disponible: ${esc(state.calendarErr)}</p>`;
+        if (sec.news && sec.news.length) html += '<ul class="news">' + sec.news.map((n) => `<li><a href="${esc(n.link)}" target="_blank" rel="noopener">${esc(n.title)}</a> <span class="small muted">${esc(n.source)}${n.t ? ' · ' + when(n.t) : ''}</span></li>`).join('') + '</ul>';
+        else if (state.news) {
+          const okSrc = Object.keys(state.news.status).filter((k) => state.news.status[k] === 'ok').length;
+          html += `<p class="small muted">${okSrc ? 'Ningún titular reciente menciona estas divisas.' : `No se pudieron leer los canales de noticias${window.radarDesktop ? '' : ' (los navegadores suelen bloquearlos; en la app de escritorio funcionan)'}.`}</p>`;
+        } else html += '<p class="small muted">Cargando noticias…</p>';
+      }
+    }
+    html += '<h3>Planes de operación</h3><div class="cards">';
+    for (const pl of p.plans) {
+      const fx = F.isForex(sym) ? F.lotSize({ symbol: sym, capital: settings.capital, riskPct: settings.riskPct, entry: pl.entry, stop: pl.stop, account: settings.account, rates: state.rates }) : null;
+      const ps = !fx ? sizing(pl.entry, pl.stop, pl.target) : null;
+      const size = fx && !fx.error ? `${nf(fx.lots, 2)} lotes` : ps ? `${nf(ps.qty, 4)} ${esc((state.info && state.info.base) || '')}` : '—';
+      html += `<div class="card${pl.preferred ? ' pref' : ''}"><div class="k">${esc(pl.title)}${pl.preferred ? ' · preferente' : ''}</div>
+        <p>Activación: ${esc(pl.trigger)}</p>
+        <dl class="kv"><dt>Entrada</dt><dd>${fp(pl.entry)}</dd><dt>Stop</dt><dd class="down">${fp(pl.stop)}</dd><dt>Objetivo</dt><dd class="up">${fp(pl.target)}</dd><dt>R:R</dt><dd>${nf(pl.rr, 1)}</dd>
+        <dt>Probabilidad</dt><dd>${ok(pl.prob) ? ppc(pl.prob) : '—'}</dd><dt>Tamaño (${nf(settings.riskPct, 1)} %)</dt><dd>${size}</dd></dl>
+        ${ok(pl.prob) ? `<p class="small">${esc(pl.probLabel)}</p>` : ''}</div>`;
+    }
+    html += '</div>';
+    if (p.risks.length) html += '<h3>Riesgos</h3><ul class="rules">' + p.risks.map((r) => `<li>${esc(r)}</li>`).join('') + '</ul>';
+    html += '<p class="small muted">Prospecto generado automáticamente con el análisis técnico, la proyección, la fuerza relativa, el calendario y los titulares disponibles. Es probabilístico: no es una predicción ni asesoramiento financiero.</p>';
+    el.innerHTML = html;
+    $('#pr-copy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(p.text);
+        toast('Informe copiado', ' Pégalo donde quieras (notas, correo…).', 0);
+      } catch (e) {
+        toast('No se pudo copiar', ' Tu navegador no permite copiar desde aquí.', 0);
+      }
+    };
+    $('#pr-news').onclick = () => loadNews(true);
+  }
+
   /* ---------- Símbolos ---------- */
   async function loadSymbols() {
     const cached = store.get('fx.symbols', null);
@@ -1320,6 +1859,7 @@
       save();
       state.scan = {};
       if (isFx()) load();
+      if (settings.scanOn) scanAll();
       if (state.tab === 'forex') renderForex();
     });
     $('#account').onchange = (e) => {
@@ -1444,8 +1984,14 @@
   setTimeout(() => (settings.scanOn ? scanAll() : scheduleScan()), 2500);
   loadForexData();
   setInterval(() => loadForexData(), 30 * 60e3);
+  loadNews();
+  setInterval(() => loadNews(true), 30 * 60e3);
+  // Mercados: índice y análisis de pares al arrancar y cada 30 minutos.
+  setTimeout(() => loadUniverse(), 4000);
+  setInterval(() => loadUniverse(true), 30 * 60e3);
+  if (window.radarDesktop && window.radarDesktop.onTab) window.radarDesktop.onTab((name) => $('#tab-' + name) && showTab(name));
   setInterval(() => state.tab === 'forex' && renderSessions(), 30e3);
 
   // Acceso para las pruebas de extremo a extremo.
-  window.__radar = { state, settings, chart, recompute, startDemo };
+  window.__radar = { state, settings, chart, recompute, startDemo, loadUniverse, analyzePairs };
 })();

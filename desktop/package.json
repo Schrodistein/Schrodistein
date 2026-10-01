@@ -1,7 +1,7 @@
 {
   "name": "radar-de-divisas",
   "productName": "Radar de Divisas",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Análisis técnico y cuantitativo de divisas y de Binance, con proyección del precio y avisos de entrada.",
   "main": "main.js",
   "author": "Schrodistein",

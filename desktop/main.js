@@ -24,13 +24,15 @@ const API_HOSTS = [
   'https://*.binance.vision', 'https://*.binance.com', 'wss://*.binance.vision', 'wss://stream.binance.com:9443',
   'https://api.twelvedata.com', 'https://api.frankfurter.dev', 'https://api.frankfurter.app', 'https://nfs.faireconomy.media',
 ];
+// Canales de noticias (bancos centrales y FXStreet): solo se leen titulares.
+const NEWS_HOSTS = ['https://www.federalreserve.gov', 'https://www.ecb.europa.eu', 'https://www.bankofengland.co.uk', 'https://www.boj.or.jp', 'https://www.fxstreet.com'];
 const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com",
   "img-src 'self' data:",
-  'connect-src ' + API_HOSTS.join(' '),
+  'connect-src ' + API_HOSTS.concat(NEWS_HOSTS).join(' '),
   "object-src 'none'",
   "base-uri 'none'",
   "frame-ancestors 'none'",
@@ -91,7 +93,7 @@ function serve() {
 
 // Algunos proveedores (calendario) no envían cabeceras CORS: en escritorio se añaden.
 function allowCors() {
-  const urls = ['https://nfs.faireconomy.media/*', 'https://api.frankfurter.dev/*', 'https://api.frankfurter.app/*', 'https://api.twelvedata.com/*'];
+  const urls = ['https://nfs.faireconomy.media/*', 'https://api.frankfurter.dev/*', 'https://api.frankfurter.app/*', 'https://api.twelvedata.com/*'].concat(NEWS_HOSTS.map((h) => h + '/*'));
   session.defaultSession.webRequest.onHeadersReceived({ urls }, (details, cb) => {
     const headers = {};
     for (const k of Object.keys(details.responseHeaders || {})) if (!/^access-control-allow-origin$/i.test(k)) headers[k] = details.responseHeaders[k];
@@ -147,6 +149,8 @@ function createTray() {
   const build = () =>
     Menu.buildFromTemplate([
       { label: 'Mostrar Radar de Divisas', click: show },
+      { label: 'Ver señales', click: () => goTab('signals') },
+      { label: 'Ver mercados', click: () => goTab('markets') },
       { type: 'separator' },
       {
         label: 'Seguir avisando al cerrar la ventana', type: 'checkbox', checked: prefs.closeToTray,
@@ -165,6 +169,11 @@ function createTray() {
     ]);
   tray.setContextMenu(build());
   tray.on('click', show);
+}
+
+function goTab(tab) {
+  show();
+  if (win) win.webContents.send('radar:tab', tab);
 }
 
 function createMenu() {
@@ -198,6 +207,13 @@ function createMenu() {
           { role: 'resetZoom', label: 'Tamaño real' }, { role: 'zoomIn', label: 'Ampliar' }, { role: 'zoomOut', label: 'Reducir' },
           { type: 'separator' }, { role: 'togglefullscreen', label: 'Pantalla completa' }, { role: 'toggleDevTools', label: 'Herramientas de desarrollo' },
         ],
+      },
+      {
+        label: 'Ir a',
+        submenu: [
+          ['signals', 'Señales'], ['markets', 'Mercados'], ['prospect', 'Prospecto'], ['projection', 'Proyección'], ['forex', 'Divisas'],
+          ['scanner', 'Escáner'], ['backtest', 'Backtest'], ['risk', 'Riesgo'],
+        ].map(([tab, label], k) => ({ label, accelerator: 'CmdOrCtrl+' + (k + 1), click: () => goTab(tab) })),
       },
       { label: 'Ayuda', submenu: [{ label: 'Acerca de Radar de Divisas', click: about }] },
     ])

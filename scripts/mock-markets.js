@@ -21,7 +21,14 @@ function market(symbol, interval) {
 const row = (k) => [k.t, String(k.o), String(k.h), String(k.l), String(k.c), String(k.v), k.T, '0', 100, '0', '0', '0'];
 
 // Tipos del BCE simulados: paseo aleatorio diario por divisa (base EUR), solo días laborables.
-const LEVEL = { USD: 1.13, JPY: 178, GBP: 0.855, CHF: 0.94, CAD: 1.58, AUD: 1.72, NZD: 1.95, MXN: 21, TRY: 47 };
+const LEVEL = { USD: 1.13, JPY: 178, GBP: 0.855, CHF: 0.94, CAD: 1.58, AUD: 1.72, NZD: 1.95, MXN: 21, TRY: 47, BRL: 6.2, SEK: 11.2, NOK: 11.8, PLN: 4.3, ZAR: 20.5, CNY: 8.1, INR: 96, KRW: 1560, SGD: 1.48 };
+// Pares de contado de Binance simulados (monedas nacionales y criptos).
+const BIN_SYMBOLS = [
+  ['EURUSDT', 'EUR', 'USDT'], ['EURUSDC', 'EUR', 'USDC'], ['BTCEUR', 'BTC', 'EUR'], ['USDTTRY', 'USDT', 'TRY'], ['BTCTRY', 'BTC', 'TRY'],
+  ['USDTBRL', 'USDT', 'BRL'], ['USDTARS', 'USDT', 'ARS'], ['USDTMXN', 'USDT', 'MXN'], ['USDTCOP', 'USDT', 'COP'], ['USDTUAH', 'USDT', 'UAH'],
+  ['BTCUSDT', 'BTC', 'USDT'], ['ETHUSDT', 'ETH', 'USDT'], ['PAXGUSDT', 'PAXG', 'USDT'],
+];
+const RSS = (items) => '<?xml version="1.0"?><rss version="2.0"><channel>' + items.map(([t, l]) => `<item><title>${t}</title><link>${l}</link><pubDate>${new Date(Date.now() - 3600e3).toUTCString()}</pubDate></item>`).join('') + '</channel></rss>';
 const ecbDays = {};
 function ecbRate(c, d) {
   if (!ecbDays[c]) {
@@ -60,6 +67,7 @@ async function mockForex(page) {
     const u = new URL(route.request().url());
     const q = Object.fromEntries(u.searchParams);
     const json = (b) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(b) });
+    if (u.pathname.endsWith('/forex_pairs')) return json({ status: 'ok', data: ['EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/MXN', 'USD/CLP', 'USD/PEN', 'EUR/SEK', 'XAU/USD', 'XAG/USD', 'USD/AED'].map((s) => ({ symbol: s, currency_group: 'Major' })) });
     if (q.apikey !== 'clave-prueba') return json({ code: 401, message: '**apikey** parameter is incorrect or not specified.', status: 'error' });
     if (u.pathname.endsWith('/time_series')) {
       const iv = TD_BACK[q.interval];
@@ -86,8 +94,24 @@ async function mockForex(page) {
   ]) }));
 }
 
+async function mockNews(page) {
+  const feeds = {
+    federalreserve: RSS([['Federal Reserve issues FOMC statement', 'https://www.federalreserve.gov/newsevents/pressreleases/a.htm']]),
+    ecb: RSS([['ECB keeps interest rates unchanged', 'https://www.ecb.europa.eu/press/pr/a.html'], ['Euro area inflation rises to 3.4%', 'https://www.ecb.europa.eu/press/pr/b.html']]),
+    bankofengland: RSS([['Bank Rate maintained', 'https://www.bankofengland.co.uk/news/a']]),
+    boj: RSS([['BoJ Tankan survey', 'https://www.boj.or.jp/en/a.htm']]),
+    fxstreet: RSS([['EUR/USD holds near 1.1330 ahead of US payrolls', 'https://www.fxstreet.com/news/a'], ['Gold slips as the dollar firms', 'https://www.fxstreet.com/news/b']]),
+  };
+  await page.route(/(federalreserve\.gov|ecb\.europa\.eu|bankofengland\.co\.uk|boj\.or\.jp|fxstreet\.com)\//, (route) => {
+    const host = new URL(route.request().url()).host;
+    const key = Object.keys(feeds).find((k) => host.includes(k));
+    route.fulfill({ contentType: 'application/rss+xml', body: feeds[key] });
+  });
+}
+
 async function mockBinance(page, ws) {
   await mockForex(page);
+  await mockNews(page);
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.abort());
   await page.route(/fapi\.binance\.com/, (r) => r.fulfill({ status: 400, contentType: 'application/json', body: '{"code":-1121,"msg":"Invalid symbol."}' }));
   await page.route(/binance\.(vision|com)\/api\/v3\//, (route) => {
@@ -100,6 +124,7 @@ async function mockBinance(page, ws) {
       if (q.endTime) C = C.filter((k) => k.t <= +q.endTime);
       return json(C.slice(-(+q.limit || 500)).map(row));
     }
+    if (u.pathname.endsWith('/exchangeInfo') && !q.symbol) return json({ symbols: BIN_SYMBOLS.map(([s, b, qq]) => ({ symbol: s, status: 'TRADING', baseAsset: b, quoteAsset: qq })) });
     if (u.pathname.endsWith('/exchangeInfo')) {
       const fx = q.symbol.startsWith('EUR');
       return json({ symbols: [{ symbol: q.symbol, status: 'TRADING', baseAsset: q.symbol.replace(/USDT$/, ''), quoteAsset: 'USDT', filters: [
@@ -107,6 +132,12 @@ async function mockBinance(page, ws) {
         { filterType: 'LOT_SIZE', stepSize: fx ? '0.10000000' : '0.00001000', minQty: '0.1' },
         { filterType: 'NOTIONAL', minNotional: '5.00000000' },
       ] }] });
+    }
+    if (u.pathname.endsWith('/ticker/24hr') && q.symbols) {
+      return json(JSON.parse(q.symbols).map((sym) => {
+        const C = market(sym, '1h');
+        return { symbol: sym, openPrice: String(C[C.length - 25].o), lastPrice: String(C[C.length - 1].c), quoteVolume: '1000000' };
+      }));
     }
     if (u.pathname.endsWith('/ticker/24hr')) {
       const C = market(q.symbol, '1h');
@@ -120,4 +151,4 @@ async function mockBinance(page, ws) {
   await page.routeWebSocket(/binance/, (socket) => ws.push(socket));
 }
 
-module.exports = { market, mockBinance, mockForex };
+module.exports = { market, mockBinance, mockForex, mockNews };

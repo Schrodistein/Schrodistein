@@ -7,6 +7,13 @@
 <p>Radar de Divisas descarga las velas del par que elijas desde Binance, las analiza con las principales escuelas de análisis técnico y cuantitativo y combina todas las evidencias en una <strong>puntuación de confluencia</strong> para comprar y otra para vender. Cuando una supera el umbral de tu perfil, hay un disparador reciente y no va contra la tendencia (si el filtro está activo), aparece una señal con entrada, stop, objetivo y tamaño de posición, y recibes un aviso.</p>
 <p>Las señales se calculan solo con <strong>velas cerradas</strong>: la vela en curso puede cambiar hasta su cierre y daría falsas alarmas.</p>
 
+<h3>Las pestañas principales</h3>
+<dl>
+  <dt>Señales</dt><dd>Tablero con todas las señales de compra y venta detectadas en el gráfico, en tu lista del escáner y en el análisis de pares de Mercados. Cada señal se sigue sola hasta que toca el objetivo, el stop o pasan 48 velas, y el tablero lleva la cuenta: porcentaje de acierto y resultado medio en R. Es la forma honesta de saber si las señales funcionan.</dd>
+  <dt>Mercados</dt><dd>Busca e indexa todas las divisas que cotizan en las fuentes conectadas: las del BCE, las monedas nacionales que se negocian en Binance (a partir de su lista completa de pares) y el catálogo de pares de Twelve Data. Para cada divisa muestra su valor en dólares, su cambio en un día, una semana y un mes, su volatilidad, su tendencia y su fuerza frente a las demás. Después construye los pares (los 28 cruces de las 8 principales, el resto frente a USD y EUR o todas las combinaciones), los analiza con el motor de señales y los ordena por oportunidad. Se actualiza cada 30 minutos.</dd>
+  <dt>Prospecto</dt><dd>Informe del par abierto que reúne el análisis de las últimas velas, el técnico por escuelas, la proyección, la fuerza relativa de cada divisa, sus bancos centrales, el calendario económico y los titulares recientes de la Reserva Federal, el BCE, el Banco de Inglaterra, el Banco de Japón y FXStreet. Termina con un sesgo y su nivel de confianza, planes de compra y de venta con entrada, stop, objetivo, tamaño y probabilidad, y los riesgos. Los titulares se leen sobre todo en la app de escritorio: muchos navegadores bloquean estos canales.</dd>
+</dl>
+
 <h3>Escuelas de análisis que combina</h3>
 <dl>
   <dt>Tendencia — teoría de Dow, medias, ADX, Ichimoku, Supertrend</dt>

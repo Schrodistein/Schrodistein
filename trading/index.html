@@ -111,7 +111,10 @@
   </div>
 
   <nav class="tabs" role="tablist" aria-label="Secciones">
-    <button role="tab" type="button" data-tab="projection" aria-selected="true">Proyección</button>
+    <button role="tab" type="button" data-tab="signals" aria-selected="true">Señales</button>
+    <button role="tab" type="button" data-tab="markets">Mercados</button>
+    <button role="tab" type="button" data-tab="prospect">Prospecto</button>
+    <button role="tab" type="button" data-tab="projection">Proyección</button>
     <button role="tab" type="button" data-tab="forex">Divisas</button>
     <button role="tab" type="button" data-tab="analysis">Análisis</button>
     <button role="tab" type="button" data-tab="patterns">Patrones</button>
@@ -122,7 +125,10 @@
     <button role="tab" type="button" data-tab="guide">Guía</button>
   </nav>
 
-  <section class="tab panel" id="tab-projection" role="tabpanel"></section>
+  <section class="tab panel" id="tab-signals" role="tabpanel"></section>
+  <section class="tab panel" id="tab-markets" role="tabpanel" hidden></section>
+  <section class="tab panel prose-wide" id="tab-prospect" role="tabpanel" hidden></section>
+  <section class="tab panel" id="tab-projection" role="tabpanel" hidden></section>
   <section class="tab panel" id="tab-forex" role="tabpanel" hidden></section>
   <section class="tab panel" id="tab-analysis" role="tabpanel" hidden></section>
   <section class="tab panel" id="tab-patterns" role="tabpanel" hidden></section>
@@ -202,6 +208,8 @@
 <script src="js/binance.js"></script>
 <script src="js/forex.js"></script>
 <script src="js/feeds.js"></script>
+<script src="js/universe.js"></script>
+<script src="js/prospect.js"></script>
 <script src="js/chart.js"></script>
 <script src="js/guide.js"></script>
 <script src="js/app.js"></script>

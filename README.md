@@ -74,6 +74,12 @@ Aplicación web instalable (PWA) que analiza divisas y los mercados de Binance, 
 | BCE (Frankfurter) | Tipos de referencia diarios de ~30 divisas desde 1999; fuerza relativa y correlaciones | No |
 | Forex Factory | Calendario económico semanal; aviso de datos de alto impacto en las próximas 24 h | No |
 
+Tres pestañas organizan el trabajo:
+
+- **Señales**: tablero con todas las señales de compra y venta (del gráfico, del escáner y del análisis de mercados), con seguimiento automático de cada una (activa, objetivo, stop o caducada) y el historial de acierto y resultado medio en R.
+- **Mercados**: índice de todas las divisas que cotizan en el BCE, en Binance (monedas nacionales detectadas en su lista completa de pares) y en Twelve Data, con su valor en USD, cambios a 1 día, 1 semana y 1 mes, volatilidad, tendencia y fuerza; mapa de calor de las 8 principales; y construcción y análisis automático de pares (cruces principales, resto frente a USD y EUR, o todas las combinaciones) ordenados por oportunidad.
+- **Prospecto**: informe del par con análisis de velas, técnico por escuelas, proyección, fuerza relativa, bancos centrales, calendario y titulares (Reserva Federal, BCE, Banco de Inglaterra, Banco de Japón y FXStreet), sesgo con nivel de confianza, planes de compra y venta con probabilidades, y riesgos. Se puede copiar como texto.
+
 La pestaña **Divisas** reúne las sesiones (Sídney, Tokio, Londres, Nueva York con horario de verano), el calendario, la fuerza de las 8 divisas principales y la matriz de correlaciones. La calculadora de riesgo da el tamaño en **lotes**, el stop en **pips** y el valor del pip en la divisa de la cuenta.
 
 ```bash
@@ -157,7 +163,9 @@ trading/js/signals.js       motor de confluencia y temporalidad superior
 trading/js/backtest.js      tamaño de posición y backtest
 trading/js/binance.js       datos públicos de Binance (REST, WebSocket, futuros)
 trading/js/forex.js         pares, pips y lotes, sesiones, fuerza relativa, correlaciones, calendario
-trading/js/feeds.js         fuentes con interfaz común: Binance, Twelve Data, BCE y Forex Factory
+trading/js/feeds.js         fuentes con interfaz común: Binance, Twelve Data, BCE, Forex Factory y noticias (RSS)
+trading/js/universe.js      catálogo e índice de divisas, métricas, construcción de pares y seguimiento de señales
+trading/js/prospect.js      prospecto por par: velas, técnico, proyección, fundamentales, planes y riesgos
 trading/js/chart.js         gráfico de velas en canvas
 trading/js/guide.js         contenido de la guía
 trading/js/app.js           controlador de la interfaz

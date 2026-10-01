@@ -109,6 +109,30 @@
     };
   }
 
+  // Todos los pares de contado en negociación: [{ symbol, base, quote }].
+  async function exchangeInfoAll() {
+    let data;
+    try {
+      data = await get('/api/v3/exchangeInfo', { permissions: 'SPOT', symbolStatus: 'TRADING' });
+    } catch (e) {
+      data = await get('/api/v3/exchangeInfo');
+    }
+    return (data.symbols || []).filter((s) => !s.status || s.status === 'TRADING').map((s) => ({ symbol: s.symbol, base: s.baseAsset, quote: s.quoteAsset }));
+  }
+
+  // Estadísticas de 24 h de varios pares en una sola petición.
+  async function tickers(list) {
+    if (!list.length) return {};
+    const rows = await get('/api/v3/ticker/24hr', { symbols: JSON.stringify(list), type: 'MINI' });
+    const out = {};
+    for (const r of rows) {
+      const open = +r.openPrice;
+      const last = +r.lastPrice;
+      out[r.symbol] = { last, open, changePct: open ? (last / open - 1) * 100 : 0, quoteVolume: +r.quoteVolume };
+    }
+    return out;
+  }
+
   async function symbols() {
     const rows = await get('/api/v3/ticker/price');
     return rows.map((r) => r.symbol).sort();
@@ -221,5 +245,5 @@
     return 'https://www.binance.com/es/markets/overview';
   }
 
-  FX.binance = { REST, WS, ApiError, get, parseKline, parseWsKline, klines, history, symbolInfo, symbols, ticker24, sentiment, stream, tradeUrl };
+  FX.binance = { REST, WS, ApiError, get, parseKline, parseWsKline, klines, history, symbolInfo, symbols, exchangeInfoAll, tickers, ticker24, sentiment, stream, tradeUrl };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

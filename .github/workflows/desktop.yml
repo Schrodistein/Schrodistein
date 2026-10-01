@@ -62,7 +62,32 @@ jobs:
         with:
           path: instaladores
           merge-multiple: true
+      # Como las demás apps de escritorio del repositorio, se publica como prerelease.
       - uses: softprops/action-gh-release@v2
         with:
+          name: Radar de Divisas ${{ github.ref_name }} (escritorio)
+          prerelease: true
           files: instaladores/*
-          generate_release_notes: true
+          body: |
+            Aplicación de escritorio de **Radar de Divisas**: análisis técnico y cuantitativo de divisas y de Binance, con proyección del precio y avisos de entrada.
+
+            ### Descarga
+            | Sistema | Archivo |
+            |---|---|
+            | Windows (instalador) | `Radar-de-Divisas-*-win-x64.exe` |
+            | Windows (portable, sin instalar) | `Radar-de-Divisas-*-portable.exe` |
+            | macOS (Intel y Apple Silicon) | `Radar-de-Divisas-*-mac-universal.dmg` |
+            | Linux | `Radar-de-Divisas-*-linux-x86_64.AppImage` |
+
+            ### Primera apertura
+            Los instaladores no están firmados:
+            - **Windows**: si aparece SmartScreen, pulsa «Más información» → «Ejecutar de todas formas».
+            - **macOS**: clic derecho sobre la app → «Abrir».
+            - **Linux**: `chmod +x` al archivo `.AppImage` y ábrelo.
+
+            ### Novedades de la versión de escritorio
+            - Sigue en la bandeja del sistema al cerrar la ventana: el escáner y los avisos continúan.
+            - Notificaciones del sistema que abren la ventana; opción «Iniciar con el sistema» (Windows y macOS).
+            - Divisas reales (Twelve Data con clave gratuita, tipos diarios del BCE), calendario económico, sesiones, fuerza de las divisas y correlaciones.
+
+            La app no envía órdenes ni accede a tu cuenta. Las señales son probabilísticas y no constituyen asesoramiento financiero.

@@ -23,11 +23,13 @@ jobs:
         with:
           node-version: 22
       - name: Pruebas
-        run: node tests/run.js
+        run: |
+          node tests/run.js
+          node tests/trading.js
       - name: Preparar sitio
         run: |
           mkdir -p _site
-          cp -r index.html manifest.webmanifest sw.js css js icons _site/
+          cp -r index.html manifest.webmanifest sw.js css js icons trading _site/
       - uses: actions/configure-pages@v5
         with:
           enablement: true

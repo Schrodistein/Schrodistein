@@ -5,8 +5,10 @@
   "private": true,
   "scripts": {
     "start": "npx http-server -p 8080 -c-1 .",
-    "test": "node tests/run.js",
+    "test": "node tests/run.js && node tests/trading.js",
     "e2e": "node scripts/e2e.js",
+    "e2e:trading": "node scripts/e2e-trading.js",
+    "scan": "node scripts/scan.js",
     "build:single": "node scripts/build-single.js"
   },
   "license": "MIT"

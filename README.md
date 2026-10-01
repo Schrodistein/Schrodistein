@@ -60,3 +60,74 @@ js/app.js             controlador de la interfaz
 sw.js                 service worker (uso sin conexión)
 tests/run.js          pruebas
 ```
+
+---
+
+# Radar de Divisas (`trading/`)
+
+Aplicación web instalable (PWA) que analiza los mercados de Binance, reconoce patrones, proyecta el comportamiento del precio y avisa de entradas de compra y venta. Sin dependencias y sin claves: usa solo los datos públicos de Binance y **no envía órdenes** (tú decides y ejecutas).
+
+```bash
+npm start              # abre http://localhost:8080/trading/
+npm test               # pruebas de las dos apps (Node, sin dependencias)
+npm run e2e:trading    # extremo a extremo con Binance simulado (Playwright)
+npm run scan -- --symbols EURUSDT,BTCUSDT --interval 1h            # escáner de consola
+npm run scan -- --watch                                            # avisos 24/7 (Telegram opcional)
+npm run scan -- --symbols EURUSDT --interval 4h --backtest --bars 5000
+```
+
+Para recibir los avisos del escáner de consola en Telegram, define `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
+
+## Qué analiza
+
+Cada vela cerrada se evalúa con todas las escuelas y se combina en una puntuación de confluencia para compra y otra para venta. Cada escuela tiene un tope de puntos (los indicadores de una misma familia están correlacionados) y los factores en contra restan.
+
+| Escuela | Herramientas |
+|---|---|
+| Tendencia | Teoría de Dow (máximos/mínimos), EMA 20/50/200, ADX ±DI, Ichimoku, Supertrend |
+| Temporalidad superior | Tendencia del marco mayor reconstruida con las propias velas (1 h → 4 h, 4 h → 1 d…) |
+| Momento | RSI, MACD, estocástico, CCI, divergencias normales y ocultas (RSI y MACD) |
+| Volatilidad | Bollinger, squeeze Bollinger/Keltner, canal de Donchian |
+| Volumen | OBV, MFI, Chaikin Money Flow, VWAP, picos de volumen |
+| Velas japonesas | Martillo, estrella fugaz, envolventes, línea penetrante, nube oscura, harami, pinzas, estrellas de la mañana/atardecer, tres soldados/cuervos, doji |
+| Estructura y chartismo | Soportes y resistencias por agrupación de pivotes, rupturas con volumen, doble suelo/techo, HCH e HCH invertido, triángulos, cuñas, canales, banderas, Fibonacci, puntos pivote, BOS/CHoCH, huecos de valor (FVG) |
+| Estadística | Pendiente de regresión con t de Student, régimen de Hurst (modula el peso de los disparadores de tendencia y de reversión) |
+
+Una señal exige un disparador en esa vela, superar el umbral del perfil (conservador, equilibrado o agresivo), ventaja sobre el lado contrario y, si el filtro está activo, no ir contra la tendencia. Incluye entrada, stop (ATR o extremo reciente), objetivo por R:R y tamaño de posición con comisiones.
+
+## Proyección
+
+- Volatilidad con **GARCH(1,1)** ajustado por máxima verosimilitud.
+- **Simulación histórica filtrada** (2 000 trayectorias con los residuos reales del par) → cono de precios al 50 % y 90 % y probabilidad de tocar el objetivo antes que el stop (con corrección de puente browniano).
+- **Régimen**: exponente de Hurst (R/S con la corrección de Anis-Lloyd-Peters) y ratio de varianzas de Lo-MacKinlay.
+- **Tasas base empíricas**: qué hizo realmente el par tras situaciones con el mismo sesgo, con intervalo de Wilson y muestras sin solapamiento.
+- Escenarios alcista, bajista y central, niveles clave y sentimiento de futuros (financiación, interés abierto, ratio largos/cortos).
+
+## Validación
+
+- **Backtest** con el mismo motor que en vivo: señal al cierre, entrada en la apertura siguiente, comisiones, deslizamiento, salida por tiempo y stop primero si una vela toca stop y objetivo. Muestra el intervalo de confianza de la esperanza y lo compara con comprar y mantener.
+- Las pruebas comprueban que **ningún cálculo mira al futuro** (la señal en la vela *i* es idéntica con o sin las velas posteriores).
+
+## Limitaciones
+
+Ningún análisis garantiza ganancias. No incluye análisis fundamental ni noticias (consulta un calendario económico), ni ondas de Elliott o patrones armónicos (demasiado subjetivos para automatizarlos). Binance es un exchange de criptomonedas: sus pares tipo divisa son de monedas estables frente a monedas nacionales (EURUSDT, USDTTRY, USDTBRL…) y oro tokenizado (PAXGUSDT); en spot no se puede vender en corto. Los avisos de la app web llegan mientras está abierta; para 24/7 usa el escáner de consola.
+
+## Estructura
+
+```
+trading/index.html          interfaz
+trading/css/styles.css      estilos (tema claro y oscuro)
+trading/js/core.js          utilidades, temporalidades y mercado sintético (pruebas y demo)
+trading/js/indicators.js    indicadores técnicos causales
+trading/js/patterns.js      velas, pivotes, niveles, figuras, Fibonacci, estructura, FVG, divergencias
+trading/js/stats.js         Hurst, ratio de varianzas, GARCH, simulación y tasas base
+trading/js/signals.js       motor de confluencia y temporalidad superior
+trading/js/backtest.js      tamaño de posición y backtest
+trading/js/binance.js       datos públicos de Binance (REST, WebSocket, futuros)
+trading/js/chart.js         gráfico de velas en canvas
+trading/js/guide.js         contenido de la guía
+trading/js/app.js           controlador de la interfaz
+trading/sw.js               service worker (uso sin conexión y notificaciones)
+scripts/scan.js             escáner de consola con avisos por Telegram
+tests/trading.js            pruebas
+```

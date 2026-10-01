@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radar de Divisas</title>
+<meta name="description" content="Análisis técnico y cuantitativo de los mercados de Binance: reconoce patrones, proyecta el precio y avisa de entradas de compra y venta.">
+<meta name="theme-color" content="#0d1117">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap bar">
+    <a class="brand" href="./" aria-label="Radar de Divisas, inicio">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--brand)"/><path d="M7 22 L12 15 L16 18 L22 9 L25 12" fill="none" stroke="var(--brand-ink)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="25" cy="12" r="2.4" fill="var(--brand-ink)"/></svg>
+      <span>Radar de Divisas</span>
+    </a>
+    <div class="conn" id="conn" data-state="idle"><i aria-hidden="true"></i><span>Sin conexión</span></div>
+    <button class="btn small" type="button" id="bell" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 7 2 7H4s2-2 2-7Z M10 20a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Activar avisos</span>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="notice" id="notice" hidden>
+    <p><strong>Antes de empezar.</strong> Esta app analiza el mercado y te avisa cuando muchas señales técnicas coinciden, pero ningún análisis garantiza ganancias: el precio puede ir en contra. No existe el dinero rápido y seguro. Comprueba cada estrategia en la pestaña <em>Backtest</em>, arriesga como mucho un 1–2 % de tu capital por operación y opera solo con dinero que puedas permitirte perder. No es asesoramiento financiero.</p>
+    <button class="btn small" type="button" id="notice-ok">Entendido</button>
+  </div>
+
+  <form class="toolbar" id="toolbar" autocomplete="off" onsubmit="return false">
+    <label class="fld sym">
+      <span>Par</span>
+      <input id="symbol" list="symbols" spellcheck="false" autocapitalize="characters" placeholder="EURUSDT">
+      <datalist id="symbols"></datalist>
+    </label>
+    <label class="fld">
+      <span>Temporalidad</span>
+      <select id="interval">
+        <option value="1m">1 min</option><option value="5m">5 min</option><option value="15m">15 min</option><option value="30m">30 min</option>
+        <option value="1h">1 hora</option><option value="4h">4 horas</option><option value="1d">1 día</option><option value="1w">1 semana</option>
+      </select>
+    </label>
+    <label class="fld">
+      <span>Perfil</span>
+      <select id="profile"><option value="conservador">Conservador</option><option value="equilibrado">Equilibrado</option><option value="agresivo">Agresivo</option></select>
+    </label>
+    <label class="fld">
+      <span>Mercado</span>
+      <select id="market"><option value="spot">Spot (solo compras)</option><option value="futures">Futuros/margen (compra y venta)</option></select>
+    </label>
+    <button class="btn primary" type="button" id="go">Analizar</button>
+    <details class="settings" id="settings">
+      <summary>Ajustes</summary>
+      <div class="grid-set">
+        <label class="check"><input type="checkbox" id="trendFilter"> <span>Solo a favor de la tendencia principal</span></label>
+        <label class="check"><input type="checkbox" id="mtfFilter"> <span>Exigir acuerdo con la temporalidad superior</span></label>
+        <label class="fld"><span>Beneficio / riesgo (R:R)</span><input type="number" id="rr" min="0.5" max="10" step="0.25"></label>
+        <label class="fld"><span>Stop (múltiplo del ATR)</span><input type="number" id="atrStop" min="0.5" max="6" step="0.25"></label>
+        <label class="fld"><span>Capital</span><input type="number" id="capital" min="1" step="any"></label>
+        <label class="fld"><span>Riesgo por operación (%)</span><input type="number" id="riskPct" min="0.1" max="10" step="0.1"></label>
+        <label class="fld"><span>Comisión por lado (%)</span><input type="number" id="fee" min="0" max="1" step="0.01"></label>
+        <label class="fld"><span>Horizonte de proyección (velas)</span><input type="number" id="horizon" min="4" max="96" step="1"></label>
+        <label class="check"><input type="checkbox" id="sound"> <span>Sonido en los avisos</span></label>
+      </div>
+    </details>
+  </form>
+
+  <div class="layout">
+    <section class="panel chart-panel" aria-label="Gráfico">
+      <div class="chart-head">
+        <div class="quote">
+          <h1 id="q-sym">—</h1>
+          <span class="num big" id="q-price">—</span>
+          <span class="chip num" id="q-chg">—</span>
+        </div>
+        <div class="small muted num" id="q-meta">&nbsp;</div>
+      </div>
+      <div class="chart-tools">
+        <div class="toggles" role="group" aria-label="Capas del gráfico">
+          <button type="button" data-layer="ema" class="tg">Medias</button>
+          <button type="button" data-layer="bb" class="tg">Bollinger</button>
+          <button type="button" data-layer="ich" class="tg">Ichimoku</button>
+          <button type="button" data-layer="levels" class="tg">Niveles y figuras</button>
+          <button type="button" data-layer="fib" class="tg">Fibonacci</button>
+          <button type="button" data-layer="proj" class="tg">Proyección</button>
+        </div>
+        <div class="row tight">
+          <select id="lower" aria-label="Panel inferior"><option value="rsi">RSI</option><option value="macd">MACD</option><option value="stoch">Estocástico</option><option value="none">Sin panel</option></select>
+          <button type="button" class="btn icon" id="zoom-in" aria-label="Acercar">+</button>
+          <button type="button" class="btn icon" id="zoom-out" aria-label="Alejar">−</button>
+          <button type="button" class="btn icon" id="zoom-reset" aria-label="Restablecer vista">⟲</button>
+        </div>
+      </div>
+      <div class="chart-box"><canvas id="chart" aria-label="Gráfico de velas del par seleccionado" role="img"></canvas></div>
+      <div class="legend small"><span><i style="background:var(--ema20)"></i>EMA 20</span><span><i style="background:var(--ema50)"></i>EMA 50</span><span><i style="background:var(--ema200)"></i>EMA 200</span><span><i style="background:var(--up)"></i>Soporte</span><span><i style="background:var(--down)"></i>Resistencia</span><span><i style="background:var(--proj)"></i>Cono 50 % / 90 %</span></div>
+      <div class="error" id="load-error" hidden></div>
+    </section>
+
+    <aside class="panel signal" id="signal" aria-live="polite"></aside>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button role="tab" type="button" data-tab="projection" aria-selected="true">Proyección</button>
+    <button role="tab" type="button" data-tab="analysis">Análisis</button>
+    <button role="tab" type="button" data-tab="patterns">Patrones</button>
+    <button role="tab" type="button" data-tab="scanner">Escáner</button>
+    <button role="tab" type="button" data-tab="alerts">Avisos <b class="badge" id="alert-badge" hidden></b></button>
+    <button role="tab" type="button" data-tab="backtest">Backtest</button>
+    <button role="tab" type="button" data-tab="risk">Riesgo</button>
+    <button role="tab" type="button" data-tab="guide">Guía</button>
+  </nav>
+
+  <section class="tab panel" id="tab-projection" role="tabpanel"></section>
+  <section class="tab panel" id="tab-analysis" role="tabpanel" hidden></section>
+  <section class="tab panel" id="tab-patterns" role="tabpanel" hidden></section>
+
+  <section class="tab panel" id="tab-scanner" role="tabpanel" hidden>
+    <div class="row wrap-row">
+      <h2>Escáner de pares</h2>
+      <label class="check"><input type="checkbox" id="scan-on"> <span>Escanear automáticamente</span></label>
+      <label class="fld inline"><span>Temporalidad</span>
+        <select id="scan-interval"><option value="5m">5 min</option><option value="15m">15 min</option><option value="30m">30 min</option><option value="1h">1 hora</option><option value="4h">4 horas</option><option value="1d">1 día</option></select>
+      </label>
+      <button class="btn small" type="button" id="scan-now">Escanear ahora</button>
+    </div>
+    <p class="small muted">Revisa tu lista al cierre de cada vela y te avisa de las señales nuevas. Funciona mientras la app esté abierta (aunque esté en segundo plano). Para avisos 24/7 usa el escáner de consola (<code>npm run scan</code>), que puede enviarlos a Telegram.</p>
+    <form class="row" id="watch-form" onsubmit="return false">
+      <input id="watch-add" list="symbols" placeholder="Añadir par, p. ej. GBPUSDT" spellcheck="false" autocapitalize="characters">
+      <button class="btn small" type="submit" id="watch-add-btn">Añadir</button>
+    </form>
+    <div class="table-wrap"><table class="table" id="scan-table"></table></div>
+    <p class="small muted" id="scan-status"></p>
+  </section>
+
+  <section class="tab panel" id="tab-alerts" role="tabpanel" hidden>
+    <div class="row wrap-row"><h2>Historial de avisos</h2><button class="btn small" type="button" id="alerts-clear">Borrar historial</button><button class="btn small" type="button" id="alert-test">Probar aviso</button></div>
+    <p class="small muted" id="notif-state"></p>
+    <div id="alerts-list"></div>
+  </section>
+
+  <section class="tab panel" id="tab-backtest" role="tabpanel" hidden>
+    <div class="row wrap-row">
+      <h2>Backtest</h2>
+      <label class="fld inline"><span>Histórico</span><select id="bt-bars"><option value="1000">1 000 velas</option><option value="3000" selected>3 000 velas</option><option value="5000">5 000 velas</option></select></label>
+      <label class="fld inline"><span>Salida por tiempo (velas)</span><input type="number" id="bt-maxbars" value="48" min="2" max="500"></label>
+      <button class="btn primary small" type="button" id="bt-run">Ejecutar backtest</button>
+    </div>
+    <p class="small muted">Simula la estrategia actual (perfil, filtros, R:R, stop, comisión y riesgo de los ajustes) sobre el histórico real del par: señal al cierre de la vela, entrada en la apertura siguiente, comisiones y un deslizamiento del 0,02 % por lado. Si en una vela se tocan el stop y el objetivo, cuenta el stop.</p>
+    <div id="bt-out"></div>
+  </section>
+
+  <section class="tab panel" id="tab-risk" role="tabpanel" hidden>
+    <h2>Calculadora de posición</h2>
+    <div class="grid-set">
+      <label class="fld"><span>Capital</span><input type="number" id="rk-capital" step="any"></label>
+      <label class="fld"><span>Riesgo (%)</span><input type="number" id="rk-risk" step="0.1"></label>
+      <label class="fld"><span>Entrada</span><input type="number" id="rk-entry" step="any"></label>
+      <label class="fld"><span>Stop</span><input type="number" id="rk-stop" step="any"></label>
+      <label class="fld"><span>Objetivo (opcional)</span><input type="number" id="rk-target" step="any"></label>
+      <label class="fld"><span>Apalancamiento máximo</span><input type="number" id="rk-lev" value="1" min="1" max="20" step="1"></label>
+    </div>
+    <div class="row"><button class="btn small" type="button" id="rk-fill">Usar la señal actual</button></div>
+    <div id="rk-out"></div>
+    <h3>Reglas que más dinero ahorran</h3>
+    <ul class="rules">
+      <li>Decide el stop <strong>antes</strong> de entrar y no lo alejes nunca.</li>
+      <li>Arriesga un porcentaje fijo y pequeño (0,5–2 %). Con un 1 %, diez pérdidas seguidas te dejan con el 90 % del capital; con un 10 %, con el 35 %.</li>
+      <li>Con R:R 2, basta acertar más de un 33 % de las veces (más comisiones) para ganar a largo plazo.</li>
+      <li>Evita el apalancamiento alto: multiplica también las pérdidas y puede liquidarte.</li>
+      <li>Lleva un diario de operaciones y revisa los resultados cada 30–50 operaciones, no cada día.</li>
+    </ul>
+  </section>
+
+  <section class="tab panel prose" id="tab-guide" role="tabpanel" hidden></section>
+
+  <footer class="foot small muted">
+    <p>Datos públicos de Binance. La app no tiene acceso a tu cuenta ni envía órdenes: tú decides y ejecutas. Señales probabilísticas con fines educativos; no constituyen asesoramiento financiero.</p>
+  </footer>
+</main>
+
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<script src="js/core.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/patterns.js"></script>
+<script src="js/stats.js"></script>
+<script src="js/signals.js"></script>
+<script src="js/backtest.js"></script>
+<script src="js/binance.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/guide.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

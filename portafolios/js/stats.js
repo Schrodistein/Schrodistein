@@ -420,13 +420,13 @@
     // Días sin negociación: la BVC repite un precio de referencia con cantidad vacía.
     // Si el archivo trae cantidad o volumen y casi siempre tiene valor, esos días se omiten.
     const qi = hd.head.findIndex((h, i) => i !== hd.pi && /^(cantidad|volumen|volume|vol)( |$)/.test(norm(h)));
-    const qty = (r) => (typeof r[qi] === 'number' ? r[qi] : parseNumber(clean(r[qi]), false));
+    const numAt = (r, k) => (typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), false));
+    const qty = (r) => numAt(r, qi);
     const withQty = qi >= 0 ? body.filter((r) => qty(r) > 0).length : 0;
     const skipNoTrade = qi >= 0 && withQty >= 0.5 * body.length;
     // Cantidad de acciones y monto negociado de cada día (para medir la liquidez del COLEQTY)
     const ci = hd.head.findIndex((h, i) => i !== hd.pi && /^cantidad( |$)/.test(norm(h)));
     const mi = hd.head.findIndex((h, i) => i !== hd.pi && /^(volumen|monto|volume)( |$)/.test(norm(h)));
-    const numAt = (r, k) => (typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), false));
     let noTrade = 0;
     const groups = new Map();
     const durs = [];

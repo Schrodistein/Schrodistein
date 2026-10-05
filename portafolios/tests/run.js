@@ -712,7 +712,7 @@ test('índices: volumen, rotación y frecuencia del COLEQTY; índice propio por 
   assert(near(pr.values[1], 100 * 160 / 150, 1e-9), 'ponderado por precios = Σ P / divisor');
   assert(PF.indices.buildIndex(table, ['A', 'B'], 'cap', { shares: { A: 10 }, V: {} }).error, 'falta N de B');
   // Página del sistema financiero con referencias
-  const html = PF.sistema.render({ macro: {}, results: {}, classes: ['accion', 'cdt'], esc: String, pct: String }) + PF.indices.render({ series: [A, B], table, model: null, shares: {}, clsOf: () => 'accion', esc: String, pct: String });
+  const html = PF.sistema.render({ macro: {}, results: {}, classes: ['accion', 'cdt'], esc: String }) + PF.indices.render({ series: [A, B], table, model: null, shares: {}, method: 'liq', clsOf: () => 'accion', esc: String, num: String, pct: String, money: String });
   assert(/Mercado monetario/.test(html) && /Mercado extrabursátil/.test(html) && /COLEQTY/.test(html) && /Markowitz, H\. \(1952\)/.test(html) && /class="sf-node on/.test(html));
 });
 

@@ -95,23 +95,23 @@
     return s;
   }
 
-  /* ctx: { macro: datos macro, results: relaciones con el índice, classes: tipos de los activos cargados, marketName, esc, pct } */
+  /* ctx: { macro: datos macro, results: relaciones con el índice, classes: tipos de los activos cargados, marketName, esc } */
   function render(ctx) {
     const esc = ctx.esc;
     const classes = new Set(ctx.classes || []);
-    const active = new Set(NODES.filter((n) => n[4].some((c) => classes.has(c))).map((n) => n[0]));
-    if ([...active].some((id) => ['bur', 'ext'].includes(id))) active.add('val').add('cap');
-    if ([...active].some((id) => ['bco', 'oin'].includes(id))) active.add('ban').add('cap');
-    if (active.size) active.add('sf');
-    const nf = (x, d = 1) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    // Nodos con activos cargados y todos sus antecesores en el árbol
+    const parentOf = Object.fromEntries(NODES.map((n) => [n[0], n[3]]));
+    const active = new Set();
+    for (const n of NODES) if (n[4].some((c) => classes.has(c))) for (let id = n[0]; id; id = parentOf[id]) active.add(id);
+    const nf = (x) => (fin(x) ? x.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—');
     const last = (k) => {
       const d = ctx.macro && ctx.macro[k];
       return d && d.values && d.values.length ? { v: d.values[d.values.length - 1], t: d.dates[d.dates.length - 1] } : null;
     };
     const L = { pib: last('pib'), inflacion: last('inflacion'), desempleo: last('desempleo'), trm: last('trm') };
     const R = ctx.results || {};
-    const rel = (k) => (R[k] && R[k].ok ? ` Con tus datos, la correlación del rendimiento de ${esc(ctx.marketName || 'el índice')} con su cambio es ${nf(R[k].corr, 2)} (n = ${R[k].n}).` : '');
-    const val = (k, unit) => (L[k] ? `<b>${k === 'trm' ? Math.round(L[k].v).toLocaleString('es-CO') : nf(L[k].v)}${unit}</b> (${esc(L[k].t)})` : '<span class="sub">sin dato: actualízalo en Macro</span>');
+    const rel = (k) => (R[k] && R[k].ok ? ` Con tus datos, la correlación del rendimiento de ${esc(ctx.marketName || 'el índice')} con su cambio es ${nf(R[k].corr)} (n = ${R[k].n}).` : '');
+    const val = (k) => (L[k] ? `<b>${PF.macro.fmtValue(k, L[k].v)}</b>${k === 'trm' ? ' pesos por dólar' : ''} (${esc(L[k].t)})` : '<span class="sub">sin dato: actualízalo en Macro</span>');
 
     const out = [];
     out.push(`<div class="panel"><h2>1. El sistema económico</h2>
@@ -123,9 +123,9 @@
     out.push(`<div class="panel"><h2>2. El sistema financiero: transforma el ahorro en inversión</h2>
       <p><b>Sistema financiero</b>: el conjunto de instituciones, medios y mercados que canalizan el ahorro generado por los prestamistas (los superavitarios) hacia los prestatarios o inversores (los deficitarios) de un país. Lo hace de dos maneras: a través de <b>intermediarios</b>, en el mercado bancario, o <b>directamente</b>, en el mercado de valores.</p>
       <div class="sf-wrap">${diagram(active)}</div>
-      <div class="sf-details">${['mon', 'cap', 'ban', 'bco', 'oin', 'val', 'bur', 'ext', 'div', 'otr']
-        .map((id) => {
-          const n = NODES.find((x) => x[0] === id);
+      <div class="sf-details">${NODES.filter((n) => n[3])
+        .map((n) => {
+          const id = n[0];
           const d = DETAIL[id];
           const on = active.has(id);
           return `<details${on ? ' open' : ''}><summary><b>${n[1]}</b> · ${n[2]}${on ? ' <span class="pos">· en tu portafolio</span>' : ''}</summary>${d ? `<p>${d.who}</p>${d.app ? `<p class="hint">${d.app}</p>` : ''}` : '<p>Une el mercado bancario y el de valores: financiación de mediano y largo plazo para la inversión productiva.</p>'}</details>`;
@@ -144,10 +144,10 @@
 
     out.push(`<div class="panel"><h2>4. Cómo se conectan: canales entre la economía y el sistema financiero</h2>
       <ol class="steps">
-        <li><b>Ahorro → inversión → crecimiento.</b> Un sistema financiero más profundo (más crédito y mercado de capitales en relación con el PIB) financia más inversión y más crecimiento (Schumpeter, 1911; Levine, 1997). Crecimiento del PIB: ${val('pib', ' %')}. Las utilidades de las empresas crecen con la economía, y el precio de sus acciones es el valor presente de esas utilidades.${rel('pib')}</li>
-        <li><b>Política monetaria → tasas → crédito, consumo y bolsa.</b> Si la inflación (${val('inflacion', ' %')}) se aleja de la meta de 3 %, el Banco de la República sube su tasa. Suben el IBR y las tasas de los CDT y del crédito, cae la demanda y, con ella, la inflación. Las acciones y los TES pierden valor porque sus flujos se descuentan a una tasa mayor; por eso la renta fija y la variable reaccionan a cada decisión de la Junta.${rel('inflacion')}</li>
-        <li><b>Empleo → ingreso de los hogares → ahorro y consumo.</b> Con desempleo alto (${val('desempleo', ' %')}) los hogares ahorran y consumen menos, y sube la morosidad de los créditos. Los bancos prestan con más cautela y bajan sus utilidades, y el sector financiero pesa mucho en el COLCAP.${rel('desempleo')}</li>
-        <li><b>Sector externo → TRM → mercado de divisas y de valores.</b> El precio del petróleo y los flujos de capital extranjero mueven la TRM (${val('trm', ' pesos por dólar')}). Cuando los extranjeros salen, venden TES y acciones y compran dólares: sube la TRM y caen la bolsa y los TES al mismo tiempo. Una TRM alta encarece la deuda en dólares y las importaciones, y sube la inflación (efecto traspaso).${rel('trm')}</li>
+        <li><b>Ahorro → inversión → crecimiento.</b> Un sistema financiero más profundo (más crédito y mercado de capitales en relación con el PIB) financia más inversión y más crecimiento (Schumpeter, 1911; Levine, 1997). Crecimiento del PIB: ${val('pib')}. Las utilidades de las empresas crecen con la economía, y el precio de sus acciones es el valor presente de esas utilidades.${rel('pib')}</li>
+        <li><b>Política monetaria → tasas → crédito, consumo y bolsa.</b> Si la inflación (${val('inflacion')}) se aleja de la meta de 3 %, el Banco de la República sube su tasa. Suben el IBR y las tasas de los CDT y del crédito, cae la demanda y, con ella, la inflación. Las acciones y los TES pierden valor porque sus flujos se descuentan a una tasa mayor; por eso la renta fija y la variable reaccionan a cada decisión de la Junta.${rel('inflacion')}</li>
+        <li><b>Empleo → ingreso de los hogares → ahorro y consumo.</b> Con desempleo alto (${val('desempleo')}) los hogares ahorran y consumen menos, y sube la morosidad de los créditos. Los bancos prestan con más cautela y bajan sus utilidades, y el sector financiero pesa mucho en el COLCAP.${rel('desempleo')}</li>
+        <li><b>Sector externo → TRM → mercado de divisas y de valores.</b> El precio del petróleo y los flujos de capital extranjero mueven la TRM (${val('trm')}). Cuando los extranjeros salen, venden TES y acciones y compran dólares: sube la TRM y caen la bolsa y los TES al mismo tiempo. Una TRM alta encarece la deuda en dólares y las importaciones, y sube la inflación (efecto traspaso).${rel('trm')}</li>
         <li><b>Política fiscal → TES → tasas de largo plazo.</b> El déficit del Gobierno se financia emitiendo TES. Si la deuda preocupa a los inversionistas, piden más tasa, lo que encarece la financiación de las empresas y baja el valor de los portafolios de renta fija (índice COLTES).</li>
       </ol>
       <p class="hint">Estas cifras salen de la sección Macro, que las descarga (en la app de escritorio) o las importa de tus archivos. La relación estadística de cada variable con cada activo está allí.</p></div>`);

@@ -116,20 +116,18 @@
   const FEE_NORMAL = 15000; // comisión de trii por operación, sin promociones
   const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'fill', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'div', 'capital', 'fee', 'feesell', 'currency', 'tol'];
 
-  /* Los errores que impiden calcular se muestran arriba en todas las secciones. Las
-   * advertencias (historias cortas, índices faltantes…) no salen como alarma en los
-   * portafolios ni en los activos: quedan como nota en Datos. */
-  function showBanner(msg, kind) {
+  /* Errores que impiden calcular: arriba, en todas las secciones. */
+  function showBanner(msg) {
     const b = $('banner');
-    const warn = kind === 'warn';
-    b.hidden = !msg || warn;
-    b.className = 'banner';
-    b.textContent = warn ? '' : msg || '';
-    const n = $('data-notes');
-    if (n) {
-      n.hidden = !(warn && msg);
-      n.textContent = warn && msg ? 'Notas sobre los datos: ' + msg : '';
-    }
+    b.hidden = !msg;
+    b.textContent = msg || '';
+  }
+  /* Advertencias sobre los datos (historias cortas, índices faltantes…): no son alarmas en los
+   * portafolios ni en los activos, sino una nota en Datos. */
+  function showDataNotes(msg) {
+    showBanner('');
+    $('data-notes').hidden = !msg;
+    $('data-notes').textContent = msg ? 'Notas sobre los datos: ' + msg : '';
   }
 
   /* ---------- Datos ---------- */
@@ -263,7 +261,7 @@
         renderWeightInputs();
         renderBuyInputs();
       }
-      showBanner(warnings.join(' '), 'warn');
+      showDataNotes(warnings.join(' '));
       const dv = P.recommended.div;
       const userCap = s.wmax;
       s.userCap = userCap;
@@ -513,11 +511,13 @@
     if (st.mode === 'acciones') computeBuys();
     renderConfirm();
     renderPlan();
-    if (st.screen === 'estadistica') renderPasos();
-    if (st.screen === 'macro') renderMacro();
-    if (st.screen === 'sistema') renderSistema();
+    renderScreen(st.screen);
     renderCharts();
   }
+
+  // Secciones que se dibujan solo cuando están a la vista
+  const SCREEN_RENDERERS = { estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema() };
+  const renderScreen = (screen) => SCREEN_RENDERERS[screen] && SCREEN_RENDERERS[screen]();
 
   function renderSummary() {
     const r = rec();
@@ -1163,9 +1163,7 @@
       /* marco sin historial */
     }
     if (screen === 'invertir') renderWhere();
-    if (screen === 'estadistica') renderPasos();
-    if (screen === 'macro') renderMacro();
-    if (screen === 'sistema') renderSistema();
+    renderScreen(screen);
     renderCharts();
   }
 
@@ -1280,18 +1278,13 @@
   }
   function renderMacro() {
     const data = macroData();
-    let market = null;
-    let assets = [];
-    if (st.model) {
-      market = Object.assign({ name: st.model.marketName }, priceSeries(st.model.marketName));
-      assets = st.model.names.map((n) => Object.assign({ name: n }, priceSeries(n)));
-    }
+    let market = marketSeries();
+    const assets = st.model ? st.model.names.map((n) => Object.assign({ name: n }, priceSeries(n))) : [];
     if (market && !market.dates.length) market = null;
     const w = Math.max(260, Math.min(520, ($('macro-cards').clientWidth || 700) / 2 - 40));
     const r = PF.macro.render({ data, market, assets, esc, width: w, desktop: !!globalThis.bvc });
     $('macro-cards').innerHTML = r.cards;
     $('macro-table').innerHTML = r.table || '<p class="sub">Carga datos de activos y de las variables.</p>';
-    st.macroResults = r.results;
   }
   function wireMacro() {
     $('macro-file').addEventListener('change', async (ev) => {
@@ -1310,7 +1303,6 @@
         const all = store.get('macro') || {};
         all[key] = Object.assign(d, { source: 'Archivo importado: ' + file.name, updated: new Date().toISOString() });
         store.set('macro', all);
-        st.macroResults = null;
         macroStatus(`${PF.macro.VARS[key].long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]}.`, 'ok');
         renderMacro();
       } catch (e) {
@@ -1320,18 +1312,16 @@
     });
   }
 
-  function renderSistema() {
-    // Las relaciones con el índice salen de la sección Macro (se calculan aquí si no se ha abierto)
-    if (st.model && !st.macroResults && Object.keys(macroData()).length) {
-      const market = Object.assign({ name: st.model.marketName }, priceSeries(st.model.marketName));
-      st.macroResults = {};
-      for (const k of Object.keys(PF.macro.VARS)) {
-        const d = macroData()[k];
-        if (d && d.dates && d.dates.length >= 3 && market.dates.length) st.macroResults[k] = PF.macro.relate(market, d, k);
-      }
-    }
+  const marketSeries = () => (st.model ? Object.assign({ name: st.model.marketName }, priceSeries(st.model.marketName)) : null);
+  // Parte fija de la sección (sistema económico y financiero), con las cifras macro vigentes
+  function sistemaBaseHTML() {
+    const data = macroData();
     const classes = st.model ? st.model.names.map(clsOf) : [];
-    const idxCtx = {
+    return PF.sistema.render({ macro: data, results: PF.macro.relateAll(marketSeries(), data), classes, marketName: st.model && st.model.marketName, esc });
+  }
+  // Parte de índices: depende de las acciones en circulación y de la ponderación elegidas
+  function sistemaIdxHTML() {
+    return PF.indices.render({
       series: st.series || [],
       table: st.table || st.parsed,
       model: st.model,
@@ -1339,11 +1329,16 @@
       method: store.get('idxMethod') || 'liq',
       clsOf,
       esc,
+      num,
       pct,
+      money,
       width: Math.max(320, Math.min(1000, ($('sistema').clientWidth || 800) - 40)),
-    };
-    $('sistema').innerHTML = PF.sistema.render({ macro: macroData(), results: st.macroResults, classes, marketName: st.model && st.model.marketName, esc, pct }) + PF.indices.render(idxCtx);
+    });
   }
+  function renderSistema() {
+    $('sistema').innerHTML = `<div id="sistema-base">${sistemaBaseHTML()}</div><div id="sistema-idx">${sistemaIdxHTML()}</div>`;
+  }
+  const renderSistemaIdx = () => ($('sistema-idx').innerHTML = sistemaIdxHTML());
 
   /* Documentos autónomos para la biblioteca local y las descargas. */
   function documents() {
@@ -1361,8 +1356,7 @@
       st.screen = prev;
       docs.push({ name: 'Variables macroeconomicas y mercado.html', html: PF.pasos.documentHTML('Variables macroeconómicas de Colombia y mercado de valores', $('macro-cards').innerHTML + '<h2>Relación de cada activo con cada variable</h2>' + $('macro-table').innerHTML) });
     }
-    renderSistema();
-    docs.push({ name: 'Sistema economico y sistema financiero en Colombia.html', html: PF.pasos.documentHTML('Sistema económico y sistema financiero en Colombia', $('sistema').innerHTML) });
+    docs.push({ name: 'Sistema economico y sistema financiero en Colombia.html', html: PF.pasos.documentHTML('Sistema económico y sistema financiero en Colombia', sistemaBaseHTML() + sistemaIdxHTML()) });
     docs.push({ name: 'Teoria de portafolios.html', html: PF.pasos.documentHTML('Teoría de portafolios', $('screen-teoria').innerHTML) });
     return docs;
   }
@@ -1466,14 +1460,14 @@
       const t = ev.target;
       if (t.dataset && t.dataset.shares) {
         const all = store.get('shares') || {};
-        const v = parseFloat(String(t.value).replace(/[.\s]/g, '').replace(',', '.'));
+        const v = PF.data.parseNumber(String(t.value), true);
         if (v > 0) all[t.dataset.shares] = v;
         else delete all[t.dataset.shares];
         store.set('shares', all);
-        renderSistema();
+        renderSistemaIdx();
       } else if (t.id === 'idx-method') {
         store.set('idxMethod', t.value);
-        renderSistema();
+        renderSistemaIdx();
       }
     });
     const savedSegs = store.get('segs');
@@ -1641,7 +1635,6 @@
     // Variables macro descargadas por la app de escritorio
     setMacro(data) {
       st.macroDesk = data || null;
-      st.macroResults = null;
       if (st.screen === 'macro') renderMacro();
     },
     macroData,

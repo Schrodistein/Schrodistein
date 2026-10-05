@@ -15,26 +15,27 @@
    *   T = días con negociación en el trimestre / ruedas (días hábiles bursátiles) del trimestre × 100
    * `ruedas`: fechas en que hubo mercado (las de cualquier activo cargado). */
   function liquidity(s, asOf, shares, ruedas) {
-    const t1 = Date.parse(asOf);
-    const inWin = (d, days) => {
-      const t = Date.parse(d);
-      return t <= t1 && t > t1 - days * DAY;
-    };
+    // Fechas ISO: se comparan como texto contra los cortes de 360, 180 y 91 días
+    const cut = (days) => new Date(Date.parse(asOf) - days * DAY).toISOString().slice(0, 10);
+    const c360 = cut(360);
+    const c180 = cut(180);
+    const c91 = cut(91);
     let V = 0;
     let R = 0;
     let traded = 0;
     let haveVol = false;
     s.dates.forEach((d, i) => {
-      const q = s.qty ? s.qty[i] : NaN;
+      if (d > asOf || d <= c360) return;
       const v = s.vol ? s.vol[i] : NaN;
-      if (inWin(d, 360) && fin(v)) {
+      const q = s.qty ? s.qty[i] : NaN;
+      if (fin(v)) {
         V += v;
         haveVol = true;
       }
-      if (inWin(d, 180) && fin(q) && shares > 0) R += q / shares;
-      if (inWin(d, 91) && fin(q) && q > 0) traded++;
+      if (d > c180 && fin(q) && shares > 0) R += q / shares;
+      if (d > c91 && fin(q) && q > 0) traded++;
     });
-    const sessions = ruedas.filter((d) => inWin(d, 91)).length;
+    const sessions = Array.isArray(ruedas) ? ruedas.filter((d) => d > c91 && d <= asOf).length : ruedas;
     return { V: haveVol ? V : NaN, R: shares > 0 && s.qty ? R * 100 : NaN, T: sessions && s.qty ? (traded / sessions) * 100 : NaN, traded, sessions };
   }
 
@@ -61,12 +62,14 @@
     const q = w.map((x, i) => x / p0[i]); // cantidades fijas que replican los pesos iniciales
     const dates = [];
     const values = [];
+    const rows = [];
     for (let t = t0; t < table.dates.length; t++) {
       if (!cols.every((c) => fin(c[t]))) continue;
+      rows.push(t);
       dates.push(table.dates[t]);
       values.push(100 * cols.reduce((a, c, i) => a + q[i] * c[t], 0));
     }
-    return { dates, values, w, from: table.dates[t0] };
+    return { dates, values, rows, w, from: table.dates[t0] };
   }
 
   const REFS = [
@@ -100,11 +103,9 @@
     'Blume, M. E. (1971). On the assessment of risk. The Journal of Finance, 26(1), 1–10.',
   ].sort((a, b) => a.localeCompare(b, 'es'));
 
-  /* ctx: { series (diarias cargadas), table, model, marketName, shares, method, pick, esc, pct } */
+  /* ctx: { series (diarias cargadas), table, model, shares, method, clsOf, esc, num, pct, money, width } */
   function render(ctx) {
-    const { esc } = ctx;
-    const nf = (x, d = 1) => (fin(x) ? x.toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—');
-    const money = (x) => (fin(x) ? '$ ' + Math.round(x).toLocaleString('es-CO') : '—');
+    const { esc, num, pct, money } = ctx;
     const out = [];
     out.push(`<div class="panel"><h2>6. Cómo se construye un índice bursátil</h2>
       <p>Un índice resume en un solo número cómo se mueve un mercado. Es el «portafolio de mercado» con el que se miden la β, Treynor y Jensen. Construirlo tiene dos pasos:</p>
@@ -135,9 +136,10 @@
     // Ruedas: días en que se negoció alguna de las acciones con datos de la BVC
     const ruedas = [...new Set(series.flatMap((s) => s.dates.filter((_, i) => s.qty && s.qty[i] > 0)))].sort();
     const asOf = ruedas[ruedas.length - 1];
+    const sessions = asOf ? liquidity({ dates: [] }, asOf, 0, ruedas).sessions : 0;
     const rows = series
       .filter((s) => !PF.data.isMarketName(s.name) || /icolcap/i.test(s.name))
-      .map((s) => Object.assign({ name: s.name }, liquidity(s, asOf, ctx.shares[s.name], ruedas)));
+      .map((s) => Object.assign({ name: s.name }, liquidity(s, asOf, ctx.shares[s.name], sessions)));
     const rank = (k) => {
       // Empates comparten puesto: 1 + número de acciones estrictamente mejores
       rows.forEach((r) => (r['rk' + k] = fin(r[k]) ? 1 + rows.filter((o) => fin(o[k]) && o[k] > r[k] + 1e-9).length : null));
@@ -150,7 +152,7 @@
       <p class="formula"><code>Tⱼ = (días en que se negoció j en el trimestre / ruedas del trimestre) × 100</code>: <b>frecuencia</b>.</p>
       ${rows.length ? `<p class="hint">Calculado al ${esc(asOf)} con la cantidad y el volumen de los CSV de la BVC. Para la rotación escribe las acciones en circulación de cada emisor, que están en su ficha de la BVC o en sus estados financieros.</p>
       <div class="table-scroll"><table class="data"><thead><tr><th>Acción</th><th class="n">Volumen V (360 días)</th><th class="n">Puesto</th><th class="n">Acciones en circulación</th><th class="n">Rotación R (180 días)</th><th class="n">Puesto</th><th class="n">Frecuencia T (trimestre)</th><th class="n">Puesto</th></tr></thead><tbody>
-      ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${money(r.V)}</td><td class="n">${r.rkV || '—'}</td><td><input type="number" min="0" step="1000" data-shares="${esc(r.name)}" value="${ctx.shares[r.name] || ''}" placeholder="N.º de acciones" aria-label="Acciones en circulación de ${esc(r.name)}"></td><td class="n">${fin(r.R) ? nf(r.R, 2) + ' %' : '—'}</td><td class="n">${r.rkR || '—'}</td><td class="n">${fin(r.T) ? nf(r.T, 1) + ' %' : '—'}<span class="sub"> ${r.traded}/${r.sessions} ruedas</span></td><td class="n">${r.rkT || '—'}</td></tr>`).join('')}
+      ${rows.map((r) => `<tr><td>${esc(r.name)}</td><td class="n">${money(r.V)}</td><td class="n">${r.rkV || '—'}</td><td><input type="number" min="0" step="1000" data-shares="${esc(r.name)}" value="${ctx.shares[r.name] || ''}" placeholder="N.º de acciones" aria-label="Acciones en circulación de ${esc(r.name)}"></td><td class="n">${fin(r.R) ? num(r.R, 2) + ' %' : '—'}</td><td class="n">${r.rkR || '—'}</td><td class="n">${fin(r.T) ? num(r.T, 1) + ' %' : '—'}<span class="sub"> ${r.traded}/${r.sessions} ruedas</span></td><td class="n">${r.rkT || '—'}</td></tr>`).join('')}
       </tbody></table></div>` : '<p class="sub">Carga los CSV de la BVC (traen cantidad y volumen negociados) para calcular la liquidez de tus acciones.</p>'}</div>`);
 
     // Constructor de índice
@@ -159,22 +161,22 @@
     if (m && ctx.table) {
       const names = m.names.filter((n) => ['accion', 'etf'].includes(ctx.clsOf(n)));
       const V = Object.fromEntries(rows.map((r) => [r.name, r.V]));
-      const method = ctx.method || 'liq';
+      const method = ctx.method;
       const idx = names.length >= 2 ? buildIndex(ctx.table, names, method, { shares: ctx.shares, V }) : null;
       let chart = '';
       let table = '';
       if (idx && !idx.error) {
         const mk = ctx.table.values[ctx.table.names.indexOf(m.marketName)];
-        const k0 = ctx.table.dates.indexOf(idx.from);
         let base = NaN;
-        for (let t = k0; t < mk.length && !fin(base); t++) base = mk[t];
-        const mkv = idx.dates.map((d) => mk[ctx.table.dates.indexOf(d)] / base * 100);
-        const W = ctx.width || 700;
-        chart = dualChart(idx.dates, idx.values, mkv, W, esc(m.marketName));
-        const R = (arr) => arr[arr.length - 1] / 100 - 1;
-        const last = mkv.filter(fin);
-        table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso inicial</th></tr></thead><tbody>${names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${nf(idx.w[i] * 100, 1)} %</td></tr>`).join('')}</tbody></table></div>
-          <p>Desde ${esc(idx.from)} tu índice rinde <b>${nf(R(idx.values) * 100, 1)} %</b> frente a <b>${nf((last[last.length - 1] / 100 - 1) * 100, 1)} %</b> de ${esc(m.marketName)}.</p>`;
+        for (let t = idx.rows[0]; t < mk.length && !fin(base); t++) base = mk[t];
+        const mkv = idx.rows.map((t) => (mk[t] / base) * 100);
+        chart = dualChart(idx.dates, idx.values, mkv, ctx.width || 700, esc(m.marketName));
+        const ret = (arr) => {
+          const v = arr.filter(fin);
+          return v[v.length - 1] / 100 - 1;
+        };
+        table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso inicial</th></tr></thead><tbody>${names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(idx.w[i])}</td></tr>`).join('')}</tbody></table></div>
+          <p>Desde ${esc(idx.from)} tu índice rinde <b>${pct(ret(idx.values))}</b> frente a <b>${pct(ret(mkv))}</b> de ${esc(m.marketName)}.</p>`;
       }
       builder = `<div class="panel" id="idx-panel"><h2>9. Construye tu propio índice</h2>
         <p>Con las acciones cargadas (canasta seleccionada) elige cómo ponderarlas y compara el resultado con ${esc(m.marketName)}.</p>

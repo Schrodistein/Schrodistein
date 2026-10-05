@@ -256,6 +256,17 @@
     return txt;
   }
 
+  const hasData = (d) => !!(d && d.dates && d.dates.length >= 3);
+  /* Relación del índice con cada variable que tenga datos. */
+  function relateAll(market, data) {
+    const out = {};
+    if (!market || !market.dates || !market.dates.length) return out;
+    for (const k of Object.keys(VARS)) if (hasData(data && data[k])) out[k] = relate(market, data[k], k);
+    return out;
+  }
+  /* Último valor de una variable como se muestra: TRM en pesos enteros, las demás en %. */
+  const fmtValue = (key, v) => (key === 'trm' ? Math.round(v).toLocaleString('es-CO') : v.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %');
+
   /* ---------- Gráficos ---------- */
   function lineChart(dates, values, o) {
     const W = o.width || 320;
@@ -301,20 +312,19 @@
     const width = ctx.width || 340;
     const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
     const cards = [];
-    const results = {};
+    const results = relateAll(market, data);
     for (const key of Object.keys(VARS)) {
       const V = VARS[key];
       const d = data && data[key];
-      if (!d || !d.dates || d.dates.length < 3) {
+      if (!hasData(d)) {
         cards.push(`<article class="macro-card"><h3>${V.long}</h3><p class="sub">Sin datos todavía. ${ctx.desktop ? 'Pulsa «Actualizar variables macro».' : 'Impórtala con un archivo (fecha y valor) del DANE, el Banco de la República o el Banco Mundial.'}</p><p class="hint">${V.theory}</p></article>`);
         continue;
       }
       const last = d.values[d.values.length - 1];
-      const res = market ? relate(market, d, key) : null;
-      results[key] = res;
+      const res = results[key] || null;
       cards.push(`<article class="macro-card">
         <h3>${V.long}</h3>
-        <div class="macro-now"><b>${key === 'trm' ? Math.round(last).toLocaleString('es-CO') : nf(last)}${key === 'trm' ? '' : ' %'}</b><span class="sub">${esc(d.dates[d.dates.length - 1])} · ${FREQ_NAME[freqOf(d.dates)]} · ${d.dates.length} datos desde ${esc(d.dates[0].slice(0, 7))}</span></div>
+        <div class="macro-now"><b>${fmtValue(key, last)}</b><span class="sub">${esc(d.dates[d.dates.length - 1])} · ${FREQ_NAME[freqOf(d.dates)]} · ${d.dates.length} datos desde ${esc(d.dates[0].slice(0, 7))}</span></div>
         ${lineChart(d.dates, d.values, { width, label: V.long })}
         <p class="sub">Fuente: ${esc(d.source || 'archivo importado')}${d.updated ? ` · descargada el ${esc(String(d.updated).slice(0, 10))}` : ''}</p>
         ${res && res.ok ? scatter(res, { width, xLabel: V.xLabel }) : ''}
@@ -352,5 +362,5 @@
     return rows.join('\n');
   }
 
-  PF.macro = { VARS, SOURCES, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
+  PF.macro = { VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -23,6 +23,7 @@
       <button type="button" data-go="frontera" id="tab-frontera">Portafolio</button>
       <button type="button" data-go="estadistica" id="tab-estadistica">Paso a paso</button>
       <button type="button" data-go="macro" id="tab-macro">Macro</button>
+      <button type="button" data-go="sistema" id="tab-sistema">Sistema financiero</button>
       <button type="button" data-go="comprar" id="tab-comprar">Comprar</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
       <button type="button" data-go="invertir" id="tab-invertir">Dónde invertir</button>
@@ -99,6 +100,7 @@
         </label>
         <button type="button" class="btn btn-primary" id="btn-parse">Procesar datos</button>
         <p class="meta" id="data-meta"></p>
+        <p class="hint" id="data-notes" hidden></p>
       </div>
       <div class="panel">
         <h2>Supuestos</h2>
@@ -296,6 +298,15 @@
     </div>
     <div class="macro-grid" id="macro-cards"></div>
     <div class="panel"><h2>Relación de cada activo con cada variable</h2><div id="macro-table"><p class="sub">Carga datos de activos y de las variables.</p></div></div>
+  </section>
+
+  <!-- SISTEMA FINANCIERO -->
+  <section class="screen" id="screen-sistema" hidden>
+    <div class="head">
+      <h1>Sistema económico y sistema financiero en Colombia</h1>
+      <p class="lede">Cómo el ahorro de los hogares llega a la inversión de las empresas y del Estado, los mercados por donde pasa, quién los regula, cómo las variables de la economía mueven tu portafolio y cómo se construyen los índices de la BVC. Al final, las referencias.</p>
+    </div>
+    <div id="sistema"></div>
   </section>
 
   <!-- DÓNDE INVERTIR -->
@@ -524,6 +535,8 @@
 <script src="js/invertir.js"></script>
 <script src="js/macro.js"></script>
 <script src="js/pasos.js"></script>
+<script src="js/sistema.js"></script>
+<script src="js/indices.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/app.js"></script>

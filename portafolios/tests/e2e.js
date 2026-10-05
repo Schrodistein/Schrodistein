@@ -90,6 +90,14 @@ const shots = process.argv[3];
     if (!/Markowitz \(1952\)/.test(pasos) || !/βL = βU/.test(pasos) || !/Varianza del portafolio/.test(pasos)) errors.push(label + ': paso a paso incompleto');
     await page.click('#tab-macro');
     if ((await page.$$('#macro-cards .macro-card')).length !== 4) errors.push(label + ': faltan las 4 variables macro');
+    // Sin alarmas de advertencia en portafolios ni activos; el sistema financiero con sus referencias
+    await page.click('#tab-frontera');
+    const bann = await page.$eval('#banner', (b) => (b.hidden ? '' : b.textContent));
+    if (bann) errors.push(label + ': alarma visible en Portafolio: ' + bann.slice(0, 80));
+    await page.click('#tab-sistema');
+    await page.waitForSelector('#sistema .sf-diagram');
+    const sis = await page.textContent('#sistema');
+    if (!/Mercado extrabursátil/.test(sis) || !/COLEQTY/.test(sis) || !/Referencias/.test(sis)) errors.push(label + ': sistema financiero incompleto');
     // Descargas
     await page.click('#tab-descargas');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dl-xlsx')]);

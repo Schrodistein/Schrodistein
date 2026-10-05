@@ -22,8 +22,9 @@ function write(store, dir, docs) {
   for (const a of store.data.assets) {
     const h = store.history(a.name);
     if (!h.dates.length) continue;
-    const head = a.kind === 'tasa' ? 'Fecha,Tasa,Fuente' : 'Fecha,Cierre,Fuente';
-    const rows = h.dates.map((d, i) => `${d},${h.prices[i]},${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}`);
+    const head = (a.kind === 'tasa' ? 'Fecha,Tasa,Fuente' : 'Fecha,Cierre,Fuente') + (h.qty ? ',Cantidad,Volumen' : '');
+    const cell = (x) => (Number.isFinite(x) ? x : '');
+    const rows = h.dates.map((d, i) => `${d},${h.prices[i]},${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}${h.qty ? `,${cell(h.qty[i])},${cell(h.vol[i])}` : ''}`);
     fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '﻿' + [head].concat(rows).join('\n'));
     assets++;
   }

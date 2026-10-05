@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'sistema', 'indices']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -685,6 +685,35 @@ test('macro: lectores de FRED, Banco Mundial y datos.gov.co, y relación con el 
   assert(/negativa fuerte/.test(PF.macro.interpret(res, 'trm', 'COLCAP')));
   const csv = PF.macro.toCSV({ desempleo: Object.assign(fred, { source: 'FRED' }) });
   assert(csv.split('\n').length === 4 && /desempleo,2024-04-01,9.9,%,"FRED"/.test(csv));
+});
+
+test('índices: volumen, rotación y frecuencia del COLEQTY; índice propio por capitalización y liquidez', () => {
+  const d0 = Date.UTC(2025, 0, 1);
+  const days = [];
+  for (let i = 0; i < 400; i++) {
+    const t = d0 + i * 864e5;
+    if (new Date(t).getUTCDay() % 6) days.push(new Date(t).toISOString().slice(0, 10));
+  }
+  const A = { name: 'A', dates: days, prices: days.map((_, i) => 100 + i), qty: days.map(() => 10), vol: days.map(() => 1000) };
+  const B = { name: 'B', dates: days.filter((_, i) => i % 2 === 0), prices: days.filter((_, i) => i % 2 === 0).map(() => 50), qty: days.filter((_, i) => i % 2 === 0).map(() => 4), vol: days.filter((_, i) => i % 2 === 0).map(() => 200) };
+  const asOf = days[days.length - 1];
+  const la = PF.indices.liquidity(A, asOf, 1000, days);
+  const lb = PF.indices.liquidity(B, asOf, 100, days);
+  const n360 = days.filter((d) => Date.parse(d) > Date.parse(asOf) - 360 * 864e5).length;
+  const n180 = days.filter((d) => Date.parse(d) > Date.parse(asOf) - 180 * 864e5).length;
+  assert(la.V === 1000 * n360 && near(la.R, (n180 * 10 / 1000) * 100, 1e-9) && la.T === 100, JSON.stringify(la));
+  assert(Math.abs(lb.T - 50) < 2 && lb.V < la.V, 'B negocia la mitad de las ruedas: ' + lb.T);
+  assert(Number.isNaN(PF.indices.liquidity(A, asOf, 0, days).R), 'sin acciones en circulación no hay rotación');
+  // Índice propio: pesos iniciales por capitalización y valores base 100
+  const table = { names: ['A', 'B'], dates: ['2025-01-01', '2025-01-02', '2025-01-03'], values: [[100, 110, 121], [50, 50, 55]] };
+  const cap = PF.indices.buildIndex(table, ['A', 'B'], 'cap', { shares: { A: 10, B: 20 }, V: {} });
+  assert(near(cap.w[0], 0.5, 1e-12) && cap.values[0] === 100 && near(cap.values[1], 105, 1e-9) && near(cap.values[2], 0.5 * 121 + 0.5 * 110, 1e-9), cap.values.join());
+  const pr = PF.indices.buildIndex(table, ['A', 'B'], 'precio', { shares: {}, V: {} });
+  assert(near(pr.values[1], 100 * 160 / 150, 1e-9), 'ponderado por precios = Σ P / divisor');
+  assert(PF.indices.buildIndex(table, ['A', 'B'], 'cap', { shares: { A: 10 }, V: {} }).error, 'falta N de B');
+  // Página del sistema financiero con referencias
+  const html = PF.sistema.render({ macro: {}, results: {}, classes: ['accion', 'cdt'], esc: String, pct: String }) + PF.indices.render({ series: [A, B], table, model: null, shares: {}, clsOf: () => 'accion', esc: String, pct: String });
+  assert(/Mercado monetario/.test(html) && /Mercado extrabursátil/.test(html) && /COLEQTY/.test(html) && /Markowitz, H\. \(1952\)/.test(html) && /class="sf-node on/.test(html));
 });
 
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);

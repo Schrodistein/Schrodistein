@@ -70,7 +70,7 @@ const shots = process.argv[2];
   await win.click('#mk-lib-save');
   await win.waitForFunction(() => /Biblioteca guardada/.test(document.getElementById('mk-status').textContent), null, { timeout: 15000 }).catch(() => errors.push('biblioteca: ' + 'sin confirmación'));
   const lib = path.join(userData, 'Biblioteca');
-  for (const f of ['LEEME.txt', 'acciones/ECOPETROL.csv', 'macro/trm.csv', 'macro/pib.csv', 'documentos/Paso a paso - varianza, covarianza, correlacion y betas.html', 'documentos/Teoria de portafolios.html']) if (!fs.existsSync(path.join(lib, f))) errors.push('biblioteca sin ' + f);
+  for (const f of ['LEEME.txt', 'acciones/ECOPETROL.csv', 'macro/trm.csv', 'macro/pib.csv', 'documentos/Paso a paso - varianza, covarianza, correlacion y betas.html', 'documentos/Teoria de portafolios.html', 'documentos/Sistema economico y sistema financiero en Colombia.html']) if (!fs.existsSync(path.join(lib, f))) errors.push('biblioteca sin ' + f);
 
   await app.evaluate(({ app }) => app.exit(0));
   if (errors.length) {

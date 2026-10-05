@@ -105,7 +105,7 @@ function importFiles(store, files, readExcel) {
       }
       for (const s of series) {
         store.ensureAsset(s.name, s.cls === 'indice' || PF.data.isMarketName(s.name), s);
-        const n = store.mergePrices(s.name, s.dates, s.prices, 'bvc');
+        const n = store.mergePrices(s.name, s.dates, s.prices, 'bvc', s.qty, s.vol);
         res.assets[s.name] = (res.assets[s.name] || 0) + n;
       }
     } catch (e) {

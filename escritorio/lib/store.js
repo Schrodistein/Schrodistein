@@ -102,7 +102,7 @@ class Store {
 
   /* Une precios de una fuente. Una fecha que ya tiene precio de una fuente de mayor
    * rango no se sobrescribe. Devuelve cuántas fechas nuevas o corregidas hubo. */
-  mergePrices(name, dates, prices, src) {
+  mergePrices(name, dates, prices, src, qty, vol) {
     const key = this.ensureAsset(name).name;
     const book = this.data.prices[key] || (this.data.prices[key] = {});
     let changed = 0;
@@ -111,8 +111,11 @@ class Store {
       if (!(p > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
       const cur = book[d];
       if (cur && RANK[cur[1]] > RANK[src]) return;
-      if (!cur || cur[0] !== p || cur[1] !== src) {
-        book[d] = [p, src];
+      // [precio, fuente, acciones negociadas, monto negociado] (los dos últimos, de la BVC)
+      const q = qty && Number.isFinite(qty[i]) ? qty[i] : cur && cur[1] === src ? cur[2] : undefined;
+      const v = vol && Number.isFinite(vol[i]) ? vol[i] : cur && cur[1] === src ? cur[3] : undefined;
+      if (!cur || cur[0] !== p || cur[1] !== src || cur[2] !== q || cur[3] !== v) {
+        book[d] = q != null || v != null ? [p, src, q == null ? null : q, v == null ? null : v] : [p, src];
         changed++;
       }
     });
@@ -123,7 +126,12 @@ class Store {
   history(name) {
     const book = this.data.prices[name] || {};
     const dates = Object.keys(book).sort();
-    return { dates, prices: dates.map((d) => book[d][0]), sources: dates.map((d) => book[d][1]) };
+    const h = { dates, prices: dates.map((d) => book[d][0]), sources: dates.map((d) => book[d][1]) };
+    if (dates.some((d) => book[d].length > 2)) {
+      h.qty = dates.map((d) => (book[d][2] == null ? NaN : book[d][2]));
+      h.vol = dates.map((d) => (book[d][3] == null ? NaN : book[d][3]));
+    }
+    return h;
   }
 
   /* Series para el análisis (formato de PF.data): solo activos activos con datos.
@@ -142,6 +150,10 @@ class Store {
         if (a.cls) out.cls = a.cls;
         else if (a.index) out.cls = 'indice';
         if (a.kind === 'tasa') Object.assign(out, { kind: 'tasa', dur: a.dur });
+        if (full.qty) {
+          out.qty = full.qty.filter((_, i) => keep[i]);
+          out.vol = full.vol.filter((_, i) => keep[i]);
+        }
         return out;
       })
       .filter((s) => s.dates.length >= 3);

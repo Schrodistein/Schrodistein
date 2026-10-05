@@ -192,13 +192,7 @@
     const top = r.names.map((n, i) => [n, r.w[i]]).filter((x) => x[1] > 0.005).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, x]) => `${n} ${Math.round(x * 100)} %`).join(', ');
     const msg = `${before && moved < 0.02 ? 'El portafolio recomendado casi no cambió' : 'Nuevo portafolio recomendado'}: ${top}. Rendimiento esperado ${(r.ret * 100).toFixed(1).replace('.', ',')} %.`;
     status(`Datos nuevos de ${fresh} ${fresh === 1 ? 'activo' : 'activos'}. ${msg} Revisa Comprar para el plan con tu presupuesto.`, 'ok');
-    if ((!before || moved >= 0.02) && summary && summary.settings && summary.settings.notify && typeof Notification !== 'undefined') {
-      try {
-        new Notification('Frontera Eficiente', { body: msg });
-      } catch (e) {
-        /* sin notificaciones */
-      }
-    }
+    // Sin alarma de escritorio por cambios del portafolio: el aviso queda en Mercado
   }
 
   /* Variables macro y biblioteca local */

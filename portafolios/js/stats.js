@@ -423,6 +423,10 @@
     const qty = (r) => (typeof r[qi] === 'number' ? r[qi] : parseNumber(clean(r[qi]), false));
     const withQty = qi >= 0 ? body.filter((r) => qty(r) > 0).length : 0;
     const skipNoTrade = qi >= 0 && withQty >= 0.5 * body.length;
+    // Cantidad de acciones y monto negociado de cada día (para medir la liquidez del COLEQTY)
+    const ci = hd.head.findIndex((h, i) => i !== hd.pi && /^cantidad( |$)/.test(norm(h)));
+    const mi = hd.head.findIndex((h, i) => i !== hd.pi && /^(volumen|monto|volume)( |$)/.test(norm(h)));
+    const numAt = (r, k) => (typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), false));
     let noTrade = 0;
     const groups = new Map();
     const durs = [];
@@ -441,7 +445,7 @@
       }
       const key = hd.ti >= 0 && clean(r[hd.ti]) ? clean(r[hd.ti]).toUpperCase() : '';
       if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push([d, v]);
+      groups.get(key).push([d, v, 0, ci >= 0 ? numAt(r, ci) : NaN, mi >= 0 ? numAt(r, mi) : NaN]);
     });
     const out = [];
     for (const [key, pts] of groups) {
@@ -551,7 +555,12 @@
     // Misma fecha repetida: gana la fuente más confiable (rango mayor), luego la última leída
     pts.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : (a[2] || 0) - (b[2] || 0)));
     const dedup = pts.filter((p, i) => i === pts.length - 1 || p[0] !== pts[i + 1][0]);
-    return { name, dates: dedup.map((p) => p[0]), prices: dedup.map((p) => p[1]), column };
+    const out = { name, dates: dedup.map((p) => p[0]), prices: dedup.map((p) => p[1]), column };
+    if (dedup.some((p) => Number.isFinite(p[3]) || Number.isFinite(p[4]))) {
+      out.qty = dedup.map((p) => (Number.isFinite(p[3]) ? p[3] : NaN));
+      out.vol = dedup.map((p) => (Number.isFinite(p[4]) ? p[4] : NaN));
+    }
+    return out;
   }
 
   /* Historial de un activo desde texto CSV (compatibilidad: devuelve el primero). */
@@ -577,7 +586,7 @@
         g.kind = 'tasa';
         g.dur = g.dur || s.dur;
       }
-      s.dates.forEach((d, i) => g.pts.push([d, s.prices[i], s.rank || 0]));
+      s.dates.forEach((d, i) => g.pts.push([d, s.prices[i], s.rank || 0, s.qty ? s.qty[i] : NaN, s.vol ? s.vol[i] : NaN]));
     }
     return [...by.values()].map((g) => {
       const f = finishSeries(g.pts, g.name, g.column);

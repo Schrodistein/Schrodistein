@@ -98,7 +98,6 @@ function runUpdate(reason) {
     writeLibrary();
     log(`actualización (${reason}): ${prices.updated.length} activos con cierres nuevos, ${news.fresh.length} noticias nuevas, ${prices.errors.length + news.errors.length} errores`);
     if (reason !== 'manual') {
-      if (prices.updated.length) notify('Cierres actualizados', `${prices.updated.length} activos con datos nuevos${prices.newest ? `; último cierre del ${prices.newest}` : ''}.`);
       if (mac.updated.length) notify('Variables macro actualizadas', mac.updated.map((k) => updater.loadPF().macro.VARS[k].label).join(', '));
       if (news.fresh.length) notify('Noticias nuevas', `${news.fresh.length} noticias de ${[...new Set(news.fresh.map((n) => n.asset))].slice(0, 4).join(', ')}.`);
     }
@@ -199,8 +198,7 @@ function handleDownloads() {
       biblioteca.saveOriginal(libraryDir(), file);
       writeLibrary();
       const names = Object.keys(r.assets);
-      if (names.length) notify('Datos de la BVC importados', names.map((n) => `${n}: ${r.assets[n]} días`).join(', '));
-      else if (r.errors.length) notify('No se pudo importar la descarga', r.errors[0]);
+      if (!names.length && r.errors.length) notify('No se pudo importar la descarga', r.errors[0]);
       broadcast({ imported: r });
     });
   });

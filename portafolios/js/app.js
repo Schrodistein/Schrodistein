@@ -116,11 +116,20 @@
   const FEE_NORMAL = 15000; // comisión de trii por operación, sin promociones
   const SETTING_IDS = ['kind', 'freq', 'rettype', 'agg', 'fill', 'history', 'rf', 'em', 'mumodel', 'covmodel', 'wmin', 'wmax', 'div', 'capital', 'fee', 'feesell', 'currency', 'tol'];
 
+  /* Los errores que impiden calcular se muestran arriba en todas las secciones. Las
+   * advertencias (historias cortas, índices faltantes…) no salen como alarma en los
+   * portafolios ni en los activos: quedan como nota en Datos. */
   function showBanner(msg, kind) {
     const b = $('banner');
-    b.hidden = !msg;
-    b.className = 'banner' + (kind === 'warn' ? ' warn' : '');
-    b.textContent = msg || '';
+    const warn = kind === 'warn';
+    b.hidden = !msg || warn;
+    b.className = 'banner';
+    b.textContent = warn ? '' : msg || '';
+    const n = $('data-notes');
+    if (n) {
+      n.hidden = !(warn && msg);
+      n.textContent = warn && msg ? 'Notas sobre los datos: ' + msg : '';
+    }
   }
 
   /* ---------- Datos ---------- */
@@ -506,6 +515,7 @@
     renderPlan();
     if (st.screen === 'estadistica') renderPasos();
     if (st.screen === 'macro') renderMacro();
+    if (st.screen === 'sistema') renderSistema();
     renderCharts();
   }
 
@@ -1155,6 +1165,7 @@
     if (screen === 'invertir') renderWhere();
     if (screen === 'estadistica') renderPasos();
     if (screen === 'macro') renderMacro();
+    if (screen === 'sistema') renderSistema();
     renderCharts();
   }
 
@@ -1299,6 +1310,7 @@
         const all = store.get('macro') || {};
         all[key] = Object.assign(d, { source: 'Archivo importado: ' + file.name, updated: new Date().toISOString() });
         store.set('macro', all);
+        st.macroResults = null;
         macroStatus(`${PF.macro.VARS[key].long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]}.`, 'ok');
         renderMacro();
       } catch (e) {
@@ -1306,6 +1318,31 @@
       }
       ev.target.value = '';
     });
+  }
+
+  function renderSistema() {
+    // Las relaciones con el índice salen de la sección Macro (se calculan aquí si no se ha abierto)
+    if (st.model && !st.macroResults && Object.keys(macroData()).length) {
+      const market = Object.assign({ name: st.model.marketName }, priceSeries(st.model.marketName));
+      st.macroResults = {};
+      for (const k of Object.keys(PF.macro.VARS)) {
+        const d = macroData()[k];
+        if (d && d.dates && d.dates.length >= 3 && market.dates.length) st.macroResults[k] = PF.macro.relate(market, d, k);
+      }
+    }
+    const classes = st.model ? st.model.names.map(clsOf) : [];
+    const idxCtx = {
+      series: st.series || [],
+      table: st.table || st.parsed,
+      model: st.model,
+      shares: store.get('shares') || {},
+      method: store.get('idxMethod') || 'liq',
+      clsOf,
+      esc,
+      pct,
+      width: Math.max(320, Math.min(1000, ($('sistema').clientWidth || 800) - 40)),
+    };
+    $('sistema').innerHTML = PF.sistema.render({ macro: macroData(), results: st.macroResults, classes, marketName: st.model && st.model.marketName, esc, pct }) + PF.indices.render(idxCtx);
   }
 
   /* Documentos autónomos para la biblioteca local y las descargas. */
@@ -1324,6 +1361,8 @@
       st.screen = prev;
       docs.push({ name: 'Variables macroeconomicas y mercado.html', html: PF.pasos.documentHTML('Variables macroeconómicas de Colombia y mercado de valores', $('macro-cards').innerHTML + '<h2>Relación de cada activo con cada variable</h2>' + $('macro-table').innerHTML) });
     }
+    renderSistema();
+    docs.push({ name: 'Sistema economico y sistema financiero en Colombia.html', html: PF.pasos.documentHTML('Sistema económico y sistema financiero en Colombia', $('sistema').innerHTML) });
     docs.push({ name: 'Teoria de portafolios.html', html: PF.pasos.documentHTML('Teoría de portafolios', $('screen-teoria').innerHTML) });
     return docs;
   }
@@ -1423,6 +1462,20 @@
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
     wirePasos();
     wireMacro();
+    $('sistema').addEventListener('change', (ev) => {
+      const t = ev.target;
+      if (t.dataset && t.dataset.shares) {
+        const all = store.get('shares') || {};
+        const v = parseFloat(String(t.value).replace(/[.\s]/g, '').replace(',', '.'));
+        if (v > 0) all[t.dataset.shares] = v;
+        else delete all[t.dataset.shares];
+        store.set('shares', all);
+        renderSistema();
+      } else if (t.id === 'idx-method') {
+        store.set('idxMethod', t.value);
+        renderSistema();
+      }
+    });
     const savedSegs = store.get('segs');
     if (Array.isArray(savedSegs)) document.querySelectorAll('#segs [data-seg]').forEach((c) => (c.checked = savedSegs.includes(c.getAttribute('data-seg'))));
     $('segs').addEventListener('change', () => {
@@ -1588,6 +1641,7 @@
     // Variables macro descargadas por la app de escritorio
     setMacro(data) {
       st.macroDesk = data || null;
+      st.macroResults = null;
       if (st.screen === 'macro') renderMacro();
     },
     macroData,

@@ -6,7 +6,7 @@ Aplicación web para construir y **confirmar portafolios eficientes** con la teo
 
 ## Qué hace
 
-0. **Datos** es la primera sección; luego la **Terminal** (pantalla inicial, aspecto de bróker): cinta de cotizaciones, lista de seguimiento con minigráficas y, para cada acción, precio con rangos 1M a Todo, rendimientos diarios con bandas de ±2σ, distribución frente a la normal, rendimiento acumulado frente al índice, correlación móvil, desempeño por periodo y mapa de correlaciones. **Apariencia**: modo oscuro (predeterminado), claro o según el sistema, y color de fondo elegible para cada modo. Letra Times New Roman.
+0. Las advertencias sobre los datos ya no salen como alarma en los portafolios ni en los activos: quedan como nota en Datos. **Datos** es la primera sección; luego la **Terminal** (pantalla inicial, aspecto de bróker): cinta de cotizaciones, lista de seguimiento con minigráficas y, para cada acción, precio con rangos 1M a Todo, rendimientos diarios con bandas de ±2σ, distribución frente a la normal, rendimiento acumulado frente al índice, correlación móvil, desempeño por periodo y mapa de correlaciones. **Apariencia**: modo oscuro (predeterminado), claro o según el sistema, y color de fondo elegible para cada modo. Letra Times New Roman.
 1. **Datos**: sube los históricos que descargas de la **Bolsa de Valores de Colombia** (Excel o CSV con nemotécnico, fecha, cantidad, volumen y precio de cierre), de Investing.com o de Yahoo Finance. Puedes subir varios archivos a la vez. La app une los tramos de 6 meses de una misma acción, toma el último cierre de cada periodo y conserva solo las fechas comunes a todos los activos. También acepta una tabla ya armada (una columna por activo más un índice) con coma, punto y coma o tabulador, y coma decimal. Incluye un ejemplo simulado de 60 meses.
    - **Fechas que no coinciden**: cada activo conserva sus propias fechas. Por defecto la media y la varianza de cada activo usan toda su historia, y cada correlación usa las fechas que comparten los dos activos; la matriz resultante se corrige para que sea válida. También puede usar solo los periodos comunes a todos.
    - **Precio de cada periodo**: último cierre (por defecto) o promedio del periodo, que amortigua columnas desfasadas como las de una hoja armada a mano. La app detecta series corridas en el tiempo respecto a las demás y lo avisa.
@@ -22,8 +22,13 @@ Aplicación web para construir y **confirmar portafolios eficientes** con la teo
 6. **Dónde invertir**: canales para cada parte del plan (trii, sociedades comisionistas, bancos y CDT, fondos de inversión colectiva, mercado de derivados de la BVC, divisas), costos, paso a paso y cómo verificar a la entidad en la Superintendencia Financiera y el AMV.
 7. **Paso a paso**: con los datos cargados, el cálculo de la media, la varianza, la desviación estándar, la covarianza y la correlación. Muestra una tabla con las desviaciones, los cuadrados y los productos cruzados, cada fórmula con sus valores sustituidos y lo que significa cada término según su autor (Markowitz, Pearson, Sharpe, Treynor, Jensen). Incluye las matrices de todos los activos, la varianza del portafolio celda por celda (wᵢ wⱼ σᵢⱼ) y el efecto de la diversificación. Compara la **beta de Sharpe** (regresión, con su intervalo del 95 %) con la **beta de Damodaran** (de abajo hacia arriba: βL = βU [1 + (1 − t) D/E]), la beta ajustada de Blume y el costo del patrimonio con cada una. Lee el archivo de betas por industria de Damodaran.
 8. **Macro**: PIB, inflación, desempleo y TRM de Colombia, con gráficos, y su relación con el índice y con cada activo: correlación, sensibilidad, t, R², adelanto del mercado y la interpretación según la teoría (Chen, Roll y Ross; Fama; Fama y Schwert; Boyd, Hu y Jagannathan; Dornbusch y Fischer). En la web se importan los archivos; la app de escritorio los descarga.
-9. **Descargas**: libro de Excel con todos los cálculos hechos con fórmulas (Precios, Rendimientos, Estadisticas, Desviaciones, Covarianza, Correlacion, Portafolios, Frontera, Plan_compra y una guía de fórmulas) y matrices sueltas en CSV. Las fórmulas del libro se verificaron recalculándolo con LibreOffice: dan los mismos resultados que la app.
-10. **Teoría**: fórmulas y referencias.
+9. **Sistema financiero**:
+   - la relación entre el sistema económico (agentes, flujo circular, ahorro = inversión) y el sistema financiero colombiano, con el esquema mercado monetario / de capitales (bancario y de valores: bursátil y extrabursátil) / de divisas / otros y sus instituciones;
+   - las autoridades (Banco de la República, Ministerio de Hacienda, Superintendencia Financiera, AMV, Fogafín, BVC, Deceval, CRCC) y los canales entre la economía y el portafolio, con las cifras de la sección Macro;
+   - la construcción de un índice (selección y ponderación), los índices de la BVC (COLEQTY, COLCAP, COLSC, COLIR, COLTES, COLTES UVR, COLIBR) y la función de selección del COLEQTY (volumen, rotación y frecuencia), calculada con la cantidad y el volumen de los CSV de la BVC;
+   - un constructor de índice propio (por liquidez, capitalización, precios o pesos iguales) y las referencias bibliográficas.
+10. **Descargas**: libro de Excel con todos los cálculos hechos con fórmulas (Precios, Rendimientos, Estadisticas, Desviaciones, Covarianza, Correlacion, Portafolios, Frontera, Plan_compra y una guía de fórmulas) y matrices sueltas en CSV. Las fórmulas del libro se verificaron recalculándolo con LibreOffice: dan los mismos resultados que la app.
+11. **Teoría**: fórmulas y referencias.
 
 ## Supuestos configurables
 
@@ -48,6 +53,8 @@ js/report.js   libro de cálculos con fórmulas
 js/invertir.js canales y paso a paso para invertir
 js/pasos.js    varianza, covarianza y correlación paso a paso; beta de Sharpe frente a Damodaran
 js/macro.js    variables macroeconómicas: lectores, relación con el mercado y gráficos
+js/sistema.js  sistema económico y sistema financiero de Colombia
+js/indices.js  construcción de índices, índices de la BVC, liquidez del COLEQTY y referencias
 js/charts.js   gráficos SVG
 js/app.js      interfaz
 tests/run.js   pruebas del motor (node portafolios/tests/run.js)

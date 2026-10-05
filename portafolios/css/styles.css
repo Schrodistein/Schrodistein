@@ -467,3 +467,16 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 .macro-now { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .macro-now b { font-size: 1.5rem; }
 .macro-now .sub { color: var(--ink-3); font-size: 0.85em; }
+
+/* Sistema financiero */
+.sf-wrap { overflow-x: auto; margin: 8px 0 12px; }
+.sf-diagram { min-width: 760px; width: 100%; height: auto; }
+.sf-node rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.3; }
+.sf-node.root rect { fill: var(--accent-soft); stroke: var(--accent); }
+.sf-node.on rect { stroke: var(--up); stroke-width: 2.4; fill: var(--up-soft); }
+.sf-t { font: 600 14px 'Times New Roman', Times, serif; fill: var(--ink); }
+.sf-s { font: 11px 'Times New Roman', Times, serif; fill: var(--ink-2); }
+.sf-details details { border-bottom: 1px solid var(--line); padding: 6px 0; }
+.sf-details summary { cursor: pointer; }
+.refs ol { padding-left: 22px; display: grid; gap: 4px; font-size: 0.92rem; }
+#liq-panel input { width: 100%; min-width: 120px; padding: 4px 6px; }

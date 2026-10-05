@@ -251,7 +251,7 @@ function applyLogin() {
 
 function registerIpc() {
   ipcMain.handle('datos:resumen', () => store.summary());
-  ipcMain.handle('datos:series', (e, source) => store.series(source === 'todos' ? 'todos' : 'cargados'));
+  ipcMain.handle('datos:series', () => store.series());
   ipcMain.handle('datos:noticias', () => store.data.news);
   ipcMain.handle('datos:actualizar', () => runUpdate('manual'));
   ipcMain.handle('datos:importar', async () => {

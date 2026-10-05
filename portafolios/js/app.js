@@ -1248,7 +1248,7 @@
     const cat = PF.catalog || [];
     const have = cat.filter((c) => inLib.has(key(c.nemo))).length;
     const desk = !!globalThis.bvc;
-    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. ${desk ? '«Descargar el historial de todos» trae el historial completo de cada uno desde la fuente automática y lo guarda aquí; los índices se descargan de la BVC (Mercado → Abrir la BVC).' : 'En el navegador no hay descarga automática: descarga cada histórico en bvc.com.co (Mercados → Renta variable → el nemotécnico → Históricos; hasta 6 meses por archivo) y súbelo en Datos; los tramos de un mismo activo se unen solos. La app de escritorio los descarga todos sola.'}`;
+    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. Los precios salen solo de la BVC: en bvc.com.co busca cada nemotécnico y descarga sus históricos (hasta 6 meses por archivo). ${desk ? '«Abrir la BVC para descargar los que faltan» abre el sitio dentro de la app: cada archivo que descargas se importa solo, los tramos de un mismo activo se unen y quedan en la biblioteca.' : 'Sube los archivos en Datos: los tramos de un mismo activo se unen solos y quedan en la biblioteca.'}`;
     $('cat-download').hidden = !desk;
     $('cat-table').innerHTML = '<thead><tr><th>Nemotécnico</th><th>Emisor o instrumento</th><th>Sector</th><th>En la biblioteca</th><th>Desde</th><th class="n">Días</th></tr></thead><tbody>' +
       cat.map((c) => {
@@ -1283,8 +1283,8 @@
         '</tbody>'
       : '<tbody><tr><td class="sub">Sin variables macro guardadas: actualízalas o impórtalas en Macro.</td></tr></tbody>';
   }
-  /* Series de la app de escritorio → biblioteca, con la fuente de cada una (BVC o automática). */
-  const SRC_LABEL = { BVC: 'BVC', 'BVC + automática': 'BVC + Yahoo Finance', 'automática': 'Yahoo Finance' };
+  /* Series de la app de escritorio → biblioteca, con su fuente (BVC; solo las divisas vienen de la fuente automática). */
+  const SRC_LABEL = { BVC: 'BVC', 'BVC + automática': 'BVC + fuente automática (divisas)', 'automática': 'fuente automática (divisas)' };
   async function saveDesktopSeries(series) {
     const out = { nuevas: 0, agregadas: 0 };
     const groups = new Map();
@@ -1335,20 +1335,9 @@
     $('cat-download').addEventListener('click', async () => {
       const api = globalThis.bvc;
       if (!api) return;
-      const btn = $('cat-download');
-      btn.disabled = true;
-      catStatus('Descargando el historial de todos los activos… puede tardar unos minutos.');
-      try {
-        const r = await api.actualizar();
-        const res = await saveDesktopSeries(await api.series('todos'));
-        renderLib();
-        const errs = r && r.prices ? r.prices.errors.length : 0;
-        catStatus(`Listo: ${res.nuevas} activos nuevos y ${res.agregadas.toLocaleString('es-CO')} fechas nuevas en la biblioteca.${errs ? ` ${errs} activos no tienen historial en la fuente automática: descárgalos de la BVC (Mercado → Abrir la BVC).` : ''}`, errs ? 'warn' : 'ok');
-      } catch (e) {
-        catStatus('No se pudo descargar: ' + e.message, 'bad');
-      } finally {
-        btn.disabled = false;
-      }
+      await api.abrirBVC();
+      const miss = (PF.catalog || []).filter((c) => c.type !== 'divisa' && !st.lib.series.some((r) => PF.data.assetKey(r.name) === PF.data.assetKey(c.nemo)));
+      catStatus(`Se abrió la BVC. Faltan ${miss.length}: ${miss.map((c) => c.nemo).join(', ')}. Busca cada uno, descarga sus históricos y la app los importa solos.`, 'ok');
     });
     box.addEventListener('change', async (ev) => {
       const t = ev.target;
@@ -1378,10 +1367,10 @@
       if (t.dataset.libDl) {
         // Un solo archivo con todo el historial del activo, con los valores tal como vienen de la fuente
         const r = st.lib.series.find((x) => x.name === t.dataset.libDl);
-        const head = r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre' + (r.qty ? ';Cantidad;Volumen' : '');
-        // Formato de Excel en español: punto de miles y coma decimal, separado por punto y coma
-        const cell = (x) => (x == null || !Number.isFinite(x) ? '' : PF.data.excelNum(x));
-        const rows = r.dates.map((d, i) => `${d};${r.name};${cell(r.kind === 'tasa' ? r.prices[i] * 100 : r.prices[i])}${r.qty && r.kind !== 'tasa' ? `;${cell(r.qty[i])};${cell(r.vol[i])}` : ''}`);
+        // Todos los días calendario: los días sin negociación llevan el último precio cotizado
+        const head = (r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre') + ';Negociación' + (r.qty && r.kind !== 'tasa' ? ';Cantidad;Volumen' : '');
+        const full = PF.matriz.fullHistory({ name: r.name, dates: r.dates, prices: r.prices.map((x) => (x == null ? NaN : x)), qty: r.qty, vol: r.vol });
+        const rows = full.map((x) => `${x.date};${r.name};${cell(r.kind === 'tasa' ? x.price * 100 : x.price)};${x.traded ? 'Sí' : 'No (último precio)'}${r.qty && r.kind !== 'tasa' ? `;${cell(x.qty)};${cell(x.vol)}` : ''}`);
         download('\ufeff' + [head].concat(rows).join('\r\n'), `${r.name.replace(/[\\/:*?"<>|]+/g, '-')}.csv`, 'text/csv;charset=utf-8');
         return;
       }

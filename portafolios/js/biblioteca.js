@@ -10,10 +10,11 @@
   const PF = (root.PF = root.PF || {});
   const fin = Number.isFinite;
   const DB = 'frontera-eficiente';
-  const VERSION = 2;
+  const VERSION = 3;
   /* Versión 2: limpieza única de la renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos)
    * guardados con las reglas de lectura anteriores; se vuelven a cargar con el lector corregido. */
   const STALE_FIXED = /(^| )(COLTES|COLIBR|IBR|TES|CDT|BONO)/i;
+  const notBvc = (r) => /yahoo/i.test(r.source || '') && r.cls !== 'divisa' && !/^[A-Z]{3}\/[A-Z]{3}$/i.test(r.name);
   const isStaleFixed = (r) => r.kind === 'tasa' || ['tes', 'cdt', 'bono'].includes(r.cls) || STALE_FIXED.test(r.name);
 
   /* Une una serie nueva con la guardada. Los valores guardados no cambian; se agregan las
@@ -89,12 +90,15 @@
         }
         req.onupgradeneeded = (ev) => {
           const db = req.result;
-          if (ev.oldVersion >= 1 && ev.oldVersion < 2 && db.objectStoreNames.contains('series')) {
+          // Versión 2: renta fija leída con reglas anteriores. Versión 3: solo la BVC para acciones,
+          // índices y ETF, así que se quitan los historiales que trajeron cierres de Yahoo Finance.
+          if (ev.oldVersion >= 1 && ev.oldVersion < 3 && db.objectStoreNames.contains('series')) {
+            const v = ev.oldVersion;
             const cur = req.transaction.objectStore('series').openCursor();
             cur.onsuccess = () => {
               const c = cur.result;
               if (!c) return;
-              if (isStaleFixed(c.value)) c.delete();
+              if ((v < 2 && isStaleFixed(c.value)) || notBvc(c.value)) c.delete();
               c.continue();
             };
           }
@@ -184,5 +188,5 @@
     return Object.assign(res, { macro: mac });
   }
 
-  PF.lib = { isStaleFixed, mergeRecord, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
+  PF.lib = { isStaleFixed, notBvc, mergeRecord, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

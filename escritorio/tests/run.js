@@ -90,28 +90,48 @@ test('almacén: la BVC tiene prioridad sobre la fuente automática', () => {
   assert(again.history('ECOPETROL').prices[2] === 2790, 'se guarda en disco');
 });
 
-test('actualización: precios y noticias con respuestas grabadas; símbolo inexistente queda como error', async () => {
+test('actualización: solo divisas de la fuente automática; acciones, índices y ETF solo de la BVC', async () => {
   const st = new Store(tmp());
   const f = fakeFetch(FIX);
-  const p = await updater.updatePrices(st, f);
+  let asked = '';
+  const p = await updater.updatePrices(st, async (url) => {
+    asked += url + ' ';
+    return f(url);
+  });
   const names = p.updated.map((u) => u.name);
-  assert(names.includes('ECOPETROL') && names.includes('ICOLCAP'), names.join());
-  assert(st.history('ECOPETROL').dates.length === 399);
-  assert(st.data.meta.errors.GEB && /no encontró el símbolo GEB.CL/.test(st.data.meta.errors.GEB), 'GEB no existe en las respuestas grabadas');
+  assert(names.join() === 'USD/COP', 'solo el dólar: ' + names.join());
+  assert(!/\.CL/.test(asked), 'no se piden acciones a la fuente automática: ' + asked);
+  assert(!st.history('ECOPETROL').dates.length && st.asset('ECOPETROL').yahoo === '', 'ECOPETROL sin cierres automáticos');
+  assert(st.data.meta.errors['EUR/COP'], 'EUR/COP no está en las respuestas grabadas');
   const nw = await updater.updateNews(st, f);
   assert(nw.fresh.length === 3, 'noticias nuevas: ' + nw.fresh.length);
   const again = await updater.updateNews(st, f);
   assert(again.fresh.length === 0, 'no se repiten');
-  const series = st.series('todos');
-  assert(series.length === 5 && series.every((s) => s.dates.length >= 3));
-  assert(st.series('cargados').length === 0, 'sin descargas de la BVC no hay datos «cargados»');
-  // segunda vez: solo el último mes
-  let asked = '';
+  const series = st.series();
+  assert(series.length === 1 && series[0].name === 'USD/COP' && series[0].dates.length > 300);
+  // Aunque alguien escriba un símbolo automático para una acción, no se usa
+  st.asset('ECOPETROL').yahoo = 'ECOPETROL.CL';
+  asked = '';
   await updater.updatePrices(st, async (url) => {
     asked += url;
     return f(url);
   });
-  assert(/range=1mo/.test(asked), 'con historia ya guardada pide 1 mes');
+  assert(/range=1mo/.test(asked) && !/ECOPETROL/.test(asked), 'con historia ya guardada pide 1 mes, y nunca acciones');
+});
+
+test('quien ya usaba la app pierde los cierres automáticos de acciones y conserva los de la BVC', () => {
+  const dir = tmp();
+  const old = new Store(dir);
+  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-19'], [2700, 2745, 2790], 'yahoo');
+  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-18'], [2700, 2745, 2770], 'bvc');
+  old.mergePrices('USD/COP', ['2026-08-13', '2026-08-14', '2026-08-18'], [4000, 4010, 4020], 'yahoo');
+  old.asset('ECOPETROL').yahoo = 'ECOPETROL.CL';
+  old.data.meta.defaults = 4;
+  old.save();
+  const st = new Store(dir);
+  const h = st.history('ECOPETROL');
+  assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((x) => x === 'bvc') && h.prices[1] === 2745, 'ECOPETROL: ' + h.dates.join());
+  assert(st.asset('ECOPETROL').yahoo === '' && st.history('USD/COP').dates.length === 3, 'el dólar se conserva');
 });
 
 test('importación de un CSV de la BVC', () => {
@@ -122,7 +142,7 @@ test('importación de un CSV de la BVC', () => {
   const h = st.history('ECOPETROL');
   assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((s) => s === 'bvc'));
   st.mergePrices('ECOPETROL', ['2026-08-19'], [2800], 'yahoo');
-  assert(st.series('cargados')[0].dates.length === 3 && st.series('todos')[0].dates.length === 4, 'solo cargados excluye la fuente automática');
+  assert(st.series().find((x) => x.name === 'ECOPETROL').dates.length === 3, 'el análisis usa solo la BVC');
   const x = updater.importFiles(st, ['/no/existe/libro.xlsx'], null);
   assert(/sección Datos/.test(x.errors[0]), x.errors[0]);
 });
@@ -148,8 +168,9 @@ test('respaldo: exportar e importar en otro equipo sin perder la prioridad de la
   const r = b.importData(backup);
   assert(r.assets === 1 && r.news === 1, JSON.stringify(r));
   const h = b.history('ECOPETROL');
-  assert(h.dates.join() === '2026-08-14,2026-08-18,2026-08-19' && h.prices[0] === 2745 && h.sources[0] === 'bvc', JSON.stringify(h));
-  assert(b.asset('NUTRESA') && b.history('NUTRESA').prices[1] === 50500);
+  // Solo la BVC: los cierres automáticos de acciones (de este equipo o del respaldo) no se guardan
+  assert(h.dates.join() === '2026-08-14,2026-08-18' && h.prices[0] === 2745 && h.sources.every((x) => x === 'bvc'), JSON.stringify(h));
+  assert(b.asset('NUTRESA') && b.history('NUTRESA').dates.length === 0);
   let err = null;
   try {
     b.importData({ hola: 1 });
@@ -171,7 +192,7 @@ test('renta fija por tasas: se guarda la tasa y el análisis recibe el índice d
   assert(a.kind === 'tasa' && a.cls === 'tes' && a.dur === 6 && st.history('TFIT16240728').prices[0] === 0.105, JSON.stringify(a));
   assert(st.asset('COLIBR').index, 'COLIBR es índice');
   const PF = updater.loadPF();
-  const ser = st.series('cargados');
+  const ser = st.series();
   const tes = PF.data.combineSeries(ser).find((x) => x.name === 'TFIT16240728');
   assert(tes.kind === 'tasa' && tes.prices[0] === 100 && tes.prices[1] < 100 && tes.prices[2] > tes.prices[1], 'índice: ' + tes.prices);
   assert(ser.find((x) => x.name === 'COLIBR').cls === 'indice');
@@ -199,7 +220,7 @@ test('catálogo de la BVC: la app nueva y quien ya la usaba tienen todos los act
   for (const n of ['ECOPETROL', 'PFCIBEST', 'GRUPOARGOS', 'PFAVAL', 'ICOLCAP', 'HCOLSEL', 'EUR/COP']) assert(st.asset(n), 'falta ' + n);
   const names = st.data.assets.map((a) => a.name.toUpperCase());
   assert(new Set(names).size === names.length, 'activos repetidos');
-  assert(st.asset('PFAVAL').yahoo === 'PFAVAL.CL' && st.asset('HCOLSEL').cls === 'etf');
+  assert(st.asset('PFAVAL').yahoo === '' && st.asset('EUR/COP').yahoo === 'EURCOP=X' && st.asset('HCOLSEL').cls === 'etf', 'solo las divisas tienen fuente automática');
   // Quien ya usaba la app (versión 3 de los predeterminados) recibe el catálogo y una descarga completa
   st.data.assets = st.data.assets.slice(0, 5);
   st.data.meta.defaults = 3;
@@ -256,12 +277,16 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   assert(w.matrix && w.matrix.assets >= 1 && fs.existsSync(path.join(dir, 'Matriz de precios.xlsx')), 'matriz de precios en la biblioteca');
   const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
   // Formato de Excel en español: punto y coma, punto de miles y coma decimal
-  assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
+  assert(/Fecha;Cierre;Fuente;Negociación;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;Sí;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
+  // Todos los días calendario: el viernes 14 queda para el sábado 15, el domingo 16 y el festivo 17
+  for (const d of ['2026-08-15', '2026-08-16', '2026-08-17']) assert(csv.includes(`${d};2.745;BVC;No (último precio);;`), 'falta ' + d);
+  assert(csv.trim().split('\r\n').length === 1 + 6, 'del 13 al 18 de agosto: 6 días');
   assert(bib.excelNum(4230.25) === '4.230,25' && bib.excelNum(0.105 * 100) === '10,5');
   // El CSV de la biblioteca se vuelve a leer con los mismos valores
   const reread = updater.loadPF().data.parseSeriesText(csv, 'ECOPETROL.csv')[0];
   assert(reread.prices.at(-1) === 2770 && reread.vol.at(-1) === 2770000 && reread.qty.at(-1) === 1000, 'relectura: ' + reread.prices.at(-1) + ' ' + reread.vol.at(-1));
-  const ser = st.series('cargados').find((x) => x.name === 'ECOPETROL');
+  assert(reread.dates.join() === '2026-08-13,2026-08-14,2026-08-18', 'al volver a leerlo, los días sin negociación no cuentan como cotización: ' + reread.dates.join());
+  const ser = st.series().find((x) => x.name === 'ECOPETROL');
   assert(ser.qty && ser.qty.length === ser.dates.length && ser.vol.at(-1) === 2770000, 'la serie lleva cantidad y volumen');
   assert(/Fuente: datos\.gov\.co/.test(fs.readFileSync(path.join(dir, 'macro', 'trm.csv'), 'utf8')) && fs.existsSync(path.join(dir, 'macro', 'todas.csv')) && fs.existsSync(path.join(dir, 'LEEME.txt')));
   // Varios tramos de la misma acción: un solo archivo en la biblioteca
@@ -271,7 +296,8 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   bib.write(st, dir, null);
   const ecoFiles = fs.readdirSync(path.join(dir, 'acciones')).filter((f) => /ECOPETROL/.test(f));
   const lines = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8').trim().split('\n');
-  assert(ecoFiles.length === 1 && lines.length === 1 + 6 && !fs.existsSync(path.join(dir, 'acciones', 'originales')), ecoFiles.join() + ' / ' + lines.length);
+  // Un solo archivo con los dos tramos y todos los días calendario entre ellos (13 de julio a 18 de agosto)
+  assert(ecoFiles.length === 1 && lines.length === 1 + 37 && lines.filter((l) => /;Sí;/.test(l)).length === 6 && !fs.existsSync(path.join(dir, 'acciones', 'originales')), ecoFiles.join() + ' / ' + lines.length);
   // El respaldo lleva las variables macro a otro equipo
   const st2 = new Store(tmp());
   st2.importData(JSON.parse(JSON.stringify(st.exportData())));

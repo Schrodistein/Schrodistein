@@ -43,6 +43,7 @@ function writeAll(dir) {
   w('yahoo-PFGRUPSURA.CL.json', yahooChart('PFGRUPSURA.CL', [2025, 0, 2], 400, 30000, 7));
   w('yahoo-TERPEL.CL.json', yahooChart('TERPEL.CL', [2025, 0, 2], 400, 12000, 11));
   w('yahoo-PFCIBEST.CL.json', yahooChart('PFCIBEST.CL', [2025, 0, 2], 400, 45000, 13));
+  w('yahoo-COP=X.json', yahooChart('COP=X', [2025, 0, 2], 400, 4000, 17));
   w('news.xml', NEWS);
   w('ECOPETROL_20260908_045259.csv', BVC_CSV);
   // Variables macro: FRED (inflación y desempleo), Banco Mundial (PIB, porque FRED no responde) y datos.gov.co (TRM)

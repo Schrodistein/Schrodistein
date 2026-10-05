@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const src = require('./sources');
+const { isFx } = require('./store');
 
 function loadPF() {
   // El motor de la app web (portafolios/js) funciona igual en Node: agrega globalThis.PF.
@@ -16,13 +17,14 @@ function loadPF() {
   return globalThis.PF;
 }
 
-/* Precios: la primera vez todo el historial disponible; después el último mes (corrige cierres recientes). */
+/* Fuente automática solo para divisas (dólar, euro): las acciones, índices y ETF salen únicamente de la BVC.
+ * La primera vez todo el historial disponible; después el último mes (corrige cierres recientes). */
 async function updatePrices(store, fetch, log) {
   const s = store.data.settings;
   const out = { updated: [], errors: [], newest: null };
   if (!s.yahoo) return out;
   for (const a of store.data.assets) {
-    if (!a.enabled || !a.yahoo) continue;
+    if (!a.enabled || !a.yahoo || !isFx(a)) continue;
     const have = (store.data.prices[a.name] && Object.keys(store.data.prices[a.name]).length) || 0;
     try {
       const r = await src.fetchYahoo(fetch, a.yahoo, have > 200 ? '1mo' : 'max');

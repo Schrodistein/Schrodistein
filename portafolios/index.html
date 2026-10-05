@@ -86,7 +86,7 @@
   <section class="screen" id="screen-datos">
     <div class="head">
       <h1>Datos y supuestos</h1>
-      <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV, o las de Investing.com o Yahoo Finance) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
+      <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
     </div>
     <div class="grid-2">
       <div class="panel drop" id="drop">
@@ -158,7 +158,7 @@
       <h2>Cómo obtener cada dato que pide la app</h2>
       <p class="hint">Los datos de mercado vienen de los archivos que cargas. Los supuestos los escribes tú en Supuestos, en Comprar o en Paso a paso. Esta tabla dice de dónde sale cada uno y cómo lo usa la app.</p>
       <div class="table-scroll"><table class="data guia"><thead><tr><th>Dato</th><th>Qué es</th><th>Dónde se obtiene en Colombia</th><th>Cómo se calcula o se usa</th></tr></thead><tbody>
-        <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). En la app de escritorio, «Abrir la BVC», o la fuente automática.</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
+        <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). Es la única fuente de precios de la app; en la app de escritorio, «Abrir la BVC y descargar» importa cada archivo solo.</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
         <tr><td><b>Tasa libre de riesgo (rf)</b></td><td>Lo que rinde una inversión sin riesgo de impago, al plazo del análisis.</td><td>Rendimiento de los TES de corto plazo (1 año) que publica el Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES), la tasa de los CDT a 90 días (DTF) o el rendimiento anual del COLIBR (botón en «Índices de referencia», si lo cargas).</td><td>Se escribe en % efectivo anual. Entra en Sharpe <code>(E(R) − rf)/σ</code>, Treynor, Jensen, CAPM y la línea del mercado de capitales.</td></tr>
         <tr><td><b>Rendimiento esperado del mercado E(Rm)</b></td><td>Lo que se espera que rinda el índice de referencia en un año.</td><td>Si se deja vacío, la app usa la media histórica anual del índice cargado (MSCI COLCAP). También se puede escribir <code>rf + prima de mercado</code>.</td><td>Base del CAPM <code>E(Rᵢ) = rf + βᵢ (E(Rm) − rf)</code> y del α de Jensen.</td></tr>
         <tr><td><b>Prima de riesgo de mercado</b></td><td><code>E(Rm) − rf</code>: lo que se paga por asumir el riesgo del mercado accionario.</td><td>Histórica: la app la calcula con el COLCAP (Activos → fila del mercado). Implícita: la que publica Aswath Damodaran para mercados maduros (pages.stern.nyu.edu/~adamodar → Data → Implied ERP), más la prima por riesgo país de Colombia.</td><td>Se obtiene restando: escribe E(Rm) = rf + prima en Supuestos. Es la pendiente de la línea del mercado de valores.</td></tr>
@@ -194,7 +194,6 @@
         <li>En <i>Supuestos</i>, escribe como tasa libre de riesgo el rendimiento actual de los TES de corto plazo, o usa el del <b>COLIBR</b> con el botón que aparece cuando lo cargas.</li>
       </ol>
       <p><b>Otros instrumentos.</b> Los archivos de <b>TES, bonos y CDT</b> pueden traer precio o solo la tasa (TIR, tasa de negociación o de valoración): con la tasa la app arma un índice de rendimiento total que suma la causación de la tasa y resta el efecto precio por duración (<code>Rₜ = (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁)·Δy</code>). Si el archivo trae una columna de duración se usa; si no, 6 años para TES, 4 para bonos y 0,5 para CDT. Las <b>divisas</b> se leen de columnas como «TRM» o «Tasa de cambio», y los <b>futuros y opciones</b> de su precio de cierre o de liquidación.</p>
-      <p class="hint">También sirven las descargas de Investing.com (en español o inglés) y de Yahoo Finance, donde las acciones de la BVC llevan el sufijo <code>.CL</code>, por ejemplo <code>ECOPETROL.CL</code>. El activo toma su nombre de la columna de nemotécnico o, si no la hay, del nombre del archivo. El índice se detecta si su nombre contiene «COLCAP», «índice» o «mercado». Para leer archivos de Excel la app descarga un lector la primera vez, así que necesita internet. Los CSV funcionan sin conexión.</p>
     </div>
   </section>
 
@@ -316,15 +315,15 @@
       <p class="status" id="lib-status" hidden></p>
     </div>
     <div class="panel" id="mx-panel"><h2>Matriz de precios para Excel</h2>
-      <p>Un libro de Excel con la hoja «M. PRECIOS»: ITEM, FECHA, el índice de mercado y una columna por acción o ETF, de la fecha más reciente a la más antigua. Los días sin negociación llevan el último precio cotizado hasta la siguiente operación; antes de la primera cotización de cada activo la celda queda vacía. Usa los activos marcados «Usar» y la fecha de corte.</p>
+      <p>Un libro de Excel con la hoja «M. PRECIOS»: ITEM, FECHA, el índice de mercado y una columna por acción o ETF, de la fecha más reciente a la más antigua, con todos los días calendario. Los días sin negociación (fines de semana, festivos o días en que el activo no se negoció) llevan el último precio cotizado hasta la siguiente operación: el precio del viernes queda para el sábado y el domingo; antes de la primera cotización de cada activo la celda queda vacía. Usa los activos marcados «Usar» y la fecha de corte.</p>
       <div class="row-btns">
-        <label class="field inline" for="mx-cal"><span>Fechas</span><select id="mx-cal"><option value="habiles">Días hábiles (lunes a viernes)</option><option value="calendario">Todos los días calendario</option></select></label>
+        <label class="field inline" for="mx-cal"><span>Fechas</span><select id="mx-cal"><option value="calendario">Todos los días calendario</option><option value="habiles">Solo días hábiles (lunes a viernes)</option></select></label>
         <button type="button" class="btn btn-primary" id="mx-download">Descargar matriz de precios (Excel)</button>
       </div>
       <p class="status" id="mx-status" hidden></p></div>
     <div class="panel" id="cat-panel"><h2>Todos los activos de la BVC</h2>
       <p id="cat-summary"></p>
-      <div class="row-btns"><button type="button" class="btn btn-primary" id="cat-download">Descargar el historial de todos</button></div>
+      <div class="row-btns"><button type="button" class="btn btn-primary" id="cat-download">Abrir la BVC para descargar los que faltan</button></div>
       <p class="status" id="cat-status" hidden></p>
       <div class="table-scroll"><table class="data" id="cat-table"></table></div></div>
     <div class="panel"><h2>Acciones, ETF, índices e instrumentos</h2><div class="table-scroll"><table class="data" id="lib-table"></table></div></div>
@@ -469,8 +468,7 @@
         <button type="button" class="btn btn-ghost" id="mk-lib-open">Abrir biblioteca local</button>
         <button type="button" class="btn btn-ghost" id="mk-lib-save">Guardar biblioteca ahora</button>
       </div>
-      <label class="field mk-src" for="mk-source"><span>Datos para el análisis y la recomendación</span>
-        <select id="mk-source"><option value="cargados">Solo los que cargué de la BVC (descargas e importaciones)</option><option value="todos">Los cargados más los de la fuente automática</option></select></label>
+      <p class="meta">Los precios de acciones, índices y ETF salen solo de la BVC: descárgalos con «Abrir la BVC y descargar» o impórtalos. La fuente automática se usa únicamente para las divisas (dólar y euro).</p>
       <p class="status" id="mk-status" role="status" hidden></p>
       <p class="meta" id="mk-meta"></p>
     </div>
@@ -479,7 +477,6 @@
       <div class="table-scroll"><table class="data" id="mk-table"></table></div>
       <div class="mk-add">
         <label class="field" for="mk-new-name"><span>Nemotécnico</span><input id="mk-new-name" placeholder="p. ej. NUTRESA" autocomplete="off"></label>
-        <label class="field" for="mk-new-yahoo"><span>Símbolo automático</span><input id="mk-new-yahoo" placeholder="p. ej. NUTRESA.CL" autocomplete="off"></label>
         <label class="field" for="mk-new-news"><span>Búsqueda de noticias</span><input id="mk-new-news" placeholder="p. ej. Nutresa acción" autocomplete="off"></label>
         <button type="button" class="btn" id="mk-add">Agregar activo</button>
       </div>
@@ -488,7 +485,7 @@
       <h2>Actualización automática</h2>
       <div class="mk-settings">
         <label class="check"><input type="checkbox" id="set-auto"> Actualizar sola cada <select id="set-interval"><option value="1">hora</option><option value="3">3 horas</option><option value="6">6 horas</option><option value="12">12 horas</option><option value="24">día</option><option value="168">semana</option></select></label>
-        <label class="check"><input type="checkbox" id="set-yahoo"> Traer cierres diarios de la fuente automática</label>
+        <label class="check"><input type="checkbox" id="set-yahoo"> Traer el dólar y el euro de la fuente automática (las acciones, índices y ETF salen solo de la BVC)</label>
         <label class="check"><input type="checkbox" id="set-news"> Traer noticias</label>
         <label class="check"><input type="checkbox" id="set-notify"> Avisarme de cierres y noticias nuevas</label>
         <label class="check"><input type="checkbox" id="set-background"> Al cerrar la ventana, seguir en la bandeja del sistema</label>

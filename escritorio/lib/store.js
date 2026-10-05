@@ -8,17 +8,21 @@ const path = require('path');
 // Precio de la BVC (descarga oficial) > fuente automática alternativa.
 const RANK = { bvc: 2, yahoo: 1 };
 
+/* Precios de acciones, índices y ETF: solo de la BVC. La fuente automática (Yahoo Finance) queda
+ * únicamente para divisas (dólar, euro), que no se negocian en la BVC. */
+const isFx = (a) => !!a && (a.cls === 'divisa' || /^[A-Z]{3}\/[A-Z]{3}$/i.test(a.name));
+
 const DEFAULT_ASSETS = [
   { name: 'MSCI COLCAP', yahoo: '', news: 'COLCAP Bolsa de Valores de Colombia', index: true },
-  { name: 'ICOLCAP', yahoo: 'ICOLCAP.CL', news: 'iShares COLCAP ICOLCAP', index: false },
-  { name: 'ECOPETROL', yahoo: 'ECOPETROL.CL', news: 'Ecopetrol acción', index: false },
-  { name: 'PFCIBEST', yahoo: 'PFCIBEST.CL', news: 'Grupo Cibest acción', index: false },
-  { name: 'CIBEST', yahoo: 'CIBEST.CL', news: 'Grupo Cibest Bancolombia', index: false },
-  { name: 'PFGRUPSURA', yahoo: 'PFGRUPSURA.CL', news: 'Grupo Sura acción', index: false },
-  { name: 'TERPEL', yahoo: 'TERPEL.CL', news: 'Terpel acción', index: false },
-  { name: 'GEB', yahoo: 'GEB.CL', news: 'Grupo Energía Bogotá acción', index: false },
-  { name: 'ISA', yahoo: 'ISA.CL', news: 'ISA Interconexión Eléctrica acción', index: false },
-  { name: 'GRUPOARGOS', yahoo: 'GRUPOARGOS.CL', news: 'Grupo Argos acción', index: false },
+  { name: 'ICOLCAP', yahoo: '', news: 'iShares COLCAP ICOLCAP', index: false },
+  { name: 'ECOPETROL', yahoo: '', news: 'Ecopetrol acción', index: false },
+  { name: 'PFCIBEST', yahoo: '', news: 'Grupo Cibest acción', index: false },
+  { name: 'CIBEST', yahoo: '', news: 'Grupo Cibest Bancolombia', index: false },
+  { name: 'PFGRUPSURA', yahoo: '', news: 'Grupo Sura acción', index: false },
+  { name: 'TERPEL', yahoo: '', news: 'Terpel acción', index: false },
+  { name: 'GEB', yahoo: '', news: 'Grupo Energía Bogotá acción', index: false },
+  { name: 'ISA', yahoo: '', news: 'ISA Interconexión Eléctrica acción', index: false },
+  { name: 'GRUPOARGOS', yahoo: '', news: 'Grupo Argos acción', index: false },
   // Divisas: el dólar se descarga solo; es también el índice de referencia del segmento
   { name: 'USD/COP', yahoo: 'COP=X', news: 'dólar peso colombiano TRM', index: false },
   // Índices de referencia de renta fija: se importan desde la BVC (no hay fuente automática)
@@ -33,9 +37,9 @@ function catalog() {
   }
   return [];
 }
-const catalogAsset = (c) => ({ name: c.nemo, yahoo: c.yahoo || '', news: `${c.name} ${c.type === 'accion' ? 'acción' : ''}`.trim(), index: c.type === 'indice', enabled: true, cls: c.type === 'accion' ? undefined : c.type });
+const catalogAsset = (c) => ({ name: c.nemo, yahoo: c.type === 'divisa' ? c.yahoo || '' : '', news: `${c.name} ${c.type === 'accion' ? 'acción' : ''}`.trim(), index: c.type === 'indice', enabled: true, cls: c.type === 'accion' ? undefined : c.type });
 
-const DEFAULTS_VERSION = 4; // sube cuando se agregan activos predeterminados o se hace una limpieza
+const DEFAULTS_VERSION = 5; // sube cuando se agregan activos predeterminados o se hace una limpieza
 
 /* Renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos) leídos con las reglas anteriores:
  * se borran una vez para volver a cargarlos con el lector corregido. */
@@ -92,12 +96,31 @@ class Store {
           for (const a of DEFAULT_ASSETS) if (!this.asset(a.name)) this.data.assets.push(Object.assign({ enabled: true }, a));
           if (from < 3) this.cleanFixed();
           if (from < 4) this.addCatalog();
+          if (from < 5) this.bvcOnly();
           this.data.meta.defaults = DEFAULTS_VERSION;
         }
       }
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
     }
+  }
+
+  /* Solo la BVC para acciones, índices y ETF: quita los cierres de la fuente automática y su símbolo. */
+  bvcOnly() {
+    let removed = 0;
+    for (const a of this.data.assets) {
+      if (isFx(a)) continue;
+      a.yahoo = '';
+      delete this.data.meta.errors[a.name];
+      const book = this.data.prices[a.name];
+      if (!book) continue;
+      for (const d of Object.keys(book))
+        if (book[d][1] !== 'bvc') {
+          delete book[d];
+          removed++;
+        }
+    }
+    return removed;
   }
 
   /* Agrega todas las acciones y ETF de la BVC que falten; devuelve cuántos agregó. */
@@ -198,15 +221,14 @@ class Store {
   }
 
   /* Series para el análisis (formato de PF.data): solo activos activos con datos.
-   * source 'cargados': solo los precios descargados o importados de la BVC;
-   * 'todos': también los de la fuente automática. */
-  series(source) {
-    const onlyLoaded = source !== 'todos';
+   * Acciones, índices y ETF llevan solo los precios descargados o importados de la BVC. */
+  series() {
     return this.data.assets
       .filter((a) => a.enabled)
       .map((a) => {
         const full = this.history(a.name);
-        const keep = full.sources.map((s) => !onlyLoaded || s === 'bvc');
+        // Acciones, índices y ETF: solo la BVC. Divisas: también la fuente automática.
+        const keep = full.sources.map((s) => s === 'bvc' || isFx(a));
         const h = { dates: full.dates.filter((_, i) => keep[i]), prices: full.prices.filter((_, i) => keep[i]), sources: full.sources.filter((_, i) => keep[i]) };
         const bvc = h.sources.filter((s) => s === 'bvc').length;
         const out = { name: a.name, dates: h.dates, prices: h.prices, column: bvc === h.dates.length ? 'BVC' : bvc ? 'BVC + automática' : 'automática', rank: 2, parts: 1 };
@@ -277,6 +299,7 @@ class Store {
         if (v && Array.isArray(v.dates) && (!this.data.macro[k] || v.dates.length > this.data.macro[k].dates.length)) this.data.macro[k] = v;
       }
     }
+    this.bvcOnly(); // un respaldo antiguo puede traer cierres automáticos de acciones
     return { assets, points, news: news.length };
   }
 
@@ -303,4 +326,4 @@ class Store {
   }
 }
 
-module.exports = { catalog, isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };
+module.exports = { catalog, isFx, isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };

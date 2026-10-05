@@ -11,6 +11,8 @@
   const fmtDateTime = (iso) => (iso ? new Date(iso).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : 'nunca');
   const fmtDate = (iso) => (iso ? new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
   const SRC = { bvc: 'BVC', yahoo: 'automática' };
+  // Solo las divisas usan la fuente automática; acciones, índices y ETF, solo la BVC
+  const isFx = (a) => a.cls === 'divisa' || /^[A-Z]{3}\/[A-Z]{3}$/i.test(a.name);
 
   let summary = null;
   let news = [];
@@ -56,7 +58,7 @@
           <td class="n ${ch == null ? '' : ch >= 0 ? 'pos' : 'neg'}">${ch == null ? '—' : (ch >= 0 ? '+' : '') + nf(2).format(ch * 100) + ' %'}</td>
           <td class="n">${a.count}${a.first ? `<span class="sub">desde ${esc(a.first)}</span>` : ''}</td>
           <td>${a.source ? `<span class="src ${a.source}">${SRC[a.source] || esc(a.source)}</span>` : '—'}</td>
-          <td><input class="cell" data-f="yahoo" value="${esc(a.yahoo)}" aria-label="Símbolo automático de ${esc(a.name)}" placeholder="sin fuente automática"></td>
+          <td>${isFx(a) ? `<input class="cell" data-f="yahoo" value="${esc(a.yahoo)}" aria-label="Símbolo automático de ${esc(a.name)}">` : '<span class="src bvc">BVC</span>'}</td>
           <td><input class="cell" data-f="news" value="${esc(a.news)}" aria-label="Búsqueda de noticias de ${esc(a.name)}"></td>
           <td><label class="check"><input type="checkbox" data-f="enabled" ${a.enabled ? 'checked' : ''} aria-label="Usar ${esc(a.name)}"> usar</label></td>
           <td><label class="check"><input type="checkbox" data-f="index" ${a.index ? 'checked' : ''} aria-label="${esc(a.name)} es un índice"> índice</label></td>
@@ -64,7 +66,7 @@
         </tr>`;
       })
       .join('');
-    $('mk-table').innerHTML = `<thead><tr><th>Activo</th><th class="n">Último cierre</th><th>Fecha</th><th class="n">Variación</th><th class="n">Días</th><th>Fuente</th><th>Símbolo automático</th><th>Búsqueda de noticias</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    $('mk-table').innerHTML = `<thead><tr><th>Activo</th><th class="n">Último cierre</th><th>Fecha</th><th class="n">Variación</th><th class="n">Días</th><th>Fuente</th><th>Origen de los precios</th><th>Búsqueda de noticias</th><th></th><th></th><th></th></tr></thead><tbody>${rows}</tbody>`;
     $('set-auto').checked = s.auto;
     $('set-interval').value = String(s.intervalHours);
     $('set-yahoo').checked = s.yahoo;
@@ -81,7 +83,7 @@
       const get = (f) => tr && tr.querySelector(`[data-f="${f}"]`);
       return {
         name: a.name,
-        yahoo: get('yahoo') ? get('yahoo').value : a.yahoo,
+        yahoo: isFx(a) && get('yahoo') ? get('yahoo').value : isFx(a) ? a.yahoo : '',
         news: get('news') ? get('news').value : a.news,
         enabled: get('enabled') ? get('enabled').checked : a.enabled,
         index: get('index') ? get('index').checked : a.index,
@@ -113,19 +115,10 @@
   }
 
   /* ---------- Datos → análisis ---------- */
-  /* El análisis usa solo los datos cargados de la BVC (descargas e importaciones),
-   * salvo que se elija incluir la fuente automática o que aún no haya descargas. */
+  /* El análisis usa solo los precios de la BVC (descargas e importaciones); las divisas, también la fuente automática. */
   async function useInAnalysis(silent) {
-    const want = $('mk-source').value === 'todos' ? 'todos' : 'cargados';
-    let series = await api.series(want);
-    let note = want === 'cargados' ? 'con los datos cargados de la BVC' : 'con los datos cargados y los de la fuente automática';
-    if (series.length < 2 && want === 'cargados') {
-      const all = await api.series('todos');
-      if (all.length >= 2) {
-        series = all;
-        note = 'con los datos de la fuente automática, porque aún no hay suficientes descargas de la BVC';
-      }
-    }
+    const series = await api.series();
+    const note = 'con los precios de la BVC';
     if (series.length < 2) {
       if (!silent) status('Faltan datos: se necesitan al menos dos activos con cierres. Abre la BVC, importa archivos o actualiza.', 'bad');
       return false;
@@ -160,7 +153,7 @@
     }
     if (payload && payload.result) await loadMacro();
     // Cada actualización agrega a la biblioteca local los historiales descargados
-    if (payload && payload.result && globalThis.PFApp && globalThis.PFApp.saveToLibrary) await globalThis.PFApp.saveToLibrary(await api.series('todos'));
+    if (payload && payload.result && globalThis.PFApp && globalThis.PFApp.saveToLibrary) await globalThis.PFApp.saveToLibrary(await api.series());
     if (payload && (payload.result || payload.imported)) setTimeout(() => saveLibrary(true), 1500);
     if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) {
       const before = lastRecommended();
@@ -272,11 +265,6 @@
       const r = await api.importar();
       if (r === null) status('');
     });
-    $('mk-source').value = prefs().source === 'todos' ? 'todos' : 'cargados';
-    $('mk-source').addEventListener('change', () => {
-      setPref('source', $('mk-source').value);
-      if (fromDesktop) useInAnalysis(false);
-    });
     $('mk-export').addEventListener('click', async () => {
       try {
         const r = await api.exportarDatos();
@@ -309,11 +297,10 @@
       if (!name) return status('Escribe el nemotécnico del activo.', 'bad');
       if (summary.assets.some((a) => a.name === name)) return status(`${name} ya está en la lista.`, 'bad');
       const list = assetsFromTable();
-      list.push({ name, yahoo: $('mk-new-yahoo').value.trim() || name + '.CL', news: $('mk-new-news').value.trim() || name + ' acción', enabled: true, index: /colcap|indice|índice/i.test(name) });
+      list.push({ name, yahoo: '', news: $('mk-new-news').value.trim() || name + ' acción', enabled: true, index: /colcap|indice|índice/i.test(name) });
       $('mk-new-name').value = '';
-      $('mk-new-yahoo').value = '';
       $('mk-new-news').value = '';
-      saveAssets(list).then(() => status(`${name} agregado. Pulsa «Actualizar ahora» para traer sus datos.`, 'ok'));
+      saveAssets(list).then(() => status(`${name} agregado. Descarga su histórico con «Abrir la BVC y descargar».`, 'ok'));
     });
     const saveSettings = () =>
       api

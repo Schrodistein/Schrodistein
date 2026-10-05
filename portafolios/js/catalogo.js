@@ -1,12 +1,12 @@
 /* Catálogo de acciones y ETF locales que cotizan en la Bolsa de Valores de Colombia (renta variable,
- * mercado principal), más los índices y divisas de referencia. El nemotécnico es el de la BVC; el
- * símbolo automático es el mismo con el sufijo .CL (Yahoo Finance). La BVC cambia la lista cuando
+ * mercado principal), más los índices y divisas de referencia. El nemotécnico es el de la BVC, la única
+ * fuente de precios de acciones, índices y ETF; solo las divisas tienen símbolo automático. La BVC cambia la lista cuando
  * una empresa se inscribe, se fusiona o cancela su inscripción: cualquier otro archivo que cargues
  * entra igual como un activo más, con su propio nombre. */
 (function (root) {
   'use strict';
   const PF = (root.PF = root.PF || {});
-  const A = (nemo, name, sector) => ({ nemo, name, sector, type: 'accion', yahoo: nemo + '.CL' });
+  const A = (nemo, name, sector) => ({ nemo, name, sector, type: 'accion', yahoo: '' });
   const CATALOG = [
     // Petróleo, gas y energía
     A('ECOPETROL', 'Ecopetrol', 'Petróleo y gas'),
@@ -49,9 +49,9 @@
     A('COLTEJER', 'Coltejer', 'Textiles'),
     A('ELCONDOR', 'Construcciones El Cóndor', 'Construcción'),
     // ETF locales
-    { nemo: 'ICOLCAP', name: 'iShares MSCI COLCAP (ETF)', sector: 'ETF del índice COLCAP', type: 'etf', yahoo: 'ICOLCAP.CL' },
-    { nemo: 'HCOLSEL', name: 'Hcolsel (ETF de acciones colombianas)', sector: 'ETF', type: 'etf', yahoo: 'HCOLSEL.CL' },
-    // Índices de referencia (sin fuente automática: se descargan de la BVC)
+    { nemo: 'ICOLCAP', name: 'iShares MSCI COLCAP (ETF)', sector: 'ETF del índice COLCAP', type: 'etf', yahoo: '' },
+    { nemo: 'HCOLSEL', name: 'Hcolsel (ETF de acciones colombianas)', sector: 'ETF', type: 'etf', yahoo: '' },
+    // Índices de referencia (se descargan de la BVC)
     { nemo: 'MSCI COLCAP', name: 'Índice MSCI COLCAP', sector: 'Índice de renta variable', type: 'indice', yahoo: '' },
     { nemo: 'COLTES LP', name: 'Índice COLTES de largo plazo', sector: 'Índice de renta fija', type: 'indice', yahoo: '' },
     { nemo: 'COLIBR', name: 'Índice COLIBR (IBR overnight)', sector: 'Índice del mercado monetario', type: 'indice', yahoo: '' },

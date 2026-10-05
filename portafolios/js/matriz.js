@@ -1,6 +1,6 @@
 /* Matriz de precios como la hoja «M. PRECIOS» de un ejercicio de portafolio en Excel:
  *   ITEM | FECHA | índice de mercado | acción 1 | acción 2 | …   (fecha más reciente arriba)
- * Las fechas son todos los días hábiles (lunes a viernes) o todos los días calendario, desde la
+ * Las fechas son todos los días calendario (o solo los hábiles, lunes a viernes), desde la
  * primera cotización hasta la última. Un día sin negociación (festivo, fin de semana o un activo
  * que no se negoció) lleva el último precio cotizado, que se mantiene hasta la siguiente
  * operación. Antes de la primera cotización de cada activo la celda queda vacía. Los precios
@@ -12,10 +12,10 @@
   const DAY = 864e5;
   const iso = (t) => new Date(t).toISOString().slice(0, 10);
 
-  /* series: [{ name, dates (yyyy-mm-dd), prices }]; opts.calendar: 'habiles' (lunes a viernes) o 'calendario';
+  /* series: [{ name, dates (yyyy-mm-dd), prices }]; opts.calendar: 'calendario' (todos los días, predeterminado) o 'habiles' (lunes a viernes);
    * opts.market: nombre del índice que va en la primera columna; opts.cut: fecha de corte. */
   function build(series, opts) {
-    const o = Object.assign({ calendar: 'habiles' }, opts);
+    const o = Object.assign({ calendar: 'calendario' }, opts);
     const list = series.filter((s) => s && s.dates && s.dates.length && s.kind !== 'tasa');
     if (!list.length) return { dates: [], names: [], values: [], filled: [] };
     const m = o.market && list.find((s) => s.name === o.market);
@@ -61,6 +61,19 @@
     return { dates, names: ordered.map((s) => s.name), values, filled, market: m ? m.name : null };
   }
 
+  /* Historial completo de un activo: todos los días calendario desde su primera cotización hasta la
+   * última. Los días cotizados conservan su precio, cantidad y volumen; los demás llevan el último
+   * precio cotizado y se marcan como sin negociación. */
+  function fullHistory(s) {
+    const mx = build([s], { calendar: 'calendario' });
+    const at = new Map(s.dates.map((d, i) => [d.slice(0, 10), i]));
+    return mx.dates.map((d, k) => {
+      const i = at.get(d);
+      const traded = i != null && fin(s.prices[i]);
+      return { date: d, price: mx.values[0][k], traded, qty: traded && s.qty ? s.qty[i] : null, vol: traded && s.vol ? s.vol[i] : null };
+    });
+  }
+
   /* Número de serie de Excel (días desde 1899-12-30). */
   const serial = (d) => Date.parse(d) / DAY + 25569;
 
@@ -92,5 +105,5 @@
     return { mx, bytes: mx.dates.length ? PF.xlsx.build([sheet(mx, opts && opts.title)]) : null };
   }
 
-  PF.matriz = { build, sheet, workbook, serial };
+  PF.matriz = { build, fullHistory, sheet, workbook, serial };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

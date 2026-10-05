@@ -1357,6 +1357,7 @@
       docs.push({ name: 'Variables macroeconomicas y mercado.html', html: PF.pasos.documentHTML('Variables macroeconómicas de Colombia y mercado de valores', $('macro-cards').innerHTML + '<h2>Relación de cada activo con cada variable</h2>' + $('macro-table').innerHTML) });
     }
     docs.push({ name: 'Sistema economico y sistema financiero en Colombia.html', html: PF.pasos.documentHTML('Sistema económico y sistema financiero en Colombia', sistemaBaseHTML() + sistemaIdxHTML()) });
+    docs.push({ name: 'Como obtener cada dato.html', html: PF.pasos.documentHTML('Cómo obtener cada dato que pide la app', $('guia-datos').innerHTML) });
     docs.push({ name: 'Teoria de portafolios.html', html: PF.pasos.documentHTML('Teoría de portafolios', $('screen-teoria').innerHTML) });
     return docs;
   }

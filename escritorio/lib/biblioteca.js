@@ -9,6 +9,18 @@
 const fs = require('fs');
 const path = require('path');
 
+/* Formato de Excel en español: punto y coma entre columnas, punto de miles y coma decimal (2.400,5). */
+function excelNum(x) {
+  if (x == null || !Number.isFinite(x)) return '';
+  let t = String(+x.toPrecision(15));
+  if (/e/i.test(t)) t = x.toFixed(12).replace(/0+$/, '').replace(/\.$/, '');
+  const neg = t[0] === '-';
+  if (neg) t = t.slice(1);
+  const [i, d] = t.split('.');
+  return (neg ? '-' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (d ? ',' + d : '');
+}
+const txt = (x) => (/[;"\n]/.test(String(x)) ? '"' + String(x).replace(/"/g, '""') + '"' : String(x));
+
 const safe = (n) => String(n).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'activo';
 
 function write(store, dir, docs) {
@@ -24,10 +36,11 @@ function write(store, dir, docs) {
   for (const a of store.data.assets) {
     const h = store.history(a.name);
     if (!h.dates.length) continue;
-    const head = (a.kind === 'tasa' ? 'Fecha,Tasa,Fuente' : 'Fecha,Cierre,Fuente') + (h.qty ? ',Cantidad,Volumen' : '');
-    const cell = (x) => (Number.isFinite(x) ? x : '');
-    const rows = h.dates.map((d, i) => `${d},${h.prices[i]},${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}${h.qty ? `,${cell(h.qty[i])},${cell(h.vol[i])}` : ''}`);
-    fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '﻿' + [head].concat(rows).join('\n'));
+    const head = (a.kind === 'tasa' ? 'Fecha;Tasa (%);Fuente' : 'Fecha;Cierre;Fuente') + (h.qty ? ';Cantidad;Volumen' : '');
+    // Las tasas se guardan como fracción (0,105) y se escriben en porcentaje (10,5), como en la BVC
+    const val = (x) => excelNum(a.kind === 'tasa' ? x * 100 : x);
+    const rows = h.dates.map((d, i) => `${d};${val(h.prices[i])};${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}${h.qty ? `;${excelNum(h.qty[i])};${excelNum(h.vol[i])}` : ''}`);
+    fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '\ufeff' + [head].concat(rows).join('\r\n'));
     written.add(safe(a.name) + '.csv');
     assets++;
   }
@@ -36,15 +49,15 @@ function write(store, dir, docs) {
   const mac = sub('macro');
   const m = store.data.macro || {};
   let vars = 0;
-  const all = ['Variable,Fecha,Valor,Fuente'];
+  const all = ['Variable;Fecha;Valor;Fuente'];
   for (const k of Object.keys(m)) {
     const d = m[k];
     if (!d || !d.dates) continue;
-    fs.writeFileSync(path.join(mac, k + '.csv'), '﻿' + ['Fecha,Valor'].concat(d.dates.map((t, i) => `${t},${d.values[i]}`)).join('\n') + `\n\nFuente: ${d.source}\nURL: ${d.url || ''}\nDescargado: ${d.updated || ''}\n`);
-    d.dates.forEach((t, i) => all.push(`${k},${t},${d.values[i]},"${d.source}"`));
+    fs.writeFileSync(path.join(mac, k + '.csv'), '\ufeff' + ['Fecha;Valor'].concat(d.dates.map((t, i) => `${t};${excelNum(d.values[i])}`)).join('\r\n') + `\r\n\r\nFuente: ${txt(d.source)}\r\nURL: ${d.url || ''}\r\nDescargado: ${d.updated || ''}\r\n`);
+    d.dates.forEach((t, i) => all.push(`${k};${t};${excelNum(d.values[i])};${txt(d.source)}`));
     vars++;
   }
-  if (vars) fs.writeFileSync(path.join(mac, 'todas.csv'), '﻿' + all.join('\n'));
+  if (vars) fs.writeFileSync(path.join(mac, 'todas.csv'), '\ufeff' + all.join('\r\n'));
   let ndocs = 0;
   if (Array.isArray(docs) && docs.length) {
     const doc = sub('documentos');
@@ -65,10 +78,10 @@ function write(store, dir, docs) {
       'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',
       'documentos/     paso a paso de varianza, covarianza, desviación, correlación y betas; variables macro; teoría.',
       '',
-      'La app reescribe esta carpeta en cada actualización (semanal por defecto). Los CSV se abren en Excel.',
+      'La app reescribe esta carpeta en cada actualización (semanal por defecto). Los CSV usan punto y coma, punto de miles y coma decimal (Excel en español): se abren directamente en Excel.',
     ].join('\r\n')
   );
   return { dir, assets, vars, docs: ndocs };
 }
 
-module.exports = { write };
+module.exports = { write, excelNum };

@@ -123,7 +123,11 @@
     if (di < 0) di = 0;
     const vi = head.findIndex((h, i) => i !== di);
     const cells = rows.slice(1).map((l) => l.split(sep));
-    const dc = cells.some((c) => /,\d/.test(c[vi] || '') && !/\./.test(c[vi] || ''));
+    // Coma decimal: «10,5» o «4.230,25» (punto de miles), como los guarda Excel en español
+    const dc = sep !== ',' && cells.some((c) => {
+      const v = String(c[vi] || '');
+      return /,\d/.test(v) && v.lastIndexOf(',') > v.lastIndexOf('.');
+    });
     const pts = [];
     for (const c of cells) {
       const d = normDate(String(c[di] || '').trim());
@@ -353,13 +357,14 @@
 
   /* Tabla larga (fecha, variable, valor, fuente) para descargar o guardar en la biblioteca. */
   function toCSV(data) {
-    const rows = ['Variable,Fecha,Valor,Unidad,Fuente'];
+    // Formato de Excel en español: punto y coma, punto de miles y coma decimal
+    const rows = ['Variable;Fecha;Valor;Unidad;Fuente'];
     for (const k of Object.keys(VARS)) {
       const d = data && data[k];
       if (!d || !d.dates) continue;
-      d.dates.forEach((t, i) => rows.push(`${k},${t},${d.values[i]},${VARS[k].unit},"${String(d.source || '').replace(/"/g, "'")}"`));
+      d.dates.forEach((t, i) => rows.push(`${k};${t};${PF.data.excelNum(d.values[i])};${VARS[k].unit};"${String(d.source || '').replace(/"/g, "'")}"`));
     }
-    return rows.join('\n');
+    return rows.join('\r\n');
   }
 
   PF.macro = { VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };

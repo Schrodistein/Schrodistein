@@ -941,7 +941,7 @@
     el.textContent = msg || '';
   }
   const stamp = () => new Date().toISOString().slice(0, 10);
-  const csvNum = (x) => (Number.isFinite(x) ? String(+x.toPrecision(12)).replace('.', ',') : '');
+  const csvNum = (x) => PF.data.excelNum(Number.isFinite(x) ? +x.toPrecision(12) : NaN);
   const csvTxt = (x) => (/[;"\n]/.test(String(x)) ? '"' + String(x).replace(/"/g, '""') + '"' : String(x));
   function csv(rows) {
     return '﻿' + rows.map((r) => r.map((c) => (typeof c === 'number' ? csvNum(c) : csvTxt(c == null ? '' : c))).join(';')).join('\r\n');
@@ -1264,9 +1264,10 @@
         // Un solo archivo con todo el historial del activo, con los valores tal como vienen de la fuente
         const r = st.lib.series.find((x) => x.name === t.dataset.libDl);
         const head = r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre' + (r.qty ? ';Cantidad;Volumen' : '');
-        const cell = (x) => (x == null || !Number.isFinite(x) ? '' : String(x));
+        // Formato de Excel en español: punto de miles y coma decimal, separado por punto y coma
+        const cell = (x) => (x == null || !Number.isFinite(x) ? '' : PF.data.excelNum(x));
         const rows = r.dates.map((d, i) => `${d};${r.name};${cell(r.kind === 'tasa' ? r.prices[i] * 100 : r.prices[i])}${r.qty && r.kind !== 'tasa' ? `;${cell(r.qty[i])};${cell(r.vol[i])}` : ''}`);
-        download('\ufeff' + [head].concat(rows).join('\n'), `${r.name.replace(/[\\/:*?"<>|]+/g, '-')}.csv`, 'text/csv;charset=utf-8');
+        download('\ufeff' + [head].concat(rows).join('\r\n'), `${r.name.replace(/[\\/:*?"<>|]+/g, '-')}.csv`, 'text/csv;charset=utf-8');
         return;
       }
       if (t.dataset.libDel || t.dataset.libDelm) {
@@ -1323,12 +1324,18 @@
       dam: { list: (store.get('damodaran') || {}).list || null, inputs: store.get('dam') || {} },
       crp: store.get('crp') || 0,
       desktop: !!globalThis.bvc,
+      sel: st.sel,
+      ports: PORTS,
+      user: st.conf && st.conf.me ? st.conf.me : null,
+      tb: st.model ? PF.model.treynorBlack(st.model) : null,
+      width: Math.min(760, Math.max(320, ($('pasos') && $('pasos').clientWidth - 40) || 640)),
     };
   }
+  const pasosHTML = (ctx) => PF.pasos.render(ctx) + PF.frontera.render(ctx);
   function renderPasos() {
     if (!st.model) return;
     try {
-      $('pasos').innerHTML = PF.pasos.render(pasosCtx());
+      $('pasos').innerHTML = pasosHTML(pasosCtx());
     } catch (e) {
       $('pasos').innerHTML = `<div class="panel"><p>No se pudo armar el desarrollo: ${esc(e.message)}</p></div>`;
     }
@@ -1483,8 +1490,8 @@
     const docs = [];
     if (st.model) {
       const tmp = document.createElement('div');
-      tmp.innerHTML = PF.pasos.render(pasosCtx());
-      docs.push({ name: 'Paso a paso - varianza, covarianza, correlacion y betas.html', html: PF.pasos.documentHTML('Paso a paso: varianza, covarianza, desviación, correlación y betas', tmp.innerHTML) });
+      tmp.innerHTML = pasosHTML(pasosCtx());
+      docs.push({ name: 'Paso a paso - varianza, covarianza, correlacion y betas.html', html: PF.pasos.documentHTML('Paso a paso: varianza, covarianza, desviación, correlación, betas y frontera eficiente', tmp.innerHTML) });
     }
     const data = macroData();
     if (Object.keys(data).length) {

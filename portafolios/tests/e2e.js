@@ -88,6 +88,9 @@ const shots = process.argv[3];
     await page.waitForSelector('#dam-panel');
     const pasos = await page.textContent('#pasos');
     if (!/Markowitz \(1952\)/.test(pasos) || !/βL = βU/.test(pasos) || !/Varianza del portafolio/.test(pasos)) errors.push(label + ': paso a paso incompleto');
+    if (!/Cómo se calcula y se grafica la frontera eficiente/.test(pasos) || !/Dónde queda el portafolio elegido/.test(pasos) || !/promedian las correlaciones/.test(pasos)) errors.push(label + ': falta el paso a paso de la frontera');
+    if ((await page.$$('#pasos .chart-box svg')).length < 2) errors.push(label + ': faltan las gráficas de la frontera y la SML en el paso a paso');
+    if (shots) await page.screenshot({ path: `${shots}/${label}-pasos.png`, fullPage: true });
     await page.click('#tab-macro');
     if ((await page.$$('#macro-cards .macro-card')).length !== 4) errors.push(label + ': faltan las 4 variables macro');
     // Sin alarmas de advertencia en portafolios ni activos; el sistema financiero con sus referencias

@@ -238,7 +238,12 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   const w = bib.write(st, dir, [{ name: 'Paso a paso.html', html: '<p>ok</p>' }]);
   assert(w.assets >= 1 && w.vars === 4 && w.docs === 1);
   const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
-  assert(/Fecha,Cierre,Fuente,Cantidad,Volumen/.test(csv) && /2026-08-18,2770,BVC,1000,2770000/.test(csv), csv.slice(0, 160));
+  // Formato de Excel en español: punto y coma, punto de miles y coma decimal
+  assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
+  assert(bib.excelNum(4230.25) === '4.230,25' && bib.excelNum(0.105 * 100) === '10,5');
+  // El CSV de la biblioteca se vuelve a leer con los mismos valores
+  const reread = updater.loadPF().data.parseSeriesText(csv, 'ECOPETROL.csv')[0];
+  assert(reread.prices.at(-1) === 2770 && reread.vol.at(-1) === 2770000 && reread.qty.at(-1) === 1000, 'relectura: ' + reread.prices.at(-1) + ' ' + reread.vol.at(-1));
   const ser = st.series('cargados').find((x) => x.name === 'ECOPETROL');
   assert(ser.qty && ser.qty.length === ser.dates.length && ser.vol.at(-1) === 2770000, 'la serie lleva cantidad y volumen');
   assert(/Fuente: datos\.gov\.co/.test(fs.readFileSync(path.join(dir, 'macro', 'trm.csv'), 'utf8')) && fs.existsSync(path.join(dir, 'macro', 'todas.csv')) && fs.existsSync(path.join(dir, 'LEEME.txt')));

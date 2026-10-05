@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -657,6 +657,57 @@ test('paso a paso: varianza, covarianza y correlación iguales a las de la libre
   assert(/Varianza del portafolio/.test(html) && /Damodaran/.test(html) && /Markowitz \(1952\)/.test(html));
 });
 
+test('frontera paso a paso: correlación promedio implícita reproduce σp y cada portafolio se explica', () => {
+  const m = sampleModel();
+  const P = PF.model.portfolios(m, 0, 1);
+  for (const k of ['recommended', 'tangency', 'minVar', 'equal']) {
+    const w = P[k].w;
+    const ac = PF.frontera.avgCorr(m, w);
+    assert(near(ac.varP, P[k].vol * P[k].vol, 1e-10), 'σp² = Σwᵢ²σᵢ² + ρ̄ₚ·cruzado para ' + k);
+    assert(near(ac.own + ac.weighted * ac.cross, ac.varP, 1e-12) && ac.weighted <= 1 && ac.weighted >= -1);
+  }
+  // Promedio simple = media de los pares de la matriz de correlaciones
+  const n = m.names.length;
+  let s = 0;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) s += m.corr[i][j];
+  assert(near(PF.frontera.avgCorr(m, P.equal.w).simple, s / ((n * (n - 1)) / 2), 1e-12));
+  // Condición de primer orden del tangente: activos interiores con prima = βᵢ,T × prima de T
+  const T = P.tangency;
+  const bT = PF.frontera.betasTo(m, T.w);
+  const diff = m.names.map((_, i) => m.mu[i] - m.rf - bT[i] * (T.ret - m.rf));
+  const inner = diff.filter((_, i) => T.w[i] > P.lo[i] + 1e-3 && T.w[i] < P.hi[i] - 1e-3);
+  assert(inner.length >= 1 && inner.every((x) => Math.abs(x - inner[0]) < 2e-3), 'los interiores comparten la misma diferencia ν');
+  diff.forEach((x, i) => {
+    if (T.w[i] <= P.lo[i] + 1e-4) assert(x <= inner[0] + 2e-3, 'en el mínimo: diferencia ≤ ν');
+    if (T.w[i] >= P.hi[i] - 1e-4) assert(x >= inner[0] - 2e-3, 'en el tope: diferencia ≥ ν');
+  });
+  const ports = [{ key: 'recommended', label: 'Recomendado' }, { key: 'tangency', label: 'Máxima Sharpe' }, { key: 'minVar', label: 'Mínima varianza' }];
+  const html = PF.frontera.render({ m, P, esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', sel: 'tangency', ports, tb: PF.model.treynorBlack(m), width: 600 });
+  for (const t of ['frontera eficiente', 'mercado de capitales', 'mercado de valores', 'Cómo se eligen', 'Por qué un activo entra', 'Dónde queda', 'promedian las correlaciones', 'Máximo rendimiento', 'Máxima Sharpe (elegido)']) assert(html.includes(t), 'falta ' + t);
+});
+
+test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {
+  const X = PF.data.excelNum;
+  assert(X(2400) === '2.400' && X(2400.5) === '2.400,5' && X(1234567.891) === '1.234.567,891' && X(-0.0525) === '-0,0525' && X(10.500000000000002) === '10,5' && X(NaN) === '' && X(999) === '999');
+  // Archivo exportado por la biblioteca → mismo historial, con cantidad y volumen
+  const dates = ['2026-01-02', '2026-01-05', '2026-01-06', '2026-01-07'];
+  const px = [2400, 2410.5, 1999.75, 12345.5];
+  const q = [1200000, 35, 1500, 2000000];
+  const v = [2880000000.5, 84367.5, 2999625, 24691000000];
+  const text = '\ufeffFecha;Nemotécnico;Precio cierre;Cantidad;Volumen\r\n' + dates.map((d, i) => `${d};ECOPETROL;${X(px[i])};${X(q[i])};${X(v[i])}`).join('\r\n');
+  const s = PF.data.parseSeriesText(text, 'ECOPETROL.csv')[0];
+  assert(s.dates.join() === dates.join() && s.prices.join() === px.join(), 'precios: ' + s.prices.join());
+  assert(s.qty.join() === q.join() && s.vol.join() === v.join(), 'cantidad y volumen: ' + s.qty.join() + ' / ' + s.vol.join());
+  // Y el formato de la BVC (coma de miles, punto decimal) sigue leyéndose igual
+  const bvc = 'Fecha,Nemotécnico,Precio cierre,Cantidad,Volumen\n' + dates.map((d, i) => `${d},ECOPETROL,"${px[i].toLocaleString('en-US')}","${q[i].toLocaleString('en-US')}","${v[i].toLocaleString('en-US', { maximumFractionDigits: 2 })}"`).join('\n');
+  const b = PF.data.parseSeriesText(bvc, 'ECOPETROL.csv')[0];
+  assert(b.prices.join() === px.join() && b.qty.join() === q.join(), 'BVC: ' + b.prices.join() + ' / ' + b.qty.join());
+  // Variables macro exportadas → se vuelven a importar igual
+  const mac = PF.macro.toCSV({ trm: { dates: ['2026-01-02', '2026-01-03', '2026-01-04'], values: [4230.25, 4199.5, 4301], source: 'x' } });
+  const back = PF.macro.parseFile(mac.split('\r\n').map((l) => l.split(';').slice(1, 3).join(';')).join('\n'), 'trm.csv');
+  assert(back.values.join() === '4230.25,4199.5,4301', 'macro: ' + back.values.join());
+});
+
 test('macro: lectores de FRED, Banco Mundial y datos.gov.co, y relación con el mercado', () => {
   const fred = PF.macro.parseFred('observation_date,LRHUTTTTCOM156S\n2024-01-01,10.5\n2024-02-01,.\n2024-03-01,10.1\n2024-04-01,9.9\n');
   assert(fred.dates.join() === '2024-01-01,2024-03-01,2024-04-01' && fred.values[2] === 9.9);
@@ -689,7 +740,7 @@ test('macro: lectores de FRED, Banco Mundial y datos.gov.co, y relación con el 
   assert(Math.abs(res.b * 100 + 0.8) < 0.15, 'b ≈ −0,8 pp por 1 % de TRM: ' + res.b * 100);
   assert(/negativa fuerte/.test(PF.macro.interpret(res, 'trm', 'COLCAP')));
   const csv = PF.macro.toCSV({ desempleo: Object.assign(fred, { source: 'FRED' }) });
-  assert(csv.split('\n').length === 4 && /desempleo,2024-04-01,9.9,%,"FRED"/.test(csv));
+  assert(csv.split('\r\n').length === 4 && /desempleo;2024-04-01;9,9;%;"FRED"/.test(csv));
 });
 
 test('índices: volumen, rotación y frecuencia del COLEQTY; índice propio por capitalización y liquidez', () => {

@@ -207,6 +207,17 @@
     return Number.isFinite(v) ? v : NaN;
   }
 
+  /* Número para Excel en español: punto de miles y coma decimal (2.400,5), sin redondear el dato. */
+  function excelNum(x) {
+    if (x == null || !Number.isFinite(x)) return '';
+    let t = String(+x.toPrecision(15));
+    if (/e/i.test(t)) t = x.toFixed(12).replace(/0+$/, '').replace(/\.$/, '');
+    const neg = t[0] === '-';
+    if (neg) t = t.slice(1);
+    const [i, d] = t.split('.');
+    return (neg ? '-' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + (d ? ',' + d : '');
+  }
+
   function parseCSV(text) {
     const lines = String(text)
       .replace(/^﻿/, '')
@@ -420,7 +431,10 @@
     // Días sin negociación: la BVC repite un precio de referencia con cantidad vacía.
     // Si el archivo trae cantidad o volumen y casi siempre tiene valor, esos días se omiten.
     const qi = hd.head.findIndex((h, i) => i !== hd.pi && /^(cantidad|volumen|volume|vol)( |$)/.test(norm(h)));
-    const numAt = (r, k) => (typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), false));
+    // Cantidad y monto: cada columna con su propio formato (1,234.5 de la BVC o 1.234,5 de Excel en español)
+    const colDc = {};
+    const dcOf = (k) => (k in colDc ? colDc[k] : (colDc[k] = columnDecimalComma(body.map((r) => (typeof r[k] === 'number' ? '' : clean(r[k]))).filter(Boolean), ',')));
+    const numAt = (r, k) => (typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), dcOf(k)));
     const qty = (r) => numAt(r, qi);
     const withQty = qi >= 0 ? body.filter((r) => qty(r) > 0).length : 0;
     const skipNoTrade = qi >= 0 && withQty >= 0.5 * body.length;
@@ -830,6 +844,6 @@
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { assetKey, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { assetKey, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

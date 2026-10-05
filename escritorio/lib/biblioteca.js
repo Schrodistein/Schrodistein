@@ -1,0 +1,79 @@
+/* Biblioteca local: una carpeta con todo lo descargado, en archivos que se abren sin la app.
+ *   acciones/<ACTIVO>.csv          historial por activo (fecha, cierre o tasa, fuente)
+ *   acciones/originales/           copias de los archivos descargados de la BVC
+ *   macro/<variable>.csv           PIB, inflación, desempleo y TRM, con su fuente
+ *   damodaran/                     betas por industria de Damodaran
+ *   documentos/*.html              paso a paso, variables macro y teoría
+ *   LEEME.txt */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+
+const safe = (n) => String(n).replace(/[\\/:*?"<>|]+/g, '-').trim() || 'activo';
+
+function write(store, dir, docs) {
+  const sub = (s) => {
+    const d = path.join(dir, s);
+    fs.mkdirSync(d, { recursive: true });
+    return d;
+  };
+  const acc = sub('acciones');
+  let assets = 0;
+  for (const a of store.data.assets) {
+    const h = store.history(a.name);
+    if (!h.dates.length) continue;
+    const head = a.kind === 'tasa' ? 'Fecha,Tasa,Fuente' : 'Fecha,Cierre,Fuente';
+    const rows = h.dates.map((d, i) => `${d},${h.prices[i]},${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}`);
+    fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '﻿' + [head].concat(rows).join('\n'));
+    assets++;
+  }
+  const mac = sub('macro');
+  const m = store.data.macro || {};
+  let vars = 0;
+  const all = ['Variable,Fecha,Valor,Fuente'];
+  for (const k of Object.keys(m)) {
+    const d = m[k];
+    if (!d || !d.dates) continue;
+    fs.writeFileSync(path.join(mac, k + '.csv'), '﻿' + ['Fecha,Valor'].concat(d.dates.map((t, i) => `${t},${d.values[i]}`)).join('\n') + `\n\nFuente: ${d.source}\nURL: ${d.url || ''}\nDescargado: ${d.updated || ''}\n`);
+    d.dates.forEach((t, i) => all.push(`${k},${t},${d.values[i]},"${d.source}"`));
+    vars++;
+  }
+  if (vars) fs.writeFileSync(path.join(mac, 'todas.csv'), '﻿' + all.join('\n'));
+  let ndocs = 0;
+  if (Array.isArray(docs) && docs.length) {
+    const doc = sub('documentos');
+    for (const d of docs) {
+      if (!d || !d.name || typeof d.html !== 'string') continue;
+      fs.writeFileSync(path.join(doc, safe(d.name)), d.html);
+      ndocs++;
+    }
+  }
+  fs.writeFileSync(
+    path.join(dir, 'LEEME.txt'),
+    [
+      'Biblioteca local de Frontera Eficiente',
+      `Actualizada: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
+      '',
+      'acciones/       un CSV por activo: fecha, cierre (o tasa en renta fija) y fuente (BVC o Yahoo Finance).',
+      'acciones/originales/  copias de los archivos descargados de la BVC dentro de la app.',
+      'macro/          PIB, inflación, desempleo y TRM de Colombia, con la fuente y la fecha de descarga.',
+      'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',
+      'documentos/     paso a paso de varianza, covarianza, desviación, correlación y betas; variables macro; teoría.',
+      '',
+      'La app reescribe esta carpeta en cada actualización (semanal por defecto). Los CSV se abren en Excel.',
+    ].join('\r\n')
+  );
+  return { dir, assets, vars, docs: ndocs };
+}
+
+function saveOriginal(dir, file) {
+  try {
+    const d = path.join(dir, 'acciones', 'originales');
+    fs.mkdirSync(d, { recursive: true });
+    fs.copyFileSync(file, path.join(d, path.basename(file).replace(/^\d{10,}-/, '')));
+  } catch (e) {
+    /* la copia es opcional */
+  }
+}
+
+module.exports = { write, saveOriginal };

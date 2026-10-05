@@ -68,7 +68,7 @@ jobs:
           prerelease: true
           files: instaladores/*
           body: |
-            Aplicación de escritorio de Frontera Eficiente: portafolios eficientes de Markowitz, Sharpe, Treynor y Jensen con acciones, renta fija, derivados y divisas de la Bolsa de Valores de Colombia; plan de inversión por presupuesto y horizonte con comisiones y montos mínimos; guía de dónde invertir; datos y noticias que se actualizan solos cada semana.
+            Aplicación de escritorio de Frontera Eficiente: portafolios eficientes de Markowitz, Sharpe, Treynor y Jensen con acciones, renta fija, derivados y divisas de la Bolsa de Valores de Colombia; plan de inversión por presupuesto y horizonte con comisiones y montos mínimos; guía de dónde invertir; paso a paso de varianza, covarianza y correlación; beta de Sharpe frente a Damodaran; PIB, inflación, desempleo y TRM con su relación con la bolsa; biblioteca local con todos los datos; datos y noticias que se actualizan solos cada semana.
 
             | Sistema | Archivo |
             | --- | --- |

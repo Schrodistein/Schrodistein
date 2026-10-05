@@ -11,6 +11,14 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
 - Además de acciones: TES, bonos y CDT (por precio o por tasa), divisas (el dólar USD/COP se descarga solo), futuros y opciones. Trae en la lista los índices de referencia de cada segmento: MSCI COLCAP, COLTES y COLIBR (estos dos se importan desde la BVC).
 - El análisis y la recomendación usan por defecto solo los datos que cargaste de la BVC (descargas e importaciones); en Mercado se puede incluir también la fuente automática.
 - **Comprar**, **Dónde invertir** y **Descargas** funcionan igual que en la app web: plan de inversión por presupuesto y horizonte con comisiones editables (promociones incluidas), montos mínimos y renta fija; canales y paso a paso para invertir; y libro de Excel con todos los cálculos (se guarda donde elijas).
+- **Variables macro**: descarga PIB, inflación, desempleo y TRM de Colombia: la TRM diaria de datos.gov.co, la inflación y el desempleo mensuales y el PIB trimestral de FRED (OCDE) y, como respaldo, las series anuales del Banco Mundial. Las actualiza con los cierres.
+- **Betas de Damodaran**: descarga el archivo de betas por industria de mercados emergentes de NYU Stern para comparar la beta de Damodaran con la de Sharpe.
+- **Biblioteca local** en `Documentos/Frontera Eficiente/Biblioteca`, que se reescribe en cada actualización:
+  - un CSV por activo con el historial (BVC y fuente automática) y copias de los archivos descargados de la BVC;
+  - las variables macro con su fuente;
+  - el archivo de Damodaran;
+  - los documentos «Paso a paso», «Variables macro» y «Teoría» en HTML.
+  Se abre con Mercado → «Abrir biblioteca local».
 - Los datos se guardan en el equipo (`datos.json` en la carpeta de datos de la app); no se envían a ningún servidor.
 
 ## Compartir la app

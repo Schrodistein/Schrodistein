@@ -45,6 +45,19 @@ function writeAll(dir) {
   w('yahoo-PFCIBEST.CL.json', yahooChart('PFCIBEST.CL', [2025, 0, 2], 400, 45000, 13));
   w('news.xml', NEWS);
   w('ECOPETROL_20260908_045259.csv', BVC_CSV);
+  // Variables macro: FRED (inflación y desempleo), Banco Mundial (PIB, porque FRED no responde) y datos.gov.co (TRM)
+  const months = [];
+  for (let y = 2024; y <= 2026; y++) for (let m = 1; m <= 12; m++) if (y < 2026 || m <= 8) months.push(`${y}-${String(m).padStart(2, '0')}-01`);
+  w('fred-CPALTT01COM659N.csv', 'observation_date,CPALTT01COM659N\n' + months.map((d, i) => `${d},${(9.5 - i * 0.15).toFixed(2)}`).join('\n'));
+  w('fred-LRHUTTTTCOM156S.csv', 'observation_date,LRHUTTTTCOM156S\n' + months.map((d, i) => `${d},${i === 3 ? '.' : (10.8 - (i % 5) * 0.1).toFixed(1)}`).join('\n'));
+  w('wb-NY.GDP.MKTP.KD.ZG.json', [{ page: 1, pages: 1, per_page: 200, total: 5 }, [2025, 2024, 2023, 2022, 2021].map((y, i) => ({ indicator: { id: 'NY.GDP.MKTP.KD.ZG' }, country: { id: 'CO', value: 'Colombia' }, countryiso3code: 'COL', date: String(y), value: [2.6, 1.6, 0.7, 7.3, 10.8][i] }))]);
+  const trm = [];
+  for (let d = Date.UTC(2025, 0, 2), v = 4400; d < Date.UTC(2025, 9, 1); d += 864e5) {
+    if (new Date(d).getUTCDay() % 6 === 0) continue;
+    v *= 1 + 0.004 * Math.sin(d / 9e8);
+    trm.push({ vigenciadesde: new Date(d).toISOString().slice(0, 10) + 'T00:00:00.000', valor: v.toFixed(2) });
+  }
+  w('socrata-trm.json', trm);
   return dir;
 }
 

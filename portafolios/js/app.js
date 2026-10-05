@@ -15,7 +15,7 @@
     { key: 'equal', label: 'Pesos iguales', short: '1/N', shape: 'diamond', title: 'Portafolio de pesos iguales (1/N)', desc: 'La diversificación ingenua: el mismo peso en cada activo. Sirve de referencia; rara vez es eficiente.' },
   ];
 
-  const st = { parsed: null, model: null, P: null, sel: 'recommended', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'terminal', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
+  const st = { parsed: null, model: null, P: null, sel: 'recommended', userW: null, userNames: null, sort: { key: null, dir: -1 }, screen: 'datos', err: null, mode: 'pesos', buys: {}, buyTotal: 0 };
 
   /* ---------- Utilidades ---------- */
   const LOCALE = { COP: 'es-CO', USD: 'en-US', MXN: 'es-MX', EUR: 'es-ES' };
@@ -504,6 +504,8 @@
     if (st.mode === 'acciones') computeBuys();
     renderConfirm();
     renderPlan();
+    if (st.screen === 'estadistica') renderPasos();
+    if (st.screen === 'macro') renderMacro();
     renderCharts();
   }
 
@@ -942,7 +944,21 @@
   }
 
   function doDownload(kind) {
+    if (kind === 'macro' || kind === 'macrodoc') {
+      const data = macroData();
+      if (!Object.keys(data).length) return dlStatus('No hay variables macro: actualízalas o impórtalas en la sección Macro.', 'bad');
+      if (kind === 'macro') download('\ufeff' + PF.macro.toCSV(data), `variables-macro-${stamp()}.csv`, 'text/csv;charset=utf-8');
+      else {
+        const d = documents().find((x) => /macro/i.test(x.name));
+        download(d.html, `variables-macro-y-mercado-${stamp()}.html`, 'text/html;charset=utf-8');
+      }
+      return dlStatus('Listo.', 'ok');
+    }
     if (!st.model) return dlStatus('Primero carga datos en la sección Datos.', 'bad');
+    if (kind === 'pasos') {
+      download(documents()[0].html, `paso-a-paso-${stamp()}.html`, 'text/html;charset=utf-8');
+      return dlStatus('Documento paso a paso generado.', 'ok');
+    }
     const m = st.model;
     try {
       if (kind === 'xlsx') {
@@ -1127,7 +1143,7 @@
 
   /* ---------- Navegación ---------- */
   function go(screen) {
-    if (!document.getElementById('screen-' + screen)) screen = 'terminal';
+    if (!document.getElementById('screen-' + screen)) screen = 'datos';
     st.screen = screen;
     document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== 'screen-' + screen));
     document.querySelectorAll('.tabs button').forEach((b) => (b.getAttribute('data-go') === screen ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
@@ -1137,6 +1153,8 @@
       /* marco sin historial */
     }
     if (screen === 'invertir') renderWhere();
+    if (screen === 'estadistica') renderPasos();
+    if (screen === 'macro') renderMacro();
     renderCharts();
   }
 
@@ -1145,6 +1163,169 @@
     $('where-plan').innerHTML = `<h2>Tu plan, canal por canal</h2>${r.summary}`;
     $('where-cards').innerHTML = r.cards;
     $('where-steps').innerHTML = r.steps;
+  }
+
+  /* ---------- Paso a paso y betas de Damodaran ---------- */
+  function pasosCtx() {
+    const pa = store.get('pa') || {};
+    const n = st.model ? st.model.names.length : 0;
+    return {
+      m: st.model,
+      table: st.table || st.parsed,
+      kind: st.s.kind,
+      retType: st.s.retType,
+      P: st.P,
+      esc,
+      pct,
+      num,
+      a: pa.a < n ? pa.a : 0,
+      b: pa.b < n ? pa.b : Math.min(1, n - 1),
+      dam: { list: (store.get('damodaran') || {}).list || null, inputs: store.get('dam') || {} },
+      crp: store.get('crp') || 0,
+      desktop: !!globalThis.bvc,
+    };
+  }
+  function renderPasos() {
+    if (!st.model) return;
+    try {
+      $('pasos').innerHTML = PF.pasos.render(pasosCtx());
+    } catch (e) {
+      $('pasos').innerHTML = `<div class="panel"><p>No se pudo armar el desarrollo: ${esc(e.message)}</p></div>`;
+    }
+  }
+  function damStatus(msg, kind) {
+    const el = $('dam-status');
+    if (!el) return;
+    el.hidden = false;
+    el.className = 'status ' + (kind || '');
+    el.textContent = msg;
+  }
+  async function loadDamodaran(read, source) {
+    try {
+      damStatus('Leyendo las betas de Damodaran…');
+      const X = await loadSheetJS();
+      const wb = read(X);
+      let list = null;
+      let err = null;
+      for (const sh of wb.SheetNames) {
+        try {
+          list = PF.pasos.parseDamodaran(X.utils.sheet_to_json(wb.Sheets[sh], { header: 1, raw: true }));
+          break;
+        } catch (e) {
+          err = e;
+        }
+      }
+      if (!list) throw err || new Error('El libro no tiene la tabla de Damodaran.');
+      store.set('damodaran', { list, source, date: new Date().toISOString().slice(0, 10) });
+      renderPasos();
+      damStatus(`Industrias de Damodaran cargadas: ${list.length} (${source}). Elige la industria de cada activo y escribe su D/E.`, 'ok');
+    } catch (e) {
+      damStatus(e.message, 'bad');
+    }
+  }
+  function wirePasos() {
+    const box = $('screen-estadistica');
+    box.addEventListener('change', (ev) => {
+      const t = ev.target;
+      if (t.id === 'pa-a' || t.id === 'pa-b') {
+        const pa = store.get('pa') || {};
+        pa[t.id === 'pa-a' ? 'a' : 'b'] = +t.value;
+        store.set('pa', pa);
+        renderPasos();
+      } else if (t.dataset && t.dataset.dam) {
+        const all = store.get('dam') || {};
+        all[t.dataset.dam] = Object.assign({}, all[t.dataset.dam], { [t.dataset.f]: t.value });
+        store.set('dam', all);
+        renderPasos();
+      } else if (t.id === 'dam-crp') {
+        const v = parseFloat(String(t.value).replace(',', '.'));
+        store.set('crp', Number.isFinite(v) ? v / 100 : 0);
+        renderPasos();
+      } else if (t.id === 'dam-file' && t.files && t.files[0]) {
+        const file = t.files[0];
+        file.arrayBuffer().then((buf) => loadDamodaran((X) => X.read(new Uint8Array(buf), { type: 'array' }), file.name));
+      }
+    });
+    box.addEventListener('click', async (ev) => {
+      if (!ev.target.closest('#dam-download') || !globalThis.bvc || !globalThis.bvc.damodaran) return;
+      damStatus('Descargando de pages.stern.nyu.edu…');
+      try {
+        const r = await globalThis.bvc.damodaran();
+        await loadDamodaran((X) => X.read(r.base64, { type: 'base64' }), `${r.file}, descargado el ${r.date}`);
+      } catch (e) {
+        damStatus('No se pudo descargar: ' + e.message + ' Descárgalo a mano desde la página de Damodaran y cárgalo con el botón de al lado.', 'bad');
+      }
+    });
+  }
+
+  /* ---------- Variables macroeconómicas ---------- */
+  st.macroDesk = null;
+  const macroData = () => Object.assign({}, st.macroDesk || {}, store.get('macro') || {});
+  function macroStatus(msg, kind) {
+    const el = $('macro-status');
+    el.hidden = !msg;
+    el.className = 'status ' + (kind || '');
+    el.textContent = msg || '';
+  }
+  function renderMacro() {
+    const data = macroData();
+    let market = null;
+    let assets = [];
+    if (st.model) {
+      market = Object.assign({ name: st.model.marketName }, priceSeries(st.model.marketName));
+      assets = st.model.names.map((n) => Object.assign({ name: n }, priceSeries(n)));
+    }
+    if (market && !market.dates.length) market = null;
+    const w = Math.max(260, Math.min(520, ($('macro-cards').clientWidth || 700) / 2 - 40));
+    const r = PF.macro.render({ data, market, assets, esc, width: w, desktop: !!globalThis.bvc });
+    $('macro-cards').innerHTML = r.cards;
+    $('macro-table').innerHTML = r.table || '<p class="sub">Carga datos de activos y de las variables.</p>';
+    st.macroResults = r.results;
+  }
+  function wireMacro() {
+    $('macro-file').addEventListener('change', async (ev) => {
+      const file = ev.target.files && ev.target.files[0];
+      if (!file) return;
+      const key = $('macro-var').value;
+      try {
+        const buf = await file.arrayBuffer();
+        let text;
+        try {
+          text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+        } catch (e) {
+          text = new TextDecoder('windows-1252').decode(buf);
+        }
+        const d = PF.macro.parseFile(text, file.name);
+        const all = store.get('macro') || {};
+        all[key] = Object.assign(d, { source: 'Archivo importado: ' + file.name, updated: new Date().toISOString() });
+        store.set('macro', all);
+        macroStatus(`${PF.macro.VARS[key].long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]}.`, 'ok');
+        renderMacro();
+      } catch (e) {
+        macroStatus(e.message, 'bad');
+      }
+      ev.target.value = '';
+    });
+  }
+
+  /* Documentos autónomos para la biblioteca local y las descargas. */
+  function documents() {
+    const docs = [];
+    if (st.model) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = PF.pasos.render(pasosCtx());
+      docs.push({ name: 'Paso a paso - varianza, covarianza, correlacion y betas.html', html: PF.pasos.documentHTML('Paso a paso: varianza, covarianza, desviación, correlación y betas', tmp.innerHTML) });
+    }
+    const data = macroData();
+    if (Object.keys(data).length) {
+      const prev = st.screen;
+      st.screen = 'macro';
+      renderMacro();
+      st.screen = prev;
+      docs.push({ name: 'Variables macroeconomicas y mercado.html', html: PF.pasos.documentHTML('Variables macroeconómicas de Colombia y mercado de valores', $('macro-cards').innerHTML + '<h2>Relación de cada activo con cada variable</h2>' + $('macro-table').innerHTML) });
+    }
+    docs.push({ name: 'Teoria de portafolios.html', html: PF.pasos.documentHTML('Teoría de portafolios', $('screen-teoria').innerHTML) });
+    return docs;
   }
 
   /* ---------- Tooltip ---------- */
@@ -1240,6 +1421,8 @@
       if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
     });
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
+    wirePasos();
+    wireMacro();
     const savedSegs = store.get('segs');
     if (Array.isArray(savedSegs)) document.querySelectorAll('#segs [data-seg]').forEach((c) => (c.checked = savedSegs.includes(c.getAttribute('data-seg'))));
     $('segs').addEventListener('change', () => {
@@ -1339,7 +1522,7 @@
     $('plan-optk').addEventListener('change', renderPlan);
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('[data-go-where]') && go('invertir'));
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('#plan-register') && registerPlan());
-    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan']) $('dl-' + k).addEventListener('click', () => doDownload(k));
+    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan', 'macro', 'pasos', 'macrodoc']) $('dl-' + k).addEventListener('click', () => doDownload(k));
     $('mode-pesos').addEventListener('click', () => setMode('pesos'));
     $('mode-acciones').addEventListener('click', () => setMode('acciones'));
     const buysChanged = debounce(() => {
@@ -1394,7 +1577,7 @@
       $('box-acciones').hidden = false;
     }
     const hash = (location.hash || '').slice(1);
-    st.screen = document.getElementById('screen-' + hash) ? hash : 'terminal';
+    st.screen = document.getElementById('screen-' + hash) ? hash : 'datos';
     parse(false);
     go(st.screen);
   }
@@ -1402,6 +1585,13 @@
   /* Punto de entrada para la app de escritorio (js/desktop.js): carga historiales
    * ya descargados como si se hubieran subido archivos. */
   globalThis.PFApp = {
+    // Variables macro descargadas por la app de escritorio
+    setMacro(data) {
+      st.macroDesk = data || null;
+      if (st.screen === 'macro') renderMacro();
+    },
+    macroData,
+    documents,
     // Portafolio recomendado actual (para avisar cuando cambia con datos nuevos)
     recommended() {
       if (!st.model || !st.P || !st.P.recommended) return null;

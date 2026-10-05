@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -626,6 +626,65 @@ test('días sin negociación: se repite el último precio desde la primera fecha
   assert(m.filled.join() === '0,2,1,0');
   const raw = PF.data.mergeSeries([A, B, C, D], 'diaria', { fill: false });
   assert(Number.isNaN(raw.values[1][1]) && raw.filled.join() === '0,0,0,0');
+});
+
+test('paso a paso: varianza, covarianza y correlación iguales a las de la librería', () => {
+  const R = rng(3);
+  const a = Array.from({ length: 40 }, () => R() - 0.5);
+  const b = a.map((x) => 0.6 * x + 0.3 * (R() - 0.5));
+  b[5] = NaN;
+  const pc = PF.pasos.pairCalc(a, b);
+  const a2 = a.filter((_, i) => i !== 5);
+  const b2 = b.filter((_, i) => i !== 5);
+  assert(pc.n === 39 && near(pc.va, PF.stats.variance(a2), 1e-15) && near(pc.cov, PF.stats.covariance(a2, b2), 1e-15));
+  assert(near(pc.corr, PF.stats.covariance(a2, b2) / Math.sqrt(PF.stats.variance(a2) * PF.stats.variance(b2)), 1e-12) && pc.corr > 0.5);
+  // Damodaran: reapalancar y desapalancar son inversas (Hamada)
+  assert(near(PF.pasos.relever(0.8, 0.35, 0.5), 1.06, 1e-12) && near(PF.pasos.unlever(1.06, 0.35, 0.5), 0.8, 1e-12));
+  const rows = [['Date updated:', '2026-01-05'], [], ['Industry Name', 'Number of firms', 'Beta', 'D/E Ratio', 'Effective Tax rate', 'Unlevered beta', 'Cash/Firm value', 'Unlevered beta corrected for cash'],
+    ['Advertising', 50, 1.1, 0.3, 0.2, 0.9, 0.05, 0.95], ['Bank (Money Center)', 80, 0.9, 1.5, 0.25, 0.5, 0.1, 0.55], ['Oil/Gas (Integrated)', 30, 1.0, 0.4, 0.3, 0.8, 0.04, 0.83], ['Power', 40, 0.7, 1.2, 0.2, 0.4, 0.02, 0.41], ['Utility (General)', 20, 0.6, 1.0, 0.2, 0.35, 0.02, 0.36], ['Total Market', 900, 1, 0.5, 0.2, 0.7, 0.05, 0.74]];
+  const list = PF.pasos.parseDamodaran(rows);
+  assert(list.length === 5 && list[1].unlev === 0.55, 'usa la beta corregida por caja');
+  assert(PF.pasos.suggestIndustry('ECOPETROL', list).name === 'Oil/Gas (Integrated)' && PF.pasos.suggestIndustry('PFCIBEST', list).name === 'Bank (Money Center)');
+  // La pantalla se arma con el modelo de ejemplo
+  const m = sampleModel();
+  const table = PF.data.parseCSV(PF.sample.csv());
+  const html = PF.pasos.render({ m, table, kind: 'prices', retType: 'simple', P: PF.model.portfolios(m, 0, 1), esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', num: String, a: 0, b: 1, dam: { list, inputs: {} } });
+  assert(/Varianza del portafolio/.test(html) && /Damodaran/.test(html) && /Markowitz \(1952\)/.test(html));
+});
+
+test('macro: lectores de FRED, Banco Mundial y datos.gov.co, y relación con el mercado', () => {
+  const fred = PF.macro.parseFred('observation_date,LRHUTTTTCOM156S\n2024-01-01,10.5\n2024-02-01,.\n2024-03-01,10.1\n2024-04-01,9.9\n');
+  assert(fred.dates.join() === '2024-01-01,2024-03-01,2024-04-01' && fred.values[2] === 9.9);
+  const wb = PF.macro.parseWorldBank([{ page: 1 }, [{ date: '2023', value: 0.6 }, { date: '2022', value: 7.3 }, { date: '2021', value: 10.8 }, { date: '2020', value: null }]]);
+  assert(wb.dates[0] === '2021-12-31' && wb.values.join() === '10.8,7.3,0.6');
+  const soc = PF.macro.parseSocrata([{ vigenciadesde: '2024-01-03T00:00:00.000', valor: '3900.5' }, { vigenciadesde: '2024-01-02T00:00:00.000', valor: '3,950.25' }, { vigenciadesde: '2024-01-04T00:00:00.000', valor: '3880' }]);
+  assert(soc.dates[0] === '2024-01-02' && soc.values[0] === 3950.25);
+  const file = PF.macro.parseFile('Fecha;Valor\n2024-01;9,28\n2024-02;8,35\n2024-03;7,36\n', 'ipc.csv');
+  assert(file.values[1] === 8.35 && file.dates[0] === '2024-01-28');
+  // Mercado mensual que cae 0,8 % por cada 1 % que sube la TRM
+  const R = rng(9);
+  const days = [];
+  for (let d = Date.UTC(2020, 0, 1); d < Date.UTC(2024, 0, 1); d += 864e5) days.push(new Date(d).toISOString().slice(0, 10));
+  const months = [...new Set(days.map((d) => d.slice(0, 7)))];
+  const dx = months.map(() => 0.03 * (R() - 0.5));
+  let trm = 4000;
+  let px = 1000;
+  const mPrice = {};
+  const trmVals = days.map((d) => {
+    const k = months.indexOf(d.slice(0, 7));
+    if (d.slice(8) === '01') {
+      trm *= Math.exp(dx[k]);
+      px *= Math.exp(-0.8 * dx[k] + 0.002 * (R() - 0.5));
+    }
+    mPrice[d] = px;
+    return trm;
+  });
+  const res = PF.macro.relate({ dates: days, prices: days.map((d) => mPrice[d]) }, { dates: days, values: trmVals }, 'trm');
+  assert(res.ok && res.freq === 'M' && res.n > 40 && res.corr < -0.9, `ρ = ${res.corr}`);
+  assert(Math.abs(res.b * 100 + 0.8) < 0.15, 'b ≈ −0,8 pp por 1 % de TRM: ' + res.b * 100);
+  assert(/negativa fuerte/.test(PF.macro.interpret(res, 'trm', 'COLCAP')));
+  const csv = PF.macro.toCSV({ desempleo: Object.assign(fred, { source: 'FRED' }) });
+  assert(csv.split('\n').length === 4 && /desempleo,2024-04-01,9.9,%,"FRED"/.test(csv));
 });
 
 console.log(`${passed} pruebas correctas, ${failed} fallidas`);

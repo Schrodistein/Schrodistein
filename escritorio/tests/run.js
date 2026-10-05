@@ -37,6 +37,9 @@ function fakeFetch(dir) {
     let file = null;
     if (u.hostname.includes('yahoo')) file = path.join(dir, 'yahoo-' + decodeURIComponent(u.pathname.split('/').pop()) + '.json');
     else if (u.hostname.includes('news.google')) file = path.join(dir, 'news.xml');
+    else if (u.hostname.includes('fred')) file = path.join(dir, 'fred-' + u.searchParams.get('id') + '.csv');
+    else if (u.hostname.includes('worldbank')) file = path.join(dir, 'wb-' + u.pathname.split('/')[5] + '.json');
+    else if (u.hostname.includes('datos.gov.co')) file = path.join(dir, 'socrata-trm.json');
     const ok = file && fs.existsSync(file);
     const body = ok ? fs.readFileSync(file, 'utf8') : JSON.stringify({ chart: { result: null, error: { code: 'Not Found', description: 'No data found, symbol may be delisted' } } });
     return { ok, status: ok ? 200 : 404, json: async () => JSON.parse(body), text: async () => body };
@@ -189,6 +192,34 @@ test('quien ya usaba la app recibe los activos predeterminados nuevos (dólar, C
   assert(st.data.settings.intervalHours === 168 || typeof st.data.settings.intervalHours === 'number');
 });
 
+
+test('variables macro: fuentes con respaldo y biblioteca local', async () => {
+  const st = new Store(tmp());
+  const PF = updater.loadPF();
+  const macro = require('../lib/macro');
+  const bib = require('../lib/biblioteca');
+  const r = await macro.updateMacro(st, fakeFetch(FIX), PF, () => {});
+  const m = st.data.macro;
+  assert(r.updated.length === 4 && r.errors.length === 0, JSON.stringify(r));
+  assert(/Banco Mundial/.test(m.pib.source) && m.pib.dates[0] === '2021-12-31', 'PIB por el respaldo del Banco Mundial: ' + m.pib.source);
+  assert(/FRED/.test(m.inflacion.source) && m.desempleo.dates.length === 31 && /datos\.gov\.co/.test(m.trm.source) && m.trm.values[0] > 4000);
+  const again = await macro.updateMacro(st, fakeFetch(FIX), PF, () => {});
+  assert(again.updated.length === 0, 'sin datos nuevos no avisa');
+  // Biblioteca
+  updater.importFiles(st, [path.join(FIX, 'ECOPETROL_20260908_045259.csv')], null);
+  const dir = tmp();
+  const w = bib.write(st, dir, [{ name: 'Paso a paso.html', html: '<p>ok</p>' }]);
+  assert(w.assets >= 1 && w.vars === 4 && w.docs === 1);
+  const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
+  assert(/Fecha,Cierre,Fuente/.test(csv) && /2026-08-18,2770,BVC/.test(csv), csv.slice(0, 120));
+  assert(/Fuente: datos\.gov\.co/.test(fs.readFileSync(path.join(dir, 'macro', 'trm.csv'), 'utf8')) && fs.existsSync(path.join(dir, 'macro', 'todas.csv')) && fs.existsSync(path.join(dir, 'LEEME.txt')));
+  bib.saveOriginal(dir, path.join(FIX, 'ECOPETROL_20260908_045259.csv'));
+  assert(fs.existsSync(path.join(dir, 'acciones', 'originales', 'ECOPETROL_20260908_045259.csv')));
+  // El respaldo lleva las variables macro a otro equipo
+  const st2 = new Store(tmp());
+  st2.importData(JSON.parse(JSON.stringify(st.exportData())));
+  assert(st2.data.macro.trm.dates.length === m.trm.dates.length);
+});
 
 Promise.all(pending).then(() => {
   console.log(`${passed} pruebas correctas, ${failed} fallidas`);

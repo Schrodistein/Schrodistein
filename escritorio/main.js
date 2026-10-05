@@ -9,6 +9,8 @@ const fs = require('fs');
 const path = require('path');
 const { Store } = require('./lib/store');
 const updater = require('./lib/updater');
+const macro = require('./lib/macro');
+const biblioteca = require('./lib/biblioteca');
 
 if (process.env.FE_USERDATA) app.setPath('userData', process.env.FE_USERDATA);
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -38,14 +40,37 @@ function getFetch() {
     let file = null;
     if (u.hostname.includes('yahoo')) file = path.join(dir, 'yahoo-' + decodeURIComponent(u.pathname.split('/').pop()) + '.json');
     else if (u.hostname.includes('news.google')) file = path.join(dir, 'news.xml');
+    else if (u.hostname.includes('fred')) file = path.join(dir, 'fred-' + u.searchParams.get('id') + '.csv');
+    else if (u.hostname.includes('worldbank')) file = path.join(dir, 'wb-' + u.pathname.split('/')[5] + '.json');
+    else if (u.hostname.includes('datos.gov.co')) file = path.join(dir, 'socrata-trm.json');
+    else if (u.hostname.includes('stern.nyu.edu')) file = path.join(dir, 'damodaran.xls');
     const ok = file && fs.existsSync(file);
-    const body = ok ? fs.readFileSync(file, 'utf8') : JSON.stringify({ chart: { result: null, error: { code: 'Not Found', description: 'No data found, symbol may be delisted' } } });
-    return { ok, status: ok ? 200 : 404, json: async () => JSON.parse(body), text: async () => body };
+    const raw = ok ? fs.readFileSync(file) : Buffer.from(JSON.stringify({ chart: { result: null, error: { code: 'Not Found', description: 'No data found, symbol may be delisted' } } }));
+    const body = raw.toString('utf8');
+    return { ok, status: ok ? 200 : 404, json: async () => JSON.parse(body), text: async () => body, arrayBuffer: async () => raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.length) };
   };
 }
 
 // Los libros de Excel se leen en la interfaz (sección Datos); la BVC entrega CSV.
 const readExcel = null;
+
+/* Biblioteca local: Documentos/Frontera Eficiente/Biblioteca (o FE_LIBRARY en las pruebas). */
+let lastDocs = null;
+function libraryDir() {
+  if (process.env.FE_LIBRARY) return process.env.FE_LIBRARY;
+  if (store.data.settings.libraryDir) return store.data.settings.libraryDir;
+  if (process.env.FE_USERDATA) return path.join(app.getPath('userData'), 'Biblioteca');
+  return path.join(app.getPath('documents'), 'Frontera Eficiente', 'Biblioteca');
+}
+function writeLibrary(docs) {
+  if (docs) lastDocs = docs;
+  try {
+    return biblioteca.write(store, libraryDir(), lastDocs);
+  } catch (e) {
+    log('biblioteca', e.message);
+    return { error: e.message, dir: libraryDir() };
+  }
+}
 
 const icon = (name) => nativeImage.createFromPath(path.join(__dirname, 'build', name));
 
@@ -68,13 +93,16 @@ function runUpdate(reason) {
     const fetch = getFetch();
     const prices = await updater.updatePrices(store, fetch, log);
     const news = await updater.updateNews(store, fetch, log);
+    const mac = await macro.updateMacro(store, fetch, updater.loadPF(), log);
     store.save();
+    writeLibrary();
     log(`actualización (${reason}): ${prices.updated.length} activos con cierres nuevos, ${news.fresh.length} noticias nuevas, ${prices.errors.length + news.errors.length} errores`);
     if (reason !== 'manual') {
       if (prices.updated.length) notify('Cierres actualizados', `${prices.updated.length} activos con datos nuevos${prices.newest ? `; último cierre del ${prices.newest}` : ''}.`);
+      if (mac.updated.length) notify('Variables macro actualizadas', mac.updated.map((k) => updater.loadPF().macro.VARS[k].label).join(', '));
       if (news.fresh.length) notify('Noticias nuevas', `${news.fresh.length} noticias de ${[...new Set(news.fresh.map((n) => n.asset))].slice(0, 4).join(', ')}.`);
     }
-    const result = { prices: { updated: prices.updated, errors: prices.errors, newest: prices.newest }, news: { fresh: news.fresh.length, errors: news.errors } };
+    const result = { prices: { updated: prices.updated, errors: prices.errors, newest: prices.newest }, news: { fresh: news.fresh.length, errors: news.errors }, macro: mac };
     broadcast({ result });
     return result;
   })().finally(() => {
@@ -168,6 +196,8 @@ function handleDownloads() {
       if (state !== 'completed') return;
       const r = updater.importFiles(store, [file], readExcel);
       store.save();
+      biblioteca.saveOriginal(libraryDir(), file);
+      writeLibrary();
       const names = Object.keys(r.assets);
       if (names.length) notify('Datos de la BVC importados', names.map((n) => `${n}: ${r.assets[n]} días`).join(', '));
       else if (r.errors.length) notify('No se pudo importar la descarga', r.errors[0]);
@@ -222,6 +252,8 @@ function registerIpc() {
     if (r.canceled || !r.filePaths.length) return null;
     const res = updater.importFiles(store, r.filePaths, readExcel);
     store.save();
+    for (const f of r.filePaths) biblioteca.saveOriginal(libraryDir(), f);
+    writeLibrary();
     broadcast({ imported: res });
     return res;
   });
@@ -269,6 +301,26 @@ function registerIpc() {
     store.save();
     broadcast({});
     return store.summary();
+  });
+  ipcMain.handle('macro:datos', () => store.data.macro || {});
+  ipcMain.handle('macro:actualizar', async () => {
+    const r = await macro.updateMacro(store, getFetch(), updater.loadPF(), log);
+    store.save();
+    writeLibrary();
+    return { result: r, data: store.data.macro };
+  });
+  ipcMain.handle('damodaran:descargar', async () => {
+    const buf = await macro.fetchDamodaran(getFetch());
+    const d = path.join(libraryDir(), 'damodaran');
+    fs.mkdirSync(d, { recursive: true });
+    fs.writeFileSync(path.join(d, 'betaemerg.xls'), buf);
+    return { base64: buf.toString('base64'), file: 'betaemerg.xls (mercados emergentes)', date: new Date().toISOString().slice(0, 10) };
+  });
+  ipcMain.handle('biblioteca:guardar', (e, docs) => writeLibrary(Array.isArray(docs) ? docs.slice(0, 20) : null));
+  ipcMain.handle('biblioteca:abrir', async () => {
+    const r = writeLibrary();
+    await shell.openPath(r.dir || libraryDir());
+    return r;
   });
   ipcMain.handle('abrir-enlace', (e, url) => safeExternal(String(url)));
   ipcMain.handle('app:version', () => app.getVersion());

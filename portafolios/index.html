@@ -17,10 +17,12 @@
       <span>Frontera Eficiente</span>
     </div>
     <nav class="tabs" aria-label="Secciones">
+      <button type="button" data-go="datos" id="tab-datos" aria-current="page">Datos</button>
       <button type="button" data-go="terminal" id="tab-terminal">Terminal</button>
-      <button type="button" data-go="datos" id="tab-datos">Datos</button>
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
-      <button type="button" data-go="frontera" id="tab-frontera" aria-current="page">Portafolio</button>
+      <button type="button" data-go="frontera" id="tab-frontera">Portafolio</button>
+      <button type="button" data-go="estadistica" id="tab-estadistica">Paso a paso</button>
+      <button type="button" data-go="macro" id="tab-macro">Macro</button>
       <button type="button" data-go="comprar" id="tab-comprar">Comprar</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
       <button type="button" data-go="invertir" id="tab-invertir">Dónde invertir</button>
@@ -78,7 +80,7 @@
   </section>
 
   <!-- DATOS -->
-  <section class="screen" id="screen-datos" hidden>
+  <section class="screen" id="screen-datos">
     <div class="head">
       <h1>Datos y supuestos</h1>
       <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV, o las de Investing.com o Yahoo Finance) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
@@ -197,7 +199,7 @@
   </section>
 
   <!-- PORTAFOLIO -->
-  <section class="screen" id="screen-frontera">
+  <section class="screen" id="screen-frontera" hidden>
     <div class="head">
       <h1>Portafolio eficiente</h1>
       <p class="lede" id="front-lede">Frontera eficiente de Markowitz con tus límites de peso, línea del mercado de capitales y los portafolios de referencia.</p>
@@ -265,6 +267,35 @@
       <p class="hint">La comisión es un costo fijo por activo: con presupuestos pequeños, tener menos activos puede dar más rendimiento neto. Cada alternativa conserva los activos de mayor peso y recalcula el portafolio con ellos; se elige la de mejor razón de Sharpe neta en tu horizonte.</p>
       <div class="table-scroll"><table class="data" id="plan-alt"></table></div>
     </div>
+  </section>
+
+  <!-- PASO A PASO -->
+  <section class="screen" id="screen-estadistica" hidden>
+    <div class="head">
+      <h1>Paso a paso: varianza, covarianza, desviación y correlación</h1>
+      <p class="lede">Cómo se calculan, con tus datos, las medidas de la teoría moderna de portafolios: cada fórmula con sus números, qué significa cada parte y qué autor la propuso (Markowitz, Sharpe, Treynor, Jensen, Damodaran).</p>
+    </div>
+    <div id="pasos"><div class="panel"><p>Carga datos en la sección Datos para ver el desarrollo.</p></div></div>
+  </section>
+
+  <!-- MACRO -->
+  <section class="screen" id="screen-macro" hidden>
+    <div class="head">
+      <h1>Variables macroeconómicas y mercado de valores</h1>
+      <p class="lede">PIB, inflación, desempleo y TRM de Colombia, y su relación con el índice y con cada activo. Sigue el modelo de factores macroeconómicos de Chen, Roll y Ross (1986): <code>rₘ = a + b·x + ε</code>, donde x es el cambio de la variable en el periodo.</p>
+    </div>
+    <div class="panel">
+      <div class="row-btns">
+        <button type="button" class="btn btn-primary desktop-only" id="macro-update" hidden>Actualizar variables macro</button>
+        <label class="field inline" for="macro-var"><span>Importar archivo de</span>
+          <select id="macro-var"><option value="pib">PIB (crecimiento %)</option><option value="inflacion">Inflación anual (%)</option><option value="desempleo">Desempleo (%)</option><option value="trm">TRM (pesos por dólar)</option></select></label>
+        <label class="btn file" for="macro-file">Elegir archivo (CSV: fecha y valor)<input type="file" id="macro-file" accept=".csv,.txt"></label>
+      </div>
+      <p class="status" id="macro-status" hidden></p>
+      <p class="hint">La app de escritorio descarga las cuatro series sola: la TRM diaria de datos.gov.co (Superintendencia Financiera), la inflación y el desempleo mensuales y el PIB trimestral de FRED (OCDE) y, si una fuente no responde, las series anuales del Banco Mundial. Las guarda en la biblioteca local. También puedes importar las series oficiales del DANE o del Banco de la República: un CSV con una columna de fecha y una de valor.</p>
+    </div>
+    <div class="macro-grid" id="macro-cards"></div>
+    <div class="panel"><h2>Relación de cada activo con cada variable</h2><div id="macro-table"><p class="sub">Carga datos de activos y de las variables.</p></div></div>
   </section>
 
   <!-- DÓNDE INVERTIR -->
@@ -356,6 +387,8 @@
         <button type="button" class="btn" id="mk-use">Usar estos datos en el análisis</button>
         <button type="button" class="btn btn-ghost" id="mk-export">Exportar mis datos</button>
         <button type="button" class="btn btn-ghost" id="mk-restore">Importar datos de otro equipo</button>
+        <button type="button" class="btn btn-ghost" id="mk-lib-open">Abrir biblioteca local</button>
+        <button type="button" class="btn btn-ghost" id="mk-lib-save">Guardar biblioteca ahora</button>
       </div>
       <label class="field mk-src" for="mk-source"><span>Datos para el análisis y la recomendación</span>
         <select id="mk-source"><option value="cargados">Solo los que cargué de la BVC (descargas e importaciones)</option><option value="todos">Los cargados más los de la fuente automática</option></select></label>
@@ -432,6 +465,14 @@
         <button type="button" class="btn" id="dl-stats">Estadísticas por activo</button>
         <button type="button" class="btn" id="dl-ports">Pesos de los portafolios</button>
         <button type="button" class="btn" id="dl-plan">Plan de compra</button>
+        <button type="button" class="btn" id="dl-macro">Variables macroeconómicas</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Documentos</h2>
+      <div class="row-btns">
+        <button type="button" class="btn" id="dl-pasos">Paso a paso: varianza, covarianza, correlación y betas (HTML)</button>
+        <button type="button" class="btn" id="dl-macrodoc">Variables macro y mercado (HTML)</button>
       </div>
     </div>
     <p class="status" id="dl-status" role="status" hidden></p>
@@ -481,6 +522,8 @@
 <script src="js/xlsx.js"></script>
 <script src="js/report.js"></script>
 <script src="js/invertir.js"></script>
+<script src="js/macro.js"></script>
+<script src="js/pasos.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/terminal.js"></script>
 <script src="js/app.js"></script>

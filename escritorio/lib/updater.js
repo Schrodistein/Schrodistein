@@ -10,6 +10,7 @@ function loadPF() {
   const base = [path.join(__dirname, '..', 'portafolios', 'js'), path.join(__dirname, '..', '..', 'portafolios', 'js')].find((d) => fs.existsSync(path.join(d, 'stats.js')));
   if (!base) throw new Error('No se encontró el motor de cálculo (portafolios/js).');
   require(path.join(base, 'stats.js'));
+  require(path.join(base, 'macro.js'));
   return globalThis.PF;
 }
 

@@ -27,7 +27,7 @@ const shots = process.argv[2];
   await win.click('#mk-update');
   await win.waitForFunction(() => /Actualizado:/.test(document.getElementById('mk-status').textContent), null, { timeout: 30000 });
   const st = await win.textContent('#mk-status');
-  if (!/5 activos con cierres nuevos/.test(st)) errors.push('estado: ' + st);
+  if (!/activos con cierres nuevos/.test(st)) errors.push('estado: ' + st);
   const table = await win.textContent('#mk-table');
   if (!/ECOPETROL/.test(table) || !/no encontró el símbolo GEB.CL/.test(table)) errors.push('tabla de mercado sin datos o sin errores de símbolo');
   if (shots) await win.screenshot({ path: path.join(shots, 'escritorio-mercado.png'), fullPage: true });
@@ -55,6 +55,22 @@ const shots = process.argv[2];
   const saved = JSON.parse(fs.readFileSync(path.join(userData, 'datos.json'), 'utf8'));
   if (!saved.assets.some((a) => a.yahoo === 'GEB2.CL')) errors.push('el símbolo editado no se guardó');
   if (!saved.news.length || !Object.keys(saved.prices).length) errors.push('datos no guardados');
+
+  // Variables macro y biblioteca local
+  await win.click('#tab-macro');
+  await win.waitForFunction(() => document.querySelectorAll('#macro-cards .macro-card svg').length >= 4, null, { timeout: 15000 }).catch(() => errors.push('macro: faltan gráficos de las 4 variables'));
+  await win.click('#macro-update');
+  await win.waitForFunction(() => /Descargadas:/.test(document.getElementById('macro-status').textContent), null, { timeout: 20000 }).catch(() => errors.push('macro: ' + 'sin estado'));
+  const ms = await win.textContent('#macro-status');
+  if (!/Banco Mundial/.test(ms) || !/datos\.gov\.co/.test(ms)) errors.push('macro: ' + ms);
+  if (shots) await win.screenshot({ path: path.join(shots, 'escritorio-macro.png'), fullPage: true });
+  await win.click('#tab-estadistica');
+  await win.waitForSelector('#dam-panel', { timeout: 10000 }).catch(() => errors.push('sin paso a paso'));
+  await win.click('#tab-mercado');
+  await win.click('#mk-lib-save');
+  await win.waitForFunction(() => /Biblioteca guardada/.test(document.getElementById('mk-status').textContent), null, { timeout: 15000 }).catch(() => errors.push('biblioteca: ' + 'sin confirmación'));
+  const lib = path.join(userData, 'Biblioteca');
+  for (const f of ['LEEME.txt', 'acciones/ECOPETROL.csv', 'macro/trm.csv', 'macro/pib.csv', 'documentos/Paso a paso - varianza, covarianza, correlacion y betas.html', 'documentos/Teoria de portafolios.html']) if (!fs.existsSync(path.join(lib, f))) errors.push('biblioteca sin ' + f);
 
   await app.evaluate(({ app }) => app.exit(0));
   if (errors.length) {

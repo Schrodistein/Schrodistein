@@ -158,6 +158,8 @@
         names.length ? 'ok' : 'bad'
       );
     }
+    if (payload && payload.result) await loadMacro();
+    if (payload && (payload.result || payload.imported)) setTimeout(() => saveLibrary(true), 1500);
     if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) {
       const before = lastRecommended();
       if (await useInAnalysis(true)) await announceRecommendation(before, payload);
@@ -199,9 +201,61 @@
     }
   }
 
+  /* Variables macro y biblioteca local */
+  async function loadMacro() {
+    if (!api.macro) return;
+    try {
+      const d = await api.macro();
+      if (globalThis.PFApp && globalThis.PFApp.setMacro) globalThis.PFApp.setMacro(d);
+    } catch (e) {
+      /* sin datos macro */
+    }
+  }
+  async function saveLibrary(silent) {
+    if (!api.guardarBiblioteca || !globalThis.PFApp || !globalThis.PFApp.documents) return null;
+    try {
+      const r = await api.guardarBiblioteca(globalThis.PFApp.documents());
+      if (!silent && r) status(r.error ? 'No se pudo guardar la biblioteca: ' + r.error : `Biblioteca guardada en ${r.dir}: ${r.assets} activos, ${r.vars} variables macro y ${r.docs} documentos.`, r.error ? 'bad' : 'ok');
+      return r;
+    } catch (e) {
+      if (!silent) status('No se pudo guardar la biblioteca: ' + e.message, 'bad');
+      return null;
+    }
+  }
+
   function init() {
     document.querySelectorAll('.desktop-only').forEach((el) => (el.hidden = false));
     api.alActualizar(refreshAll);
+    loadMacro();
+    setTimeout(() => saveLibrary(true), 6000);
+    $('mk-lib-open').addEventListener('click', async () => {
+      await saveLibrary(true);
+      const r = await api.abrirBiblioteca();
+      status(`Biblioteca local: ${r.dir}`, 'ok');
+    });
+    $('mk-lib-save').addEventListener('click', () => saveLibrary(false));
+    $('macro-update').addEventListener('click', async () => {
+      const el = $('macro-status');
+      const say = (t, k) => {
+        el.hidden = false;
+        el.className = 'status ' + (k || '');
+        el.textContent = t;
+      };
+      say('Descargando PIB, inflación, desempleo y TRM…');
+      $('macro-update').disabled = true;
+      try {
+        const r = await api.actualizarMacro();
+        if (globalThis.PFApp) globalThis.PFApp.setMacro(r.data);
+        const V = globalThis.PF.macro.VARS;
+        const got = Object.keys(r.data || {}).map((k) => `${V[k] ? V[k].label : k} (${r.data[k].source})`);
+        say(`${got.length ? 'Descargadas: ' + got.join('; ') + '.' : 'No se descargó ninguna variable.'}${r.result.errors.length ? ' Fallaron: ' + r.result.errors.join(' · ') : ''}`, r.result.errors.length ? 'warn' : 'ok');
+        saveLibrary(true);
+      } catch (e) {
+        say('No se pudo actualizar: ' + e.message, 'bad');
+      } finally {
+        $('macro-update').disabled = false;
+      }
+    });
 
     $('mk-update').addEventListener('click', async () => {
       status('Actualizando cierres y noticias…');

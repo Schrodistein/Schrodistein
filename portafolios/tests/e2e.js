@@ -14,7 +14,11 @@ const shots = process.argv[3];
     page.on('pageerror', (e) => errors.push(label + ': ' + e.message));
     page.on('console', (m) => m.type() === 'error' && !/fonts|Failed to load resource/.test(m.text()) && errors.push(label + ': ' + m.text()));
     await page.goto(url);
-    // Pantalla inicial: la terminal, en modo oscuro y con Times New Roman
+    // Pantalla inicial: Datos; luego la terminal, en modo oscuro y con Times New Roman
+    await page.waitForSelector('#screen-datos:not([hidden])');
+    const first = await page.$eval('.tabs button', (b) => b.textContent);
+    if (first !== 'Datos') errors.push(label + ': la primera pestaña es ' + first);
+    await page.click('#tab-terminal');
     await page.waitForSelector('#tc-price svg');
     if ((await page.getAttribute('html', 'data-theme')) !== 'dark') errors.push(label + ': el modo oscuro no es el predeterminado');
     if (!/Times New Roman/.test(await page.evaluate(() => getComputedStyle(document.body).fontFamily))) errors.push(label + ': la letra no es Times New Roman');
@@ -79,6 +83,13 @@ const shots = process.argv[3];
     await bf.fill('7500');
     await page.waitForTimeout(700);
     if ((await page.textContent('#buy-sum')) === before) errors.push(`${label}: la comisión de una compra no cambia el total`);
+    // Paso a paso y macro
+    await page.click('#tab-estadistica');
+    await page.waitForSelector('#dam-panel');
+    const pasos = await page.textContent('#pasos');
+    if (!/Markowitz \(1952\)/.test(pasos) || !/βL = βU/.test(pasos) || !/Varianza del portafolio/.test(pasos)) errors.push(label + ': paso a paso incompleto');
+    await page.click('#tab-macro');
+    if ((await page.$$('#macro-cards .macro-card')).length !== 4) errors.push(label + ': faltan las 4 variables macro');
     // Descargas
     await page.click('#tab-descargas');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#dl-xlsx')]);

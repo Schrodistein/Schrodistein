@@ -44,6 +44,7 @@ function emptyData() {
     assets: DEFAULT_ASSETS.map((a) => Object.assign({ enabled: true }, a)),
     prices: {},
     news: [],
+    macro: {},
     meta: { lastPrices: null, lastNews: null, errors: {}, defaults: DEFAULTS_VERSION },
     settings: Object.assign({}, DEFAULT_SETTINGS),
   };
@@ -193,6 +194,14 @@ class Store {
       }
     }
     const news = Array.isArray(d.news) ? this.addNews(d.news.filter((n) => n && n.title)) : [];
+    // Variables macro: se conserva la serie más larga de cada una
+    if (d.macro && typeof d.macro === 'object') {
+      this.data.macro = this.data.macro || {};
+      for (const k of Object.keys(d.macro)) {
+        const v = d.macro[k];
+        if (v && Array.isArray(v.dates) && (!this.data.macro[k] || v.dates.length > this.data.macro[k].dates.length)) this.data.macro[k] = v;
+      }
+    }
     return { assets, points, news: news.length };
   }
 

@@ -15,6 +15,11 @@ contextBridge.exposeInMainWorld('bvc', {
   guardarActivos: (l) => ipcRenderer.invoke('activos:guardar', l),
   abrirEnlace: (u) => ipcRenderer.invoke('abrir-enlace', u),
   version: () => ipcRenderer.invoke('app:version'),
+  macro: () => ipcRenderer.invoke('macro:datos'),
+  actualizarMacro: () => ipcRenderer.invoke('macro:actualizar'),
+  damodaran: () => ipcRenderer.invoke('damodaran:descargar'),
+  guardarBiblioteca: (docs) => ipcRenderer.invoke('biblioteca:guardar', docs),
+  abrirBiblioteca: () => ipcRenderer.invoke('biblioteca:abrir'),
   alActualizar: (cb) => {
     ipcRenderer.removeAllListeners('datos:actualizados');
     ipcRenderer.on('datos:actualizados', (_e, d) => cb(d));

@@ -315,6 +315,13 @@
       </div>
       <p class="status" id="lib-status" hidden></p>
     </div>
+    <div class="panel" id="mx-panel"><h2>Matriz de precios para Excel</h2>
+      <p>Un libro de Excel con la hoja «M. PRECIOS»: ITEM, FECHA, el índice de mercado y una columna por acción o ETF, de la fecha más reciente a la más antigua. Los días sin negociación llevan el último precio cotizado hasta la siguiente operación; antes de la primera cotización de cada activo la celda queda vacía. Usa los activos marcados «Usar» y la fecha de corte.</p>
+      <div class="row-btns">
+        <label class="field inline" for="mx-cal"><span>Fechas</span><select id="mx-cal"><option value="habiles">Días hábiles (lunes a viernes)</option><option value="calendario">Todos los días calendario</option></select></label>
+        <button type="button" class="btn btn-primary" id="mx-download">Descargar matriz de precios (Excel)</button>
+      </div>
+      <p class="status" id="mx-status" hidden></p></div>
     <div class="panel" id="cat-panel"><h2>Todos los activos de la BVC</h2>
       <p id="cat-summary"></p>
       <div class="row-btns"><button type="button" class="btn btn-primary" id="cat-download">Descargar el historial de todos</button></div>
@@ -590,6 +597,7 @@
 <script src="js/sample.js"></script>
 <script src="js/plan.js"></script>
 <script src="js/xlsx.js"></script>
+<script src="js/matriz.js"></script>
 <script src="js/report.js"></script>
 <script src="js/invertir.js"></script>
 <script src="js/catalogo.js"></script>

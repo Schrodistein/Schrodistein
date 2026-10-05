@@ -11,6 +11,8 @@ function loadPF() {
   if (!base) throw new Error('No se encontró el motor de cálculo (portafolios/js).');
   require(path.join(base, 'stats.js'));
   require(path.join(base, 'macro.js'));
+  require(path.join(base, 'xlsx.js'));
+  require(path.join(base, 'matriz.js'));
   return globalThis.PF;
 }
 

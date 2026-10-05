@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -698,6 +698,35 @@ test('guía de la BVC y catálogo de activos', () => {
   const P = PF.model.portfolios(m, 0, 1);
   const con = PF.guia.render({ m, P, pct: (x) => (x * 100).toFixed(1) + '%', esc: String, sel: 'tangency', ports: [{ key: 'tangency', label: 'Máxima Sharpe' }] });
   assert(con.includes('Con tus datos') && con.includes('Máxima Sharpe') && /Gordon \(1959\)/.test(con) && /Tobin \(1958\)/.test(con));
+});
+
+test('matriz de precios como «M. PRECIOS»: días hábiles, último precio en días sin negociación, vacío antes de cotizar', () => {
+  // COLCAP negocia lun 2026-08-10 a vie 08-14 y mar 08-18 (lunes 17 festivo); NUEVA empieza a cotizar el 13
+  const colcap = { name: 'MSCI COLCAP', dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'], prices: [2372.5, 2423.37, 2430.45, 2432.1, 2452.46, 2461.23] };
+  const eco = { name: 'ECOPETROL', dates: ['2026-08-10', '2026-08-12', '2026-08-14', '2026-08-18'], prices: [2735, 2665, 2745, 2770] };
+  const nueva = { name: 'NUEVA', dates: ['2026-08-13', '2026-08-18'], prices: [100, 101] };
+  const tasa = { name: 'TES', kind: 'tasa', dates: ['2026-08-10', '2026-08-11'], prices: [0.1, 0.11] };
+  const mx = PF.matriz.build([eco, nueva, colcap, tasa], { market: 'MSCI COLCAP' });
+  assert(mx.names.join() === 'MSCI COLCAP,ECOPETROL,NUEVA', 'el índice va primero y las tasas no entran');
+  assert(mx.dates.join() === '2026-08-10,2026-08-11,2026-08-12,2026-08-13,2026-08-14,2026-08-17,2026-08-18', 'días hábiles sin fines de semana: ' + mx.dates.join());
+  assert(mx.values[0][5] === 2452.46 && mx.filled[0][5], 'festivo: se mantiene el último precio del índice');
+  assert(mx.values[1].join() === '2735,2735,2665,2665,2745,2745,2770', 'ECOPETROL: ' + mx.values[1].join());
+  assert(mx.values[1][2] === 2665 && !mx.filled[1][2] && mx.filled[1][1], 'los precios cotizados no cambian');
+  assert(isNaN(mx.values[2][0]) && isNaN(mx.values[2][2]) && mx.values[2][3] === 100 && mx.values[2][5] === 100, 'vacío antes de la primera cotización');
+  const cal = PF.matriz.build([eco, colcap], { calendar: 'calendario', market: 'MSCI COLCAP' });
+  assert(cal.dates.length === 9 && cal.values[1][5] === 2745 && cal.values[1][6] === 2745, 'calendario: sábado y domingo con el precio del viernes');
+  const cut = PF.matriz.build([eco, colcap], { market: 'MSCI COLCAP', cut: '2026-08-12' });
+  assert(cut.dates[cut.dates.length - 1] === '2026-08-12');
+  // Hoja: encabezados como en «M. PRECIOS» y la fecha más reciente arriba
+  const sh = PF.matriz.sheet(mx);
+  assert(sh.name === 'M. PRECIOS' && sh.rows[0][0].v === 'ITEM' && sh.rows[0][1].v === 'FECHA' && sh.rows[0][2].v === 'MSCI COLCAP' && sh.rows[0][3].v === 'PRECIO DE CIERRE');
+  assert(sh.rows[1][3].v === 'ECOPETROL' && sh.rows[1][4].v === 'NUEVA');
+  assert(sh.rows[2][0] === 1 && sh.rows[2][1].v === PF.matriz.serial('2026-08-18') && sh.rows[2][1].s === 'date' && sh.rows[2][3].v === 2770 && sh.rows[2][3].s === 'px');
+  assert(PF.matriz.serial('2026-08-21') === 46255, 'serie de Excel');
+  assert(sh.rows[sh.rows.length - 1][4] === null, 'celda vacía antes de cotizar');
+  const wb = PF.matriz.workbook([eco, colcap], { market: 'MSCI COLCAP' });
+  assert(wb.bytes && wb.bytes.length > 500 && wb.bytes[0] === 0x50 && wb.bytes[1] === 0x4b, 'archivo xlsx');
+  if (process.env.MATRIZ_OUT) require('fs').writeFileSync(process.env.MATRIZ_OUT, Buffer.from(PF.matriz.workbook([eco, nueva, colcap], { market: 'MSCI COLCAP' }).bytes));
 });
 
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {

@@ -16,6 +16,7 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
 - **Betas de Damodaran**: descarga el archivo de betas por industria de mercados emergentes de NYU Stern para comparar la beta de Damodaran con la de Sharpe.
 - **Biblioteca local** en `Documentos/Frontera Eficiente/Biblioteca`, que se reescribe en cada actualización:
   - un solo CSV por acción, ETF o índice con todo su historial, en formato de Excel en español (punto y coma, punto de miles y coma decimal): los tramos de 6 meses que descarga la BVC se unen y el archivo temporal de cada descarga se borra al importarlo;
+  - `Matriz de precios.xlsx`, con la hoja «M. PRECIOS» (días hábiles, último precio cotizado en los días sin negociación);
   - las variables macro con su fuente;
   - el archivo de Damodaran (se descarga solo en cada actualización semanal);
   - los documentos «Paso a paso», «Variables macro» y «Teoría» en HTML.

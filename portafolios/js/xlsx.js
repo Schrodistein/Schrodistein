@@ -5,12 +5,12 @@
  *
  * Celda: null | número | texto | { v, f, s }   (f = fórmula sin «=», s = estilo)
  * Estilos: h (encabezado), b (negrita), t (título), n (nota), pct, pctb, num2, num4,
- *          num6, int, money, moneyb */
+ *          num6, int, money, moneyb, date (fecha m/d/yyyy), px (#,##0.00) */
 (function (root) {
   'use strict';
   const PF = (root.PF = root.PF || {});
 
-  const STYLE = { h: 1, b: 2, pct: 3, num4: 4, num6: 5, money: 6, num2: 7, t: 8, n: 9, pctb: 10, moneyb: 11, int: 12 };
+  const STYLE = { h: 1, b: 2, pct: 3, num4: 4, num6: 5, money: 6, num2: 7, t: 8, n: 9, pctb: 10, moneyb: 11, int: 12, date: 13, px: 14 };
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
 
@@ -56,12 +56,12 @@
   }
 
   const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="6"><numFmt numFmtId="164" formatCode="0.00%"/><numFmt numFmtId="165" formatCode="0.0000"/><numFmt numFmtId="166" formatCode="0.000000"/><numFmt numFmtId="167" formatCode="&quot;$&quot; #,##0"/><numFmt numFmtId="168" formatCode="0.00"/><numFmt numFmtId="169" formatCode="#,##0"/></numFmts>
+<numFmts count="8"><numFmt numFmtId="164" formatCode="0.00%"/><numFmt numFmtId="165" formatCode="0.0000"/><numFmt numFmtId="166" formatCode="0.000000"/><numFmt numFmtId="167" formatCode="&quot;$&quot; #,##0"/><numFmt numFmtId="168" formatCode="0.00"/><numFmt numFmtId="169" formatCode="#,##0"/><numFmt numFmtId="170" formatCode="[$-409]m/d/yyyy"/><numFmt numFmtId="171" formatCode="#,##0.00"/></numFmts>
 <fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF1D4F91"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF4A5651"/><name val="Calibri"/></font></fonts>
 <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3EBF6"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF9AA5B4"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="13">
+<cellXfs count="15">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
@@ -75,6 +75,8 @@
 <xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
 <xf numFmtId="167" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/>
 <xf numFmtId="169" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="170" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+<xf numFmtId="171" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 </cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
 
   function workbookParts(sheets) {

@@ -1307,8 +1307,31 @@
     el.className = 'status' + (kind ? ' ' + kind : '');
     el.textContent = msg || '';
   }
+  /* Matriz de precios (hoja «M. PRECIOS») con los activos marcados «Usar» de la biblioteca. */
+  function priceMatrix(calendar) {
+    let list = st.lib.series.filter((r) => r.use !== false && r.kind !== 'tasa');
+    // Sin biblioteca (por ejemplo, con los datos de ejemplo o pegados): los datos cargados en Datos
+    if (!list.length && st.parsed && st.parsed.dates.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) list = st.parsed.names.map((name, i) => ({ name, dates: st.parsed.dates, prices: st.parsed.values[i] }));
+    const mi = PF.data.guessMarket(list.map((r) => r.name));
+    const market = list[mi] && PF.data.isMarketName(list[mi].name) ? list[mi].name : null;
+    return PF.matriz.workbook(list, { calendar, market, cut: libCut() });
+  }
   function wireLib() {
     const box = $('screen-biblioteca');
+    $('mx-download').addEventListener('click', () => {
+      const el = $('mx-status');
+      el.hidden = false;
+      const { mx, bytes } = priceMatrix($('mx-cal').value);
+      if (!bytes) {
+        el.className = 'status bad';
+        el.textContent = 'La biblioteca no tiene precios todavía: carga archivos en Datos.';
+        return;
+      }
+      download(bytes, `Matriz de precios ${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      const nFill = mx.filled.reduce((q, c) => q + c.filter(Boolean).length, 0);
+      el.className = 'status ok';
+      el.textContent = `Matriz de ${mx.names.length} activos y ${mx.dates.length.toLocaleString('es-CO')} fechas (${mx.dates[0]} a ${mx.dates[mx.dates.length - 1]}); ${nFill.toLocaleString('es-CO')} celdas completadas con el último precio cotizado.`;
+    });
     $('cat-download').addEventListener('click', async () => {
       const api = globalThis.bvc;
       if (!api) return;

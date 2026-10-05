@@ -46,6 +46,21 @@ function write(store, dir, docs) {
   }
   // Archivos de activos que ya no están o se limpiaron (p. ej. COLTES leídos con reglas anteriores)
   for (const f of fs.readdirSync(acc)) if (f.toLowerCase().endsWith('.csv') && !written.has(f)) fs.rmSync(path.join(acc, f), { force: true });
+  // Matriz de precios como la hoja «M. PRECIOS»: días hábiles, último precio cotizado en los días sin negociación
+  let matrix = null;
+  try {
+    const PF = require('./updater').loadPF();
+    const list = store.series('todos');
+    const mi = PF.data.guessMarket(list.map((x) => x.name));
+    const market = list[mi] && PF.data.isMarketName(list[mi].name) ? list[mi].name : null;
+    const { bytes, mx } = PF.matriz.workbook(list, { calendar: 'habiles', market });
+    if (bytes) {
+      fs.writeFileSync(path.join(dir, 'Matriz de precios.xlsx'), Buffer.from(bytes));
+      matrix = { assets: mx.names.length, dates: mx.dates.length };
+    }
+  } catch (e) {
+    /* sin motor de cálculo: la matriz se descarga desde la sección Biblioteca */
+  }
   const mac = sub('macro');
   const m = store.data.macro || {};
   let vars = 0;
@@ -73,6 +88,7 @@ function write(store, dir, docs) {
       'Biblioteca local de Frontera Eficiente',
       `Actualizada: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       '',
+      'Matriz de precios.xlsx   hoja «M. PRECIOS»: ITEM, FECHA, índice y una columna por activo, días hábiles, con el último precio cotizado en los días sin negociación.',
       'acciones/       un solo CSV por acción, ETF o índice con todo su historial: los tramos de 6 meses que descarga la BVC quedan unidos (fecha, cierre o tasa, fuente, cantidad y volumen).',
       'macro/          PIB, inflación, desempleo y TRM de Colombia, con la fuente y la fecha de descarga.',
       'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',
@@ -81,7 +97,7 @@ function write(store, dir, docs) {
       'La app reescribe esta carpeta en cada actualización (semanal por defecto). Los CSV usan punto y coma, punto de miles y coma decimal (Excel en español): se abren directamente en Excel.',
     ].join('\r\n')
   );
-  return { dir, assets, vars, docs: ndocs };
+  return { dir, assets, vars, docs: ndocs, matrix };
 }
 
 module.exports = { write, excelNum };

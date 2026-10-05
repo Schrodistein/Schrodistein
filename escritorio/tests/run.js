@@ -253,6 +253,7 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   const dir = tmp();
   const w = bib.write(st, dir, [{ name: 'Paso a paso.html', html: '<p>ok</p>' }]);
   assert(w.assets >= 1 && w.vars === 4 && w.docs === 1);
+  assert(w.matrix && w.matrix.assets >= 1 && fs.existsSync(path.join(dir, 'Matriz de precios.xlsx')), 'matriz de precios en la biblioteca');
   const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
   // Formato de Excel en español: punto y coma, punto de miles y coma decimal
   assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));

@@ -101,8 +101,16 @@ const shots = process.argv[3];
     await page.click('#pick-assets [data-pick-all="1"]');
     await page.waitForTimeout(400);
     if ((await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length)) !== nAll) errors.push(label + ': «Todos» no devuelve los activos');
-    // Catálogo de la BVC en la biblioteca
+    // Catálogo de la BVC y matriz de precios en la biblioteca
+    await page.evaluate(() => PFApp.saveToLibrary([
+      { name: 'MSCI COLCAP', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [2432.1, 2452.46, 2461.23] },
+      { name: 'ECOPETROL', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [2700, 2745, 2770] },
+    ]));
+    await page.click('#tab-datos');
     await page.click('#tab-biblioteca');
+    await page.waitForTimeout(300);
+    const [mxDl] = await Promise.all([page.waitForEvent('download'), page.click('#mx-download')]);
+    if (!/\.xlsx$/.test(mxDl.suggestedFilename())) errors.push(label + ': la matriz de precios no se descarga');
     if ((await page.$$('#cat-table tbody tr')).length < 30) errors.push(label + ': falta el catálogo de la BVC');
     // Paso a paso y macro
     await page.click('#tab-estadistica');

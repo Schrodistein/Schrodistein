@@ -150,11 +150,11 @@
         <li><b>Sector externo → TRM → mercado de divisas y de valores.</b> El precio del petróleo y los flujos de capital extranjero mueven la TRM (${val('trm')}). Cuando los extranjeros salen, venden TES y acciones y compran dólares: sube la TRM y caen la bolsa y los TES al mismo tiempo. Una TRM alta encarece la deuda en dólares y las importaciones, y sube la inflación (efecto traspaso).${rel('trm')}</li>
         <li><b>Política fiscal → TES → tasas de largo plazo.</b> El déficit del Gobierno se financia emitiendo TES. Si la deuda preocupa a los inversionistas, piden más tasa, lo que encarece la financiación de las empresas y baja el valor de los portafolios de renta fija (índice COLTES).</li>
       </ol>
-      <p class="hint">Estas cifras salen de la sección Macro, que las descarga (en la app de escritorio) o las importa de tus archivos. La relación estadística de cada variable con cada activo está allí.</p></div>`);
+      </div>`);
 
     out.push(`<div class="panel"><h2>5. Dónde encaja la teoría de portafolios</h2>
       <p>La teoría moderna de portafolios trabaja en el <b>mercado de valores</b>, sobre todo en el bursátil. Markowitz (1952) explica cómo combinar los títulos para tener el mayor rendimiento por unidad de riesgo. Sharpe (1964), Treynor (1965) y Jensen (1968) miden el riesgo y el desempeño frente al índice del mercado. La economía entra por dos lados: en el <b>rendimiento esperado</b>, porque el crecimiento, la inflación y las tasas determinan las utilidades y la tasa de descuento, y en el <b>riesgo</b>, porque los choques macroeconómicos son el riesgo sistemático, el que no se elimina diversificando y que mide la β. Chen, Roll y Ross (1986) llevan esto al modelo de factores: cada activo tiene una sensibilidad a cada variable macro.</p>
-      <p class="hint">Por eso la app combina segmentos de varios mercados del esquema: renta variable y renta fija del mercado de valores, CDT del mercado monetario y bancario, divisas y derivados. Al diversificar entre mercados que responden distinto a la economía, se reduce el riesgo del portafolio.</p></div>`);
+      </div>`);
     return out.join('');
   }
 

@@ -346,7 +346,7 @@
         return `<tr${a === market ? ' class="hl"' : ''}><td>${esc(a.name)}${a === market ? ' (índice)' : ''}</td>${cells.join('')}</tr>`;
       });
       table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th>${keys.map((k) => `<th class="n">${VARS[k].label}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>
-        <p class="hint">Correlación de Pearson entre el rendimiento de cada activo y el cambio de cada variable, en la frecuencia de la variable. * = significativa al 5 %; en verde las positivas y en rojo las negativas. Pasa el cursor sobre un número para ver la sensibilidad b (puntos de rendimiento por unidad de la variable) y su t.</p>`;
+        `;
     }
     return { cards: cards.join(''), table, results };
   }

@@ -25,7 +25,14 @@ const DEFAULT_ASSETS = [
   { name: 'COLTES LP', yahoo: '', news: 'TES Colombia tasas deuda pública', index: true },
   { name: 'COLIBR', yahoo: '', news: 'IBR tasa interbancaria Colombia', index: true },
 ];
-const DEFAULTS_VERSION = 2; // sube cuando se agregan activos predeterminados
+const DEFAULTS_VERSION = 3; // sube cuando se agregan activos predeterminados o se hace una limpieza
+
+/* Renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos) leídos con las reglas anteriores:
+ * se borran una vez para volver a cargarlos con el lector corregido. */
+const STALE_FIXED = /(^| )(COLTES|COLIBR|IBR|TES|CDT|BONO)/i;
+function isStaleFixed(a) {
+  return a.kind === 'tasa' || ['tes', 'cdt', 'bono'].includes(a.cls) || STALE_FIXED.test(a.name);
+}
 
 const DEFAULT_SETTINGS = {
   auto: true, // actualizar solo
@@ -62,14 +69,37 @@ class Store {
         this.data.settings = Object.assign({}, DEFAULT_SETTINGS, raw.settings);
         this.data.meta = Object.assign({ errors: {} }, raw.meta);
         // Activos predeterminados nuevos (divisas e índices de renta fija) para quien ya usaba la app
-        if ((this.data.meta.defaults || 1) < DEFAULTS_VERSION) {
+        const from = this.data.meta.defaults || 1;
+        if (from < DEFAULTS_VERSION) {
           for (const a of DEFAULT_ASSETS) if (!this.asset(a.name)) this.data.assets.push(Object.assign({ enabled: true }, a));
+          if (from < 3) this.cleanFixed();
           this.data.meta.defaults = DEFAULTS_VERSION;
         }
       }
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
     }
+  }
+
+  /* Limpieza: borra los históricos de renta fija e índices de tasas guardados, quita los activos
+   * importados de ese tipo (los predeterminados se conservan, vacíos) y pide descargar todo de nuevo. */
+  cleanFixed() {
+    const keep = new Set(DEFAULT_ASSETS.map((a) => a.name));
+    const removed = [];
+    this.data.assets = this.data.assets.filter((a) => {
+      if (!isStaleFixed(a)) return true;
+      delete this.data.prices[a.name];
+      delete this.data.meta.errors[a.name];
+      removed.push(a.name);
+      if (!keep.has(a.name)) return false;
+      delete a.kind;
+      delete a.dur;
+      delete a.cls;
+      return true;
+    });
+    this.data.meta.lastPrices = null; // fuerza la descarga completa al abrir
+    this.data.meta.cleaned = removed;
+    return removed;
   }
 
   save() {
@@ -240,4 +270,4 @@ class Store {
   }
 }
 
-module.exports = { Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };
+module.exports = { isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };

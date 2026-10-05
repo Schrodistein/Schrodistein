@@ -20,6 +20,7 @@ function write(store, dir, docs) {
   const acc = sub('acciones');
   fs.rmSync(path.join(acc, 'originales'), { recursive: true, force: true }); // versiones anteriores guardaban cada tramo
   let assets = 0;
+  const written = new Set();
   for (const a of store.data.assets) {
     const h = store.history(a.name);
     if (!h.dates.length) continue;
@@ -27,8 +28,11 @@ function write(store, dir, docs) {
     const cell = (x) => (Number.isFinite(x) ? x : '');
     const rows = h.dates.map((d, i) => `${d},${h.prices[i]},${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}${h.qty ? `,${cell(h.qty[i])},${cell(h.vol[i])}` : ''}`);
     fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '﻿' + [head].concat(rows).join('\n'));
+    written.add(safe(a.name) + '.csv');
     assets++;
   }
+  // Archivos de activos que ya no están o se limpiaron (p. ej. COLTES leídos con reglas anteriores)
+  for (const f of fs.readdirSync(acc)) if (f.toLowerCase().endsWith('.csv') && !written.has(f)) fs.rmSync(path.join(acc, f), { force: true });
   const mac = sub('macro');
   const m = store.data.macro || {};
   let vars = 0;

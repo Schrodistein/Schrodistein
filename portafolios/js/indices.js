@@ -129,7 +129,7 @@
       <tr><td><b>COLTES UVR</b></td><td>TES indexados a la UVR (protegidos contra la inflación).</td><td>Unidad de valor real</td></tr>
       <tr><td>Mercado monetario</td><td><b>COLIBR</b></td><td>Inversión a un día que renta a la tasa IBR.</td><td>Tasa interbancaria</td></tr>
       </tbody></table></div>
-      <p class="hint">En la app, cada segmento se mide contra su índice: COLCAP para acciones y ETF, COLTES para TES y bonos, COLIBR para CDT y mercado monetario (sección Datos → Índices de referencia).</p></div>`);
+      </div>`);
 
     // Función de selección con los datos cargados
     const series = (ctx.series || []).filter((s) => s.qty || s.vol);
@@ -191,7 +191,7 @@
     out.push(builder);
 
     out.push(`<div class="panel refs"><h2>Referencias</h2><ol>${REFS.map((r) => `<li>${esc(r).replace(/(https?:\/\/[^\s]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>')}</li>`).join('')}</ol>
-      <p class="hint">Las metodologías de los índices cambian con el tiempo; la versión vigente está en bvc.com.co (Índices) y, para el MSCI COLCAP, en msci.com.</p></div>`);
+      </div>`);
     return out.join('');
   }
 

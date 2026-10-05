@@ -193,6 +193,33 @@ test('quien ya usaba la app recibe los activos predeterminados nuevos (dólar, C
 });
 
 
+test('limpieza única: borra COLTES y renta fija leídos antes, conserva acciones y pide descargar todo', () => {
+  const dir = tmp();
+  const old = new Store(dir);
+  old.mergePrices('COLTES LP', ['2026-01-02', '2026-01-05'], [10500, 10.6], 'bvc');
+  old.ensureAsset('TES 2032', false, { cls: 'tes', kind: 'tasa', dur: 6 });
+  old.mergePrices('TES 2032', ['2026-01-02', '2026-01-05'], [0.105, 0.106], 'bvc');
+  old.mergePrices('ECOPETROL', ['2026-01-02', '2026-01-05'], [2400, 2410], 'bvc');
+  old.data.meta.lastPrices = '2026-01-05T00:00:00Z';
+  old.data.meta.defaults = 2;
+  old.save();
+  const st = new Store(dir);
+  assert(!st.data.prices['COLTES LP'] && st.asset('COLTES LP'), 'COLTES LP queda vacío para volver a cargarlo');
+  assert(!st.asset('TES 2032') && !st.data.prices['TES 2032'], 'el TES importado se quita');
+  assert(st.history('ECOPETROL').dates.length === 2, 'las acciones no se tocan');
+  assert(st.data.meta.lastPrices === null, 'se descarga todo al abrir');
+  st.save();
+  const again = new Store(dir);
+  again.mergePrices('COLTES LP', ['2026-02-02', '2026-02-03'], [250, 251], 'bvc');
+  again.save();
+  assert(new Store(dir).history('COLTES LP').dates.length === 2, 'la limpieza se hace una sola vez');
+  const lib = path.join(dir, 'bib');
+  fs.mkdirSync(path.join(lib, 'acciones'), { recursive: true });
+  fs.writeFileSync(path.join(lib, 'acciones', 'COLTES CP.csv'), 'viejo');
+  require('../lib/biblioteca').write(again, lib);
+  assert(!fs.existsSync(path.join(lib, 'acciones', 'COLTES CP.csv')) && fs.existsSync(path.join(lib, 'acciones', 'ECOPETROL.csv')), 'la carpeta queda con un archivo por activo vigente');
+});
+
 test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   const st = new Store(tmp());
   const PF = updater.loadPF();

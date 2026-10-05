@@ -86,6 +86,17 @@ function notify(title, body) {
   n.show();
 }
 
+/* Betas por industria de Damodaran en la biblioteca (una vez por semana basta). */
+async function saveDamodaran(fetch) {
+  const d = path.join(libraryDir(), 'damodaran');
+  const f = path.join(d, 'betaemerg.xls');
+  if (fs.existsSync(f) && Date.now() - fs.statSync(f).mtimeMs < 6 * 864e5) return fs.readFileSync(f);
+  const buf = await macro.fetchDamodaran(fetch || getFetch());
+  fs.mkdirSync(d, { recursive: true });
+  fs.writeFileSync(f, buf);
+  return buf;
+}
+
 /* Una actualización a la vez; las llamadas simultáneas esperan la misma. */
 function runUpdate(reason) {
   if (running) return running;
@@ -94,6 +105,7 @@ function runUpdate(reason) {
     const prices = await updater.updatePrices(store, fetch, log);
     const news = await updater.updateNews(store, fetch, log);
     const mac = await macro.updateMacro(store, fetch, updater.loadPF(), log);
+    await saveDamodaran(fetch).catch((e) => log('Damodaran: ' + e.message));
     store.save();
     writeLibrary();
     log(`actualización (${reason}): ${prices.updated.length} activos con cierres nuevos, ${news.fresh.length} noticias nuevas, ${prices.errors.length + news.errors.length} errores`);
@@ -308,10 +320,7 @@ function registerIpc() {
     return { result: r, data: store.data.macro };
   });
   ipcMain.handle('damodaran:descargar', async () => {
-    const buf = await macro.fetchDamodaran(getFetch());
-    const d = path.join(libraryDir(), 'damodaran');
-    fs.mkdirSync(d, { recursive: true });
-    fs.writeFileSync(path.join(d, 'betaemerg.xls'), buf);
+    const buf = await saveDamodaran();
     return { base64: buf.toString('base64'), file: 'betaemerg.xls (mercados emergentes)', date: new Date().toISOString().slice(0, 10) };
   });
   ipcMain.handle('biblioteca:guardar', (e, docs) => writeLibrary(Array.isArray(docs) ? docs.slice(0, 20) : null));

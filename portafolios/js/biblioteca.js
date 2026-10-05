@@ -10,7 +10,11 @@
   const PF = (root.PF = root.PF || {});
   const fin = Number.isFinite;
   const DB = 'frontera-eficiente';
-  const VERSION = 1;
+  const VERSION = 2;
+  /* Versión 2: limpieza única de la renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos)
+   * guardados con las reglas de lectura anteriores; se vuelven a cargar con el lector corregido. */
+  const STALE_FIXED = /(^| )(COLTES|COLIBR|IBR|TES|CDT|BONO)/i;
+  const isStaleFixed = (r) => r.kind === 'tasa' || ['tes', 'cdt', 'bono'].includes(r.cls) || STALE_FIXED.test(r.name);
 
   /* Une una serie nueva con la guardada. Los valores guardados no cambian; se agregan las
    * fechas nuevas (con su cantidad y volumen, si los hay). Devuelve el registro y cuántas
@@ -83,8 +87,17 @@
         } catch (e) {
           return ok(null);
         }
-        req.onupgradeneeded = () => {
+        req.onupgradeneeded = (ev) => {
           const db = req.result;
+          if (ev.oldVersion >= 1 && ev.oldVersion < 2 && db.objectStoreNames.contains('series')) {
+            const cur = req.transaction.objectStore('series').openCursor();
+            cur.onsuccess = () => {
+              const c = cur.result;
+              if (!c) return;
+              if (isStaleFixed(c.value)) c.delete();
+              c.continue();
+            };
+          }
           if (!db.objectStoreNames.contains('series')) db.createObjectStore('series', { keyPath: 'name' });
           if (!db.objectStoreNames.contains('macro')) db.createObjectStore('macro', { keyPath: 'key' });
         };
@@ -171,5 +184,5 @@
     return Object.assign(res, { macro: mac });
   }
 
-  PF.lib = { mergeRecord, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
+  PF.lib = { isStaleFixed, mergeRecord, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

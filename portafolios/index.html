@@ -68,16 +68,16 @@
           <div class="panel term-head" id="th"></div>
           <div class="tiles" id="t-tiles"></div>
           <figure class="panel chart"><figcaption><h2 id="tc-price-t">Precio</h2></figcaption><div class="chart-box term-chart" id="tc-price"></div></figure>
-          <figure class="panel chart"><figcaption><h2 id="tc-ret-t">Rendimientos diarios</h2><p>Verde: días al alza; rojo: a la baja. Las líneas marcan ±2 desviaciones estándar.</p></figcaption><div class="chart-box term-chart" id="tc-ret"></div></figure>
+          <figure class="panel chart"><figcaption><h2 id="tc-ret-t">Rendimientos diarios</h2></figcaption><div class="chart-box term-chart" id="tc-ret"></div></figure>
         </div>
       </div>
       <div class="grid-2">
-        <figure class="panel chart"><figcaption><h2>Distribución de los rendimientos</h2><p>Histograma de toda la historia frente a la curva normal con la misma media y desviación.</p></figcaption><div class="chart-box term-chart" id="tc-hist"></div></figure>
-        <figure class="panel chart"><figcaption><h2 id="tc-cum-t">Rendimiento acumulado</h2><p>Crecimiento de 100 invertidos al inicio del rango.</p></figcaption><div class="chart-box term-chart" id="tc-cum"></div><div class="legend" id="tc-cum-lg"></div></figure>
+        <figure class="panel chart"><figcaption><h2>Distribución de los rendimientos</h2></figcaption><div class="chart-box term-chart" id="tc-hist"></div></figure>
+        <figure class="panel chart"><figcaption><h2 id="tc-cum-t">Rendimiento acumulado</h2></figcaption><div class="chart-box term-chart" id="tc-cum"></div><div class="legend" id="tc-cum-lg"></div></figure>
       </div>
-      <figure class="panel chart"><figcaption><h2 id="tc-roll-t">Correlación móvil</h2><p>Correlación de los rendimientos con el índice en una ventana móvil de 60 días (12 periodos si los datos no son diarios).</p></figcaption><div class="chart-box term-chart" id="tc-roll"></div></figure>
+      <figure class="panel chart"><figcaption><h2 id="tc-roll-t">Correlación móvil</h2></figcaption><div class="chart-box term-chart" id="tc-roll"></div></figure>
       <div class="panel"><h2>Desempeño por periodo</h2><div class="table-scroll"><table class="data perf" id="t-perf"></table></div></div>
-      <figure class="panel chart"><figcaption><h2>Correlación de los rendimientos</h2><p>Con las fechas que comparte cada par de series. Azul: se mueven juntas; rojo: en sentido contrario.</p></figcaption><div class="chart-box" id="tc-corr"></div></figure>
+      <figure class="panel chart"><figcaption><h2>Correlación de los rendimientos</h2></figcaption><div class="chart-box" id="tc-corr"></div></figure>
     </div>
   </section>
 
@@ -151,7 +151,6 @@
           <label class="check"><input type="checkbox" id="seg-divisas" data-seg="divisas" checked> Divisas <span class="sub">dólar y otras monedas</span></label>
         </fieldset>
         <p class="hint" id="div-hint"></p>
-        <p class="hint">Un peso mínimo negativo permite ventas en corto. La mezcla con el CAPM reduce el error de estimación de las medias históricas, que es la principal debilidad práctica de Markowitz.</p>
       </div>
     </div>
     <div class="panel" id="guia-datos">
@@ -180,7 +179,6 @@
       <div class="table-scroll"><table class="data" id="bench-table"></table></div>
       <p class="status" id="colibr-note" hidden></p>
       <h3>Instrumentos cargados</h3>
-      <p class="hint">El tipo se detecta por el nombre y las columnas del archivo; corrígelo aquí si hace falta. Los índices no se compran: solo sirven de referencia.</p>
       <div class="table-scroll"><table class="data" id="inst-table"></table></div>
     </div>
     <div class="panel guide">
@@ -207,15 +205,14 @@
     </div>
     <div class="panel">
       <div class="table-scroll"><table class="data" id="assets-table"></table></div>
-      <p class="hint">α de Jensen = E(R) − [rf + β(E[Rm] − rf)]. La t y el valor p son de la regresión histórica del exceso de rendimiento sobre el del mercado; |t| ≥ 2 suele considerarse significativo.</p>
     </div>
     <div class="grid-2">
       <figure class="panel chart">
-        <figcaption><h2>Línea del mercado de valores (SML)</h2><p>Arriba de la línea: α de Jensen positivo, el activo rinde más de lo que su β justifica.</p></figcaption>
+        <figcaption><h2>Línea del mercado de valores (SML)</h2></figcaption>
         <div class="chart-box" id="chart-sml"></div>
       </figure>
       <figure class="panel chart">
-        <figcaption><h2>Correlaciones</h2><p>Cuanto menor la correlación entre activos, mayor el beneficio de diversificar.</p></figcaption>
+        <figcaption><h2>Correlaciones</h2></figcaption>
         <div class="chart-box" id="chart-corr"></div>
       </figure>
     </div>
@@ -228,7 +225,7 @@
       <p class="lede" id="front-lede">Frontera eficiente de Markowitz con tus límites de peso, línea del mercado de capitales y los portafolios de referencia.</p>
     </div>
     <figure class="panel chart">
-      <figcaption><h2>Frontera eficiente y línea del mercado de capitales</h2><p>Riesgo (σ anual) contra rendimiento esperado anual. Pasa el cursor sobre los puntos para ver los detalles.</p></figcaption>
+      <figcaption><h2>Frontera eficiente y línea del mercado de capitales</h2></figcaption>
       <div class="chart-box" id="chart-front"></div>
       <div class="legend" id="legend-front"></div>
     </figure>
@@ -282,12 +279,10 @@
     <div class="panel" id="plan-out"></div>
     <div class="panel" id="plan-proj-box">
       <h2>Rendimiento esperado a corto, mediano y largo plazo</h2>
-      <p class="hint">Con el plan de arriba, después de comisiones de compra y de venta (se vende todo al final del plazo) y con la renta fija segura a su tasa. El rango del 95 % sale de la volatilidad histórica; los rendimientos pasados no garantizan los futuros.</p>
       <div class="table-scroll"><table class="data" id="plan-proj"></table></div>
     </div>
     <div class="panel" id="plan-alt-box">
       <h2>Alternativas según el número de activos</h2>
-      <p class="hint">La comisión es un costo fijo por activo: con presupuestos pequeños, tener menos activos puede dar más rendimiento neto. Cada alternativa conserva los activos de mayor peso y recalcula el portafolio con ellos; se elige la de mejor razón de Sharpe neta en tu horizonte.</p>
       <div class="table-scroll"><table class="data" id="plan-alt"></table></div>
     </div>
   </section>
@@ -305,10 +300,9 @@
         <label class="field inline" for="lib-cut"><span>Calcular con los datos hasta (fecha de corte)</span><input type="date" id="lib-cut"></label>
         <button type="button" class="btn btn-primary" id="lib-use">Calcular con la biblioteca</button>
       </div>
-      <p class="hint">Con una fecha de corte, todos los cálculos (portafolios, paso a paso, macro, índices) usan solo los datos guardados hasta ese día: el mismo análisis da siempre el mismo resultado aunque después entren datos nuevos. Déjala vacía para usar todo lo guardado.</p>
       <p class="status" id="lib-status" hidden></p>
     </div>
-    <div class="panel"><h2>Acciones, ETF, índices e instrumentos</h2><p class="hint">Desmarca «Usar» para dejar un instrumento guardado pero fuera del análisis.</p><div class="table-scroll"><table class="data" id="lib-table"></table></div></div>
+    <div class="panel"><h2>Acciones, ETF, índices e instrumentos</h2><div class="table-scroll"><table class="data" id="lib-table"></table></div></div>
     <div class="panel"><h2>Variables macroeconómicas</h2><div class="table-scroll"><table class="data" id="lib-macro"></table></div></div>
     <div class="panel">
       <h2>Copias y archivos</h2>
@@ -318,7 +312,6 @@
         <button type="button" class="btn" id="lib-csv">Descargar los históricos en CSV</button>
         <button type="button" class="btn btn-ghost" id="lib-clear">Vaciar la biblioteca</button>
       </div>
-      <p class="hint">La biblioteca vive en este navegador o en esta instalación de la app. Para llevarla a otro equipo, exporta el respaldo e impórtalo allá: se suma a lo que ese equipo ya tenga, sin cambiar sus valores guardados. La app de escritorio además escribe una copia en archivos CSV en Documentos/Frontera Eficiente/Biblioteca.</p>
     </div>
   </section>
 
@@ -345,7 +338,6 @@
         <label class="btn file" for="macro-file">Elegir archivo (CSV: fecha y valor)<input type="file" id="macro-file" accept=".csv,.txt"></label>
       </div>
       <p class="status" id="macro-status" hidden></p>
-      <p class="hint">La app de escritorio descarga las cuatro series sola: la TRM diaria de datos.gov.co (Superintendencia Financiera), la inflación y el desempleo mensuales y el PIB trimestral de FRED (OCDE) y, si una fuente no responde, las series anuales del Banco Mundial. Las guarda en la biblioteca local. También puedes importar las series oficiales del DANE o del Banco de la República: un CSV con una columna de fecha y una de valor.</p>
     </div>
     <div class="macro-grid" id="macro-cards"></div>
     <div class="panel"><h2>Relación de cada activo con cada variable</h2><div id="macro-table"><p class="sub">Carga datos de activos y de las variables.</p></div></div>
@@ -466,7 +458,6 @@
         <label class="field" for="mk-new-news"><span>Búsqueda de noticias</span><input id="mk-new-news" placeholder="p. ej. Nutresa acción" autocomplete="off"></label>
         <button type="button" class="btn" id="mk-add">Agregar activo</button>
       </div>
-      <p class="hint">La descarga de la BVC es la fuente principal: sus cierres tienen prioridad. Como la BVC no ofrece una conexión abierta para aplicaciones, la actualización automática diaria toma los cierres de Yahoo Finance con el símbolo de la columna «Símbolo automático» (las acciones de la BVC llevan el sufijo .CL). Si un símbolo falla, corrígelo o déjalo vacío y usa solo las descargas de la BVC.</p>
     </div>
     <div class="panel">
       <h2>Actualización automática</h2>
@@ -519,7 +510,6 @@
     </div>
     <div class="panel">
       <h2>Matrices sueltas en CSV</h2>
-      <p class="hint">Separadas por punto y coma y con coma decimal, para abrirlas directamente en Excel en español.</p>
       <div class="row-btns">
         <button type="button" class="btn" id="dl-cov">Matriz de covarianzas</button>
         <button type="button" class="btn" id="dl-corr">Matriz de correlación</button>

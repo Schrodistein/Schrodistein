@@ -887,7 +887,7 @@
         <tr class="hl"><td>Total</td><td></td><td></td><td></td><td></td><td></td><td class="n">${money(plan.invested + plan.safe)}</td><td class="n">${plan.invested ? pct(1) : '—'}</td><td class="n">${money(plan.buyFees)}</td></tr>
       </tbody></table></div>
       ${notes.map((t) => `<p class="hint">${t}</p>`).join('')}
-      <p class="hint">Precios: último dato cargado (${esc(dates.join(', ') || '—')}); el precio al comprar será distinto. El portafolio se calcula solo con los ${m.names.length} activos de los segmentos elegidos en Datos.</p>
+      
       <div class="row-btns"><button type="button" class="btn btn-primary" id="plan-register"${plan.rows.length ? '' : ' disabled'}>Registrar esta compra en Confirmar</button> <button type="button" class="btn" data-go-where="1">Dónde y cómo invertir</button></div>`;
     // Proyecciones
     const hs = [...new Set([1, 3, 5, 10, H])].sort((a, b) => a - b);

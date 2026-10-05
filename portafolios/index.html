@@ -18,6 +18,7 @@
     </div>
     <nav class="tabs" aria-label="Secciones">
       <button type="button" data-go="datos" id="tab-datos" aria-current="page">Datos</button>
+      <button type="button" data-go="biblioteca" id="tab-biblioteca">Biblioteca</button>
       <button type="button" data-go="terminal" id="tab-terminal">Terminal</button>
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
       <button type="button" data-go="frontera" id="tab-frontera">Portafolio</button>
@@ -291,6 +292,36 @@
     </div>
   </section>
 
+  <!-- BIBLIOTECA -->
+  <section class="screen" id="screen-biblioteca" hidden>
+    <div class="head">
+      <h1>Biblioteca local</h1>
+      <p class="lede">El histórico de cada acción, ETF, índice e instrumento, y de cada variable macroeconómica, guardado en este equipo. Todos los cálculos de la app se hacen con estos valores guardados. Un dato que entra a la biblioteca queda fijo: al cargar archivos nuevos solo se agregan las fechas que faltan, nunca se cambia un valor ya guardado.</p>
+      <p class="lede"><b>Fiel a la fuente:</b> se guarda exactamente lo que trae cada archivo, sin redondear ni modificar: cierre, cantidad y volumen de cada día negociado, o la tasa en renta fija. Los tramos de 6 meses de un mismo activo se unen en un solo historial. Los días sin negociación <i>no</i> se escriben en la biblioteca: al calcular, cada hueco se completa con el último precio anterior (Datos → Supuestos → Días sin negociación).</p>
+    </div>
+    <div class="panel">
+      <p id="lib-summary"></p>
+      <div class="row-btns">
+        <label class="field inline" for="lib-cut"><span>Calcular con los datos hasta (fecha de corte)</span><input type="date" id="lib-cut"></label>
+        <button type="button" class="btn btn-primary" id="lib-use">Calcular con la biblioteca</button>
+      </div>
+      <p class="hint">Con una fecha de corte, todos los cálculos (portafolios, paso a paso, macro, índices) usan solo los datos guardados hasta ese día: el mismo análisis da siempre el mismo resultado aunque después entren datos nuevos. Déjala vacía para usar todo lo guardado.</p>
+      <p class="status" id="lib-status" hidden></p>
+    </div>
+    <div class="panel"><h2>Acciones, ETF, índices e instrumentos</h2><p class="hint">Desmarca «Usar» para dejar un instrumento guardado pero fuera del análisis.</p><div class="table-scroll"><table class="data" id="lib-table"></table></div></div>
+    <div class="panel"><h2>Variables macroeconómicas</h2><div class="table-scroll"><table class="data" id="lib-macro"></table></div></div>
+    <div class="panel">
+      <h2>Copias y archivos</h2>
+      <div class="row-btns">
+        <button type="button" class="btn" id="lib-export">Exportar la biblioteca (respaldo)</button>
+        <label class="btn file" for="lib-file">Importar una biblioteca<input type="file" id="lib-file" accept=".json,application/json"></label>
+        <button type="button" class="btn" id="lib-csv">Descargar los históricos en CSV</button>
+        <button type="button" class="btn btn-ghost" id="lib-clear">Vaciar la biblioteca</button>
+      </div>
+      <p class="hint">La biblioteca vive en este navegador o en esta instalación de la app. Para llevarla a otro equipo, exporta el respaldo e impórtalo allá: se suma a lo que ese equipo ya tenga, sin cambiar sus valores guardados. La app de escritorio además escribe una copia en archivos CSV en Documentos/Frontera Eficiente/Biblioteca.</p>
+    </div>
+  </section>
+
   <!-- PASO A PASO -->
   <section class="screen" id="screen-estadistica" hidden>
     <div class="head">
@@ -553,6 +584,7 @@
 <script src="js/xlsx.js"></script>
 <script src="js/report.js"></script>
 <script src="js/invertir.js"></script>
+<script src="js/biblioteca.js"></script>
 <script src="js/macro.js"></script>
 <script src="js/pasos.js"></script>
 <script src="js/sistema.js"></script>

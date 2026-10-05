@@ -413,13 +413,17 @@
       return;
     }
     const combined = PF.data.combineSeries(series);
-    if (combined.length < 2) {
-      status(`Solo se encontró el historial de ${combined[0].name}. Sube a la vez los archivos de todas tus acciones y del índice de mercado (por ejemplo el COLCAP).${allErr ? ' Además: ' + allErr : ''}`, 'bad');
+    // Todo lo leído queda en la biblioteca local; el análisis usa la biblioteca completa
+    const saved = await PF.lib.saveSeries(combined, 'archivo');
+    await refreshLib();
+    const usable = libSeries();
+    if (usable.length < 2) {
+      status(`Solo hay un instrumento en la biblioteca (${combined[0].name}). Sube también los archivos de tus otras acciones y del índice de mercado (por ejemplo el COLCAP).${allErr ? ' Además: ' + allErr : ''}`, 'bad');
       return;
     }
-    st.series = combined;
-    const plan = suggestSettings(combined);
-    if (mergeLoaded(false)) status(`Listo: ${combined.length} activos cargados de ${files.length - errors.length} archivos. ${plan}${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
+    st.series = usable;
+    const plan = suggestSettings(usable);
+    if (mergeLoaded(false)) status(`Listo: ${combined.length} instrumentos leídos de ${files.length - errors.length} archivos y guardados en la biblioteca (${saved.agregadas.toLocaleString('es-CO')} fechas nuevas${saved.nuevas ? `, ${saved.nuevas} instrumentos nuevos` : ''}; los valores ya guardados no cambian). El análisis usa los ${usable.length} instrumentos de la biblioteca. ${plan}${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
   }
 
   /* Frecuencia y agregación sugeridas para historiales recién cargados.
@@ -482,8 +486,9 @@
         status('El texto pegado tiene el historial de un solo activo. Pega una tabla con la columna de nemotécnico que incluya todas tus acciones y el índice.', 'bad');
         return true;
       }
+      PF.lib.saveSeries(combined, 'texto pegado').then(refreshLib);
       st.series = combined;
-      if (mergeLoaded(false)) status(`Listo: ${combined.length} activos leídos del texto pegado.`, 'ok');
+      if (mergeLoaded(false)) status(`Listo: ${combined.length} activos leídos del texto pegado y guardados en la biblioteca.`, 'ok');
     } catch (e) {
       status(e.message, 'bad');
     }
@@ -516,7 +521,7 @@
   }
 
   // Secciones que se dibujan solo cuando están a la vista
-  const SCREEN_RENDERERS = { estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema() };
+  const SCREEN_RENDERERS = { estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
   const renderScreen = (screen) => SCREEN_RENDERERS[screen] && SCREEN_RENDERERS[screen]();
 
   function renderSummary() {
@@ -1174,6 +1179,132 @@
     $('where-steps').innerHTML = r.steps;
   }
 
+  /* ---------- Biblioteca local ---------- */
+  st.lib = { series: [], macro: {} };
+  const libCut = () => store.get('corte') || '';
+  async function refreshLib() {
+    st.lib = await PF.lib.all();
+    if (st.screen === 'biblioteca') renderLib();
+  }
+  // Series para el análisis: las marcadas «usar», hasta la fecha de corte
+  const libSeries = () =>
+    PF.data.combineSeries(
+      st.lib.series
+        .filter((r) => r.use !== false)
+        .map((r) => PF.lib.toSeries(r, libCut()))
+        .filter((x) => x.dates.length >= 3)
+    );
+  function useLibrary(msg) {
+    const usable = libSeries();
+    if (usable.length < 2) return false;
+    st.series = usable;
+    const ok = mergeLoaded(true);
+    if (ok) status(msg || `Análisis con la biblioteca local: ${usable.length} instrumentos${libCut() ? `, datos hasta el ${libCut()}` : ''}.`, 'ok');
+    return ok;
+  }
+  function libStatus(msg, kind) {
+    const el = $('lib-status');
+    el.hidden = !msg;
+    el.className = 'status ' + (kind || '');
+    el.textContent = msg || '';
+  }
+  function renderLib() {
+    const L = st.lib;
+    const C = PF.data.CLASSES;
+    const cut = libCut();
+    const n = L.series.reduce((q, r) => q + r.dates.length, 0);
+    const last = (a) => a[a.length - 1];
+    $('lib-cut').value = cut;
+    $('lib-summary').textContent = L.series.length
+      ? `${L.series.length} instrumentos y ${Object.keys(L.macro).length} variables macro guardados, con ${n.toLocaleString('es-CO')} datos diarios. ${cut ? `Los cálculos usan los datos hasta el ${cut}.` : 'Los cálculos usan todos los datos guardados.'}`
+      : 'La biblioteca está vacía: sube los históricos de la BVC en Datos (o actualiza en Mercado, en la app de escritorio) y quedan guardados aquí.';
+    $('lib-table').innerHTML = L.series.length
+      ? '<thead><tr><th>Usar</th><th>Instrumento</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th class="n">Datos</th><th>Cantidad y volumen</th><th>Fuente</th><th>Última fecha agregada</th><th></th></tr></thead><tbody>' +
+        L.series
+          .map((r) => `<tr><td><input type="checkbox" data-lib-use="${esc(r.name)}"${r.use !== false ? ' checked' : ''} aria-label="Usar ${esc(r.name)} en el análisis"></td><td>${esc(r.name)}</td><td>${esc(C[r.cls] || (r.kind === 'tasa' ? 'Renta fija' : ''))}</td><td>${esc(r.dates[0])}</td><td>${esc(last(r.dates))}</td><td class="n">${r.dates.length.toLocaleString('es-CO')}</td><td>${r.qty ? 'Sí' : '—'}</td><td>${esc(r.source)}</td><td>${esc(String(r.updated).slice(0, 10))}</td><td><button type="button" class="btn btn-ghost" data-lib-dl="${esc(r.name)}">Descargar CSV</button> <button type="button" class="btn btn-ghost" data-lib-del="${esc(r.name)}">Quitar</button></td></tr>`)
+          .join('') +
+        '</tbody>'
+      : '';
+    const V = PF.macro.VARS;
+    const mk = Object.values(L.macro);
+    $('lib-macro').innerHTML = mk.length
+      ? '<thead><tr><th>Variable</th><th>Desde</th><th>Hasta</th><th class="n">Datos</th><th>Fuente</th><th></th></tr></thead><tbody>' +
+        mk.map((m) => `<tr><td>${esc(V[m.key] ? V[m.key].long : m.key)}</td><td>${esc(m.dates[0])}</td><td>${esc(last(m.dates))}</td><td class="n">${m.dates.length.toLocaleString('es-CO')}</td><td>${esc(m.source)}</td><td><button type="button" class="btn btn-ghost" data-lib-delm="${esc(m.key)}">Quitar</button></td></tr>`).join('') +
+        '</tbody>'
+      : '<tbody><tr><td class="sub">Sin variables macro guardadas: actualízalas o impórtalas en Macro.</td></tr></tbody>';
+  }
+  function wireLib() {
+    const box = $('screen-biblioteca');
+    box.addEventListener('change', async (ev) => {
+      const t = ev.target;
+      if (t.dataset.libUse) {
+        await PF.lib.setUse(t.dataset.libUse, t.checked);
+        await refreshLib();
+        useLibrary();
+      } else if (t.id === 'lib-cut') {
+        store.set('corte', t.value || '');
+        renderLib();
+        useLibrary();
+      } else if (t.id === 'lib-file' && t.files && t.files[0]) {
+        try {
+          const r = await PF.lib.importJSON(JSON.parse(await t.files[0].text()));
+          await refreshLib();
+          useLibrary();
+          libStatus(`Biblioteca importada: ${r.nuevas} instrumentos nuevos, ${r.agregadas.toLocaleString('es-CO')} fechas y ${r.macro} datos macro agregados. Los valores que ya tenías no cambiaron.`, 'ok');
+        } catch (e) {
+          libStatus(e.message, 'bad');
+        }
+        t.value = '';
+      }
+    });
+    box.addEventListener('click', async (ev) => {
+      const t = ev.target.closest('button');
+      if (!t) return;
+      if (t.dataset.libDl) {
+        // Un solo archivo con todo el historial del activo, con los valores tal como vienen de la fuente
+        const r = st.lib.series.find((x) => x.name === t.dataset.libDl);
+        const head = r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre' + (r.qty ? ';Cantidad;Volumen' : '');
+        const cell = (x) => (x == null || !Number.isFinite(x) ? '' : String(x));
+        const rows = r.dates.map((d, i) => `${d};${r.name};${cell(r.kind === 'tasa' ? r.prices[i] * 100 : r.prices[i])}${r.qty && r.kind !== 'tasa' ? `;${cell(r.qty[i])};${cell(r.vol[i])}` : ''}`);
+        download('\ufeff' + [head].concat(rows).join('\n'), `${r.name.replace(/[\\/:*?"<>|]+/g, '-')}.csv`, 'text/csv;charset=utf-8');
+        return;
+      }
+      if (t.dataset.libDel || t.dataset.libDelm) {
+        const what = t.dataset.libDel || PF.macro.VARS[t.dataset.libDelm].long;
+        if (!confirm(`¿Quitar «${what}» de la biblioteca? Se borra su histórico guardado.`)) return;
+        await PF.lib.remove(t.dataset.libDel ? 'series' : 'macro', t.dataset.libDel || t.dataset.libDelm);
+        await refreshLib();
+        if (t.dataset.libDel) useLibrary();
+      } else if (t.id === 'lib-use') {
+        if (!useLibrary()) libStatus('Se necesitan al menos dos instrumentos marcados para el análisis.', 'bad');
+        else go('frontera');
+      } else if (t.id === 'lib-export') {
+        download(JSON.stringify(await PF.lib.exportJSON()), `biblioteca-frontera-eficiente-${stamp()}.json`, 'application/json');
+      } else if (t.id === 'lib-csv') {
+        const rows = ['Instrumento,Tipo,Fecha,Valor,Cantidad,Volumen'];
+        for (const r of st.lib.series) r.dates.forEach((d, i) => rows.push(`"${r.name}",${r.kind === 'tasa' ? 'tasa' : r.cls || ''},${d},${r.prices[i]},${r.qty && r.qty[i] != null ? r.qty[i] : ''},${r.vol && r.vol[i] != null ? r.vol[i] : ''}`));
+        download('\ufeff' + rows.join('\n'), `biblioteca-historicos-${stamp()}.csv`, 'text/csv;charset=utf-8');
+        if (Object.keys(st.lib.macro).length) download('\ufeff' + PF.macro.toCSV(macroData()), `biblioteca-macro-${stamp()}.csv`, 'text/csv;charset=utf-8');
+      } else if (t.id === 'lib-clear') {
+        if (!confirm('¿Vaciar toda la biblioteca local? Se borran todos los históricos y variables macro guardados en este equipo. Exporta una copia antes si la necesitas.')) return;
+        await PF.lib.clear();
+        await refreshLib();
+        libStatus('Biblioteca vaciada.', 'ok');
+      }
+    });
+  }
+  // Al abrir: las variables macro importadas en versiones anteriores pasan a la biblioteca,
+  // y si hay datos guardados el análisis arranca con ellos.
+  async function startLibrary() {
+    const old = store.get('macro');
+    if (old && typeof old === 'object') {
+      for (const [k, d] of Object.entries(old)) if (d && d.dates) await PF.lib.saveMacro(k, d, d.source);
+      store.set('macro', null);
+    }
+    await refreshLib();
+    if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos${libCut() ? `, hasta el ${libCut()}` : ''}. Para agregar fechas nuevas, sube los archivos en Datos.`);
+  }
+
   /* ---------- Paso a paso y betas de Damodaran ---------- */
   function pasosCtx() {
     const pa = store.get('pa') || {};
@@ -1268,8 +1399,16 @@
   }
 
   /* ---------- Variables macroeconómicas ---------- */
-  st.macroDesk = null;
-  const macroData = () => Object.assign({}, st.macroDesk || {}, store.get('macro') || {});
+  // Variables macro: las guardadas en la biblioteca, hasta la fecha de corte
+  const macroData = () => {
+    const cut = libCut();
+    const out = {};
+    for (const [k, d] of Object.entries((st.lib && st.lib.macro) || {})) {
+      const keep = d.dates.map((t) => !cut || t <= cut);
+      out[k] = { dates: d.dates.filter((_, i) => keep[i]), values: d.values.filter((_, i) => keep[i]), source: d.source, updated: d.updated };
+    }
+    return out;
+  };
   function macroStatus(msg, kind) {
     const el = $('macro-status');
     el.hidden = !msg;
@@ -1300,9 +1439,8 @@
           text = new TextDecoder('windows-1252').decode(buf);
         }
         const d = PF.macro.parseFile(text, file.name);
-        const all = store.get('macro') || {};
-        all[key] = Object.assign(d, { source: 'Archivo importado: ' + file.name, updated: new Date().toISOString() });
-        store.set('macro', all);
+        await PF.lib.saveMacro(key, d, 'Archivo importado: ' + file.name);
+        await refreshLib();
         macroStatus(`${PF.macro.VARS[key].long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]}.`, 'ok');
         renderMacro();
       } catch (e) {
@@ -1457,6 +1595,7 @@
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
     wirePasos();
     wireMacro();
+    wireLib();
     $('sistema').addEventListener('change', (ev) => {
       const t = ev.target;
       if (t.dataset && t.dataset.shares) {
@@ -1628,14 +1767,16 @@
     st.screen = document.getElementById('screen-' + hash) ? hash : 'datos';
     parse(false);
     go(st.screen);
+    startLibrary();
   }
 
   /* Punto de entrada para la app de escritorio (js/desktop.js): carga historiales
    * ya descargados como si se hubieran subido archivos. */
   globalThis.PFApp = {
     // Variables macro descargadas por la app de escritorio
-    setMacro(data) {
-      st.macroDesk = data || null;
+    async setMacro(data) {
+      for (const [k, d] of Object.entries(data || {})) if (d && d.dates) await PF.lib.saveMacro(k, d, d.source);
+      await refreshLib();
       if (st.screen === 'macro') renderMacro();
     },
     macroData,
@@ -1646,16 +1787,18 @@
       const r = st.P.recommended;
       return { names: st.model.names.slice(), w: r.w.slice(), ret: r.ret, vol: r.vol, date: st.parsed.dates.at(-1) };
     },
-    loadSeries(list, origin) {
-      const combined = PF.data.combineSeries(list);
-      if (combined.length < 2) {
+    async loadSeries(list, origin) {
+      await PF.lib.saveSeries(PF.data.combineSeries(list), 'app de escritorio');
+      await refreshLib();
+      const usable = libSeries();
+      if (usable.length < 2) {
         status('Se necesitan al menos dos activos con datos para el análisis.', 'bad');
         return false;
       }
-      st.series = combined;
-      const plan = suggestSettings(combined);
+      st.series = usable;
+      const plan = suggestSettings(usable);
       const ok = mergeLoaded(false);
-      if (ok) status(`Listo: ${combined.length} activos cargados ${origin || ''}. ${plan}`.trim(), 'ok');
+      if (ok) status(`Listo: ${usable.length} instrumentos de la biblioteca local, actualizada ${origin || ''}. ${plan}`.trim(), 'ok');
       return ok;
     },
     go,

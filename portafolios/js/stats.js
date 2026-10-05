@@ -573,10 +573,20 @@
 
   /* Junta los tramos del mismo activo (la BVC descarga como máximo 6 meses por archivo).
    * Las series de tasa (renta fija) se convierten, ya unidas, en un índice de rendimiento total. */
+  /* Clave de un activo: el mismo nemotécnico aunque cambien mayúsculas, tildes, espacios o
+   * guiones bajos entre los archivos (la BVC entrega cada historial en tramos de 6 meses). */
+  const assetKey = (name) =>
+    String(name)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase()
+      .replace(/[\s_]+/g, ' ')
+      .trim();
+
   function combineSeries(list) {
     const by = new Map();
     for (const s of list) {
-      const k = s.name.toUpperCase();
+      const k = assetKey(s.name);
       if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur });
       const g = by.get(k);
       g.parts++;
@@ -820,6 +830,6 @@
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { assetKey, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

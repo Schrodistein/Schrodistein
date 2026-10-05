@@ -245,7 +245,7 @@ const shots = process.argv[3];
     page.on('pageerror', (e) => errors.push('win1252: ' + e.message));
     await page.goto(url + '#datos');
     await page.setInputFiles('#file', files);
-    await page.waitForFunction(() => /Listo: 4 activos/.test(document.getElementById('upload-status').textContent), null, { timeout: 8000 }).catch(async () => errors.push('win1252: ' + (await page.textContent('#upload-status'))));
+    await page.waitForFunction(() => /Listo: 4 instrumentos/.test(document.getElementById('upload-status').textContent), null, { timeout: 8000 }).catch(async () => errors.push('win1252: ' + (await page.textContent('#upload-status'))));
     const st = await page.textContent('#upload-status');
     if (!/notas\.txt/.test(st)) errors.push('win1252: no informa el archivo inválido: ' + st);
     const market = await page.$eval('#market', (s) => s.value);

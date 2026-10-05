@@ -1,18 +1,23 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'sistema', 'indices']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
 let passed = 0;
+const pending = [];
 function test(name, fn) {
-  try {
-    fn();
-    passed++;
-  } catch (e) {
+  const fail = (e) => {
     failed++;
     console.error('✗ ' + name + '\n  ' + e.message);
+  };
+  try {
+    const r = fn();
+    if (r && typeof r.then === 'function') pending.push(r.then(() => passed++, fail));
+    else passed++;
+  } catch (e) {
+    fail(e);
   }
 }
 function assert(cond, msg) {
@@ -716,5 +721,60 @@ test('índices: volumen, rotación y frecuencia del COLEQTY; índice propio por 
   assert(/Mercado monetario/.test(html) && /Mercado extrabursátil/.test(html) && /COLEQTY/.test(html) && /Markowitz, H\. \(1952\)/.test(html) && /class="sf-node on/.test(html));
 });
 
-console.log(`${passed} pruebas correctas, ${failed} fallidas`);
-if (failed) process.exit(1);
+test('biblioteca: tramos de 6 meses de una acción = un solo activo; valores guardados fijos; fecha de corte', async () => {
+  const csv = (rows) => '﻿Fecha;Nemotécnico;Precio cierre;Cantidad;Volumen\n' + rows.map(([d, p]) => `${d};ECOPETROL;${p};1,000.00;${parseFloat(p.replace(/,/g, '')) * 1000}`).join('\n');
+  // Dos descargas de la BVC: enero-junio y julio-diciembre, con nombres de archivo distintos
+  const a = PF.data.readText(csv([['2025-01-02', '2,000.00'], ['2025-03-03', '2,100.00'], ['2025-06-30', '2,200.00']]), 'ECOPETROL_20250701_101010.csv').series;
+  const b = PF.data.readText(csv([['2025-07-01', '2,300.00'], ['2025-12-30', '2,400.00']]), 'ecopetrol_20260105_2.csv').series;
+  const c = PF.data.readText('Fecha;Valor hoy\n2025/01/02;1,300.00\n2025/06/30;1,400.00\n2025/12/30;1,500.00', 'MSCI_COLCAP_20260105_1.csv').series;
+  const d = PF.data.readText('Fecha;Valor hoy\n2026/01/02;1,510.00\n2026/01/05;1,520.00', 'MSCI COLCAP (1).csv').series;
+  const merged = PF.data.combineSeries(a.concat(b, c, d));
+  assert(merged.length === 2, 'dos activos, no cuatro: ' + merged.map((x) => x.name).join(', '));
+  assert(PF.data.assetKey('MSCI_COLCAP') === PF.data.assetKey('msci colcap') && PF.data.assetKey('Ecopetról') === 'ECOPETROL');
+  await PF.lib.clear();
+  const r1 = await PF.lib.saveSeries(PF.data.combineSeries(a), 'archivo');
+  const r2 = await PF.lib.saveSeries(PF.data.combineSeries(b), 'archivo');
+  assert(r1.nuevas === 1 && r2.nuevas === 0 && r2.agregadas === 2, 'el segundo tramo se suma al mismo activo');
+  // Un archivo que trae otro valor para una fecha ya guardada no la cambia
+  const fix = PF.data.readText(csv([['2025-03-03', '9,999.00'], ['2026-01-02', '2,500.00']]), 'ECOPETROL.csv').series;
+  const r3 = await PF.lib.saveSeries(PF.data.combineSeries(fix), 'archivo');
+  const lib = await PF.lib.all();
+  const eco = lib.series.find((x) => x.name === 'ECOPETROL');
+  assert(lib.series.length === 1 && r3.agregadas === 1 && eco.dates.length === 6, JSON.stringify(eco.dates));
+  assert(eco.prices[eco.dates.indexOf('2025-03-03')] === 2100, 'el valor guardado queda fijo');
+  assert(eco.qty && eco.vol[0] === 2000000, 'guarda cantidad y volumen');
+  // Fiel a la fuente: lo guardado es exactamente lo leído (sin redondeo ni relleno)
+  const src = PF.data.combineSeries(a.concat(b))[0];
+  assert(src.dates.every((d) => eco.prices[eco.dates.indexOf(d)] === src.prices[src.dates.indexOf(d)]), 'mismos valores que el archivo');
+  assert(!eco.dates.includes('2025-01-03'), 'los días sin negociación no se guardan');
+  // El relleno con el último precio se hace solo al calcular
+  const other = (n) => ({ name: n, dates: ['2025-01-02', '2025-01-03', '2025-03-03', '2025-06-30'], prices: [1, 2, 3, 4] });
+  const calc = PF.data.mergeSeries([PF.lib.toSeries(eco), other('X'), other('Y')], 'diaria');
+  const ce = calc.values[calc.names.indexOf('ECOPETROL')];
+  assert(ce[calc.dates.indexOf('2025-01-03')] === 2000, 'hueco completado con el cierre anterior al calcular');
+  // Fecha de corte
+  const cut = PF.lib.toSeries(eco, '2025-06-30');
+  assert(cut.dates.join() === '2025-01-02,2025-03-03,2025-06-30' && cut.vol.length === 3);
+  // Renta fija por tasas: se guarda la tasa y vuelve a ser índice al usarla
+  const tes = PF.data.combineSeries(PF.data.readText('Fecha;Nemotécnico;Tasa\n2026-01-02;TFIT1;10.5\n2026-01-05;TFIT1;10.6\n2026-01-06;TFIT1;10.4', 't.csv').series);
+  await PF.lib.saveSeries(tes, 'archivo');
+  const t = (await PF.lib.all()).series.find((x) => x.name === 'TFIT1');
+  assert(t.kind === 'tasa' && t.prices[0] === 0.105, 'tasa guardada: ' + t.prices[0]);
+  const back = PF.data.combineSeries([PF.lib.toSeries(t)])[0];
+  assert(back.prices[0] === 100 && back.prices[1] < 100, 'índice de rendimiento total');
+  // Variables macro y respaldo
+  await PF.lib.saveMacro('trm', { dates: ['2025-01-02', '2025-01-03'], values: [4000, 4010] }, 'datos.gov.co');
+  const added = await PF.lib.saveMacro('trm', { dates: ['2025-01-03', '2025-01-06'], values: [9999, 4020] }, 'datos.gov.co');
+  const m = (await PF.lib.all()).macro.trm;
+  assert(added === 1 && m.values.join() === '4000,4010,4020');
+  const json = JSON.parse(JSON.stringify(await PF.lib.exportJSON()));
+  await PF.lib.clear();
+  const imp = await PF.lib.importJSON(json);
+  assert(imp.nuevas === 2 && (await PF.lib.all()).macro.trm.dates.length === 3);
+  await PF.lib.clear();
+});
+
+Promise.all(pending).then(() => {
+  console.log(`${passed} pruebas correctas, ${failed} fallidas`);
+  if (failed) process.exit(1);
+});

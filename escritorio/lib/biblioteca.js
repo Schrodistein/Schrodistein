@@ -1,6 +1,6 @@
 /* Biblioteca local: una carpeta con todo lo descargado, en archivos que se abren sin la app.
- *   acciones/<ACTIVO>.csv          historial por activo (fecha, cierre o tasa, fuente)
- *   acciones/originales/           copias de los archivos descargados de la BVC
+ *   acciones/<ACTIVO>.csv          un solo archivo por activo con todo su historial (los tramos de 6 meses
+ *                                  que entrega la BVC se unen): fecha, cierre o tasa, fuente, cantidad, volumen
  *   macro/<variable>.csv           PIB, inflación, desempleo y TRM, con su fuente
  *   damodaran/                     betas por industria de Damodaran
  *   documentos/*.html              paso a paso, variables macro y teoría
@@ -18,6 +18,7 @@ function write(store, dir, docs) {
     return d;
   };
   const acc = sub('acciones');
+  fs.rmSync(path.join(acc, 'originales'), { recursive: true, force: true }); // versiones anteriores guardaban cada tramo
   let assets = 0;
   for (const a of store.data.assets) {
     const h = store.history(a.name);
@@ -55,8 +56,7 @@ function write(store, dir, docs) {
       'Biblioteca local de Frontera Eficiente',
       `Actualizada: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       '',
-      'acciones/       un CSV por activo: fecha, cierre (o tasa en renta fija) y fuente (BVC o Yahoo Finance).',
-      'acciones/originales/  copias de los archivos descargados de la BVC dentro de la app.',
+      'acciones/       un solo CSV por acción, ETF o índice con todo su historial: los tramos de 6 meses que descarga la BVC quedan unidos (fecha, cierre o tasa, fuente, cantidad y volumen).',
       'macro/          PIB, inflación, desempleo y TRM de Colombia, con la fuente y la fecha de descarga.',
       'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',
       'documentos/     paso a paso de varianza, covarianza, desviación, correlación y betas; variables macro; teoría.',
@@ -67,14 +67,4 @@ function write(store, dir, docs) {
   return { dir, assets, vars, docs: ndocs };
 }
 
-function saveOriginal(dir, file) {
-  try {
-    const d = path.join(dir, 'acciones', 'originales');
-    fs.mkdirSync(d, { recursive: true });
-    fs.copyFileSync(file, path.join(d, path.basename(file).replace(/^\d{10,}-/, '')));
-  } catch (e) {
-    /* la copia es opcional */
-  }
-}
-
-module.exports = { write, saveOriginal };
+module.exports = { write };

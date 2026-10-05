@@ -195,7 +195,8 @@ function handleDownloads() {
       if (state !== 'completed') return;
       const r = updater.importFiles(store, [file], readExcel);
       store.save();
-      biblioteca.saveOriginal(libraryDir(), file);
+      // El tramo descargado ya quedó unido al historial del activo: un solo archivo por activo
+      if (Object.keys(r.assets).length) fs.rm(file, { force: true }, () => {});
       writeLibrary();
       const names = Object.keys(r.assets);
       if (!names.length && r.errors.length) notify('No se pudo importar la descarga', r.errors[0]);
@@ -250,7 +251,6 @@ function registerIpc() {
     if (r.canceled || !r.filePaths.length) return null;
     const res = updater.importFiles(store, r.filePaths, readExcel);
     store.save();
-    for (const f of r.filePaths) biblioteca.saveOriginal(libraryDir(), f);
     writeLibrary();
     broadcast({ imported: res });
     return res;

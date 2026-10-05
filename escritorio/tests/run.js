@@ -215,8 +215,14 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   const ser = st.series('cargados').find((x) => x.name === 'ECOPETROL');
   assert(ser.qty && ser.qty.length === ser.dates.length && ser.vol.at(-1) === 2770000, 'la serie lleva cantidad y volumen');
   assert(/Fuente: datos\.gov\.co/.test(fs.readFileSync(path.join(dir, 'macro', 'trm.csv'), 'utf8')) && fs.existsSync(path.join(dir, 'macro', 'todas.csv')) && fs.existsSync(path.join(dir, 'LEEME.txt')));
-  bib.saveOriginal(dir, path.join(FIX, 'ECOPETROL_20260908_045259.csv'));
-  assert(fs.existsSync(path.join(dir, 'acciones', 'originales', 'ECOPETROL_20260908_045259.csv')));
+  // Varios tramos de la misma acción: un solo archivo en la biblioteca
+  const t2 = path.join(tmp(), 'ECOPETROL_20260908_045427.csv');
+  fs.writeFileSync(t2, fx.BVC_CSV.replace(/2026-08-1(3|4|7|8)/g, (m, d) => '2026-07-1' + d));
+  updater.importFiles(st, [t2], null);
+  bib.write(st, dir, null);
+  const ecoFiles = fs.readdirSync(path.join(dir, 'acciones')).filter((f) => /ECOPETROL/.test(f));
+  const lines = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8').trim().split('\n');
+  assert(ecoFiles.length === 1 && lines.length === 1 + 6 && !fs.existsSync(path.join(dir, 'acciones', 'originales')), ecoFiles.join() + ' / ' + lines.length);
   // El respaldo lleva las variables macro a otro equipo
   const st2 = new Store(tmp());
   st2.importData(JSON.parse(JSON.stringify(st.exportData())));

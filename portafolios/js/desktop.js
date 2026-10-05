@@ -130,7 +130,7 @@
       if (!silent) status('Faltan datos: se necesitan al menos dos activos con cierres. Abre la BVC, importa archivos o actualiza.', 'bad');
       return false;
     }
-    const ok = globalThis.PFApp && globalThis.PFApp.loadSeries(series, note);
+    const ok = globalThis.PFApp && (await globalThis.PFApp.loadSeries(series, note));
     fromDesktop = !!ok;
     if (ok && !silent) status(`El análisis usa ahora ${series.length} series ${note}: ${series.map((x) => x.name).join(', ')}.`, 'ok');
     return ok;

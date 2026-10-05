@@ -83,6 +83,27 @@ const shots = process.argv[3];
     await bf.fill('7500');
     await page.waitForTimeout(700);
     if ((await page.textContent('#buy-sum')) === before) errors.push(`${label}: la comisión de una compra no cambia el total`);
+    // Guía para operar en la BVC
+    await page.click('#tab-guia');
+    if ((await page.$$('#guia .guia-ch')).length < 10) errors.push(label + ': la guía no tiene sus capítulos');
+    if (!/Con tus datos/.test(await page.textContent('#guia'))) errors.push(label + ': la guía no usa los datos cargados');
+    if (shots) await page.screenshot({ path: `${shots}/${label}-guia.png`, fullPage: false });
+    await page.click('#guia [data-guia-go="frontera"]');
+    if (await page.isHidden('#screen-frontera')) errors.push(label + ': el botón de la guía no lleva a Portafolio');
+    // Elegir activos: quitar uno recalcula con uno menos, y «Todos» lo devuelve
+    const nAll = await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length);
+    await page.click('#pick-assets [data-pick] >> nth=0');
+    await page.waitForTimeout(400);
+    const nNow = await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length);
+    const rows = await page.$$eval('#compare-table tbody tr', (els) => els.length);
+    if (nNow !== nAll - 1 || !/de \d+ activos en el portafolio/.test(await page.textContent('#pick-assets'))) errors.push(`${label}: elegir activos no funciona (${nAll} → ${nNow})`);
+    if (!rows) errors.push(label + ': sin portafolios al quitar un activo');
+    await page.click('#pick-assets [data-pick-all="1"]');
+    await page.waitForTimeout(400);
+    if ((await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length)) !== nAll) errors.push(label + ': «Todos» no devuelve los activos');
+    // Catálogo de la BVC en la biblioteca
+    await page.click('#tab-biblioteca');
+    if ((await page.$$('#cat-table tbody tr')).length < 30) errors.push(label + ': falta el catálogo de la BVC');
     // Paso a paso y macro
     await page.click('#tab-estadistica');
     await page.waitForSelector('#dam-panel');

@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -684,6 +684,20 @@ test('frontera paso a paso: correlación promedio implícita reproduce σp y cad
   const ports = [{ key: 'recommended', label: 'Recomendado' }, { key: 'tangency', label: 'Máxima Sharpe' }, { key: 'minVar', label: 'Mínima varianza' }];
   const html = PF.frontera.render({ m, P, esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', sel: 'tangency', ports, tb: PF.model.treynorBlack(m), width: 600 });
   for (const t of ['frontera eficiente', 'mercado de capitales', 'mercado de valores', 'Cómo se eligen', 'Por qué un activo entra', 'Dónde queda', 'promedian las correlaciones', 'Máximo rendimiento', 'Máxima Sharpe (elegido)']) assert(html.includes(t), 'falta ' + t);
+});
+
+test('guía de la BVC y catálogo de activos', () => {
+  const cat = PF.catalog;
+  const nemos = cat.map((c) => c.nemo);
+  assert(new Set(nemos).size === nemos.length, 'nemotécnicos repetidos');
+  for (const n of ['ECOPETROL', 'PFCIBEST', 'ICOLCAP', 'MSCI COLCAP', 'COLIBR']) assert(nemos.includes(n), 'falta ' + n);
+  assert(cat.filter((c) => c.type === 'accion').every((c) => c.yahoo === c.nemo + '.CL'));
+  const sin = PF.guia.render({});
+  assert(PF.guia.CHAPTERS.length >= 10 && sin.includes('Ruta de aprendizaje') && sin.includes('Glosario') && !sin.includes('Con tus datos'));
+  const m = sampleModel();
+  const P = PF.model.portfolios(m, 0, 1);
+  const con = PF.guia.render({ m, P, pct: (x) => (x * 100).toFixed(1) + '%', esc: String, sel: 'tangency', ports: [{ key: 'tangency', label: 'Máxima Sharpe' }] });
+  assert(con.includes('Con tus datos') && con.includes('Máxima Sharpe') && /Gordon \(1959\)/.test(con) && /Tobin \(1958\)/.test(con));
 });
 
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {

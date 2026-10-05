@@ -15,11 +15,11 @@ Para instalarla en el móvil, publica la carpeta en cualquier hosting estático 
 
 ## Frontera Eficiente (portafolios)
 
-La carpeta [`portafolios/`](portafolios/README.md) contiene otra app independiente para construir y confirmar portafolios eficientes (Markowitz, Sharpe, Treynor, Jensen). Ábrela con `portafolios/index.html`. `npm test` también ejecuta sus pruebas, y `npm run build:portafolios` genera `dist/frontera-eficiente.html`.
+La carpeta [`portafolios/`](portafolios/README.md) contiene otra app independiente para aprender a operar acciones y ETF en la BVC (guía conectada con la teoría) y para construir y confirmar portafolios eficientes (Markowitz, Sharpe, Treynor, Jensen) con los activos que elijas, con el paso a paso de cada cálculo. Ábrela con `portafolios/index.html`. `npm test` también ejecuta sus pruebas, y `npm run build:portafolios` genera `dist/frontera-eficiente.html`.
 
 ## Frontera Eficiente para escritorio
 
-La carpeta [`escritorio/`](escritorio/README.md) empaqueta la app de portafolios como aplicación instalable (Windows, macOS, Linux) con Electron. Se actualiza sola (cada semana, por defecto) con los cierres de los activos de la BVC, el dólar y sus noticias, combina renta variable, renta fija, derivados y divisas, y recalcula el portafolio recomendado cuando llegan datos nuevos. Los instaladores se publican en la Release `escritorio-v<versión>`.
+La carpeta [`escritorio/`](escritorio/README.md) empaqueta la app de portafolios como aplicación instalable (Windows, macOS, Linux) con Electron. Trae el catálogo de las acciones y ETF de la BVC, descarga su historial completo a la biblioteca local y se actualiza sola (cada semana, por defecto) con los cierres de los activos de la BVC, el dólar y sus noticias, combina renta variable, renta fija, derivados y divisas, y recalcula el portafolio recomendado cuando llegan datos nuevos. Los instaladores se publican en la Release `escritorio-v<versión>`.
 
 ## Qué mide
 

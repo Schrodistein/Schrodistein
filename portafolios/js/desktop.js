@@ -159,6 +159,8 @@
       );
     }
     if (payload && payload.result) await loadMacro();
+    // Cada actualización agrega a la biblioteca local los historiales descargados
+    if (payload && payload.result && globalThis.PFApp && globalThis.PFApp.saveToLibrary) await globalThis.PFApp.saveToLibrary(await api.series('todos'));
     if (payload && (payload.result || payload.imported)) setTimeout(() => saveLibrary(true), 1500);
     if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) {
       const before = lastRecommended();

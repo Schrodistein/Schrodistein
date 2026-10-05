@@ -2,6 +2,7 @@
 
 Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye todo el análisis de la app web: Markowitz, Sharpe, Treynor y Jensen, confirmación de portafolios y compras por acciones y fecha. Además se conecta a internet para alimentarse día a día:
 
+- **Catálogo de la BVC**: la lista trae todas las acciones y ETF locales, los índices de referencia y el dólar y el euro. La primera vez descarga el **historial completo** de cada uno (la fuente automática, hasta donde tenga datos) y lo agrega a la biblioteca local; después, cada semana, solo lo nuevo. En Biblioteca, «Descargar el historial de todos» lo hace en el momento.
 - **Mercado**: cierres diarios de los activos que sigues. Tienen prioridad los datos oficiales de la Bolsa de Valores de Colombia:
   - **Abrir la BVC y descargar** abre el sitio de la BVC dentro de la app. Cada histórico que descargas ahí (CSV) se importa y se une solo.
   - **Importar archivos de la BVC** carga CSV ya descargados, por ejemplo los tramos de 6 meses de cada acción.
@@ -14,9 +15,9 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
 - **Variables macro**: descarga PIB, inflación, desempleo y TRM de Colombia: la TRM diaria de datos.gov.co, la inflación y el desempleo mensuales y el PIB trimestral de FRED (OCDE) y, como respaldo, las series anuales del Banco Mundial. Las actualiza con los cierres.
 - **Betas de Damodaran**: descarga el archivo de betas por industria de mercados emergentes de NYU Stern para comparar la beta de Damodaran con la de Sharpe.
 - **Biblioteca local** en `Documentos/Frontera Eficiente/Biblioteca`, que se reescribe en cada actualización:
-  - un solo CSV por acción, ETF o índice con todo su historial: los tramos de 6 meses que descarga la BVC se unen y el archivo temporal de cada descarga se borra al importarlo;
+  - un solo CSV por acción, ETF o índice con todo su historial, en formato de Excel en español (punto y coma, punto de miles y coma decimal): los tramos de 6 meses que descarga la BVC se unen y el archivo temporal de cada descarga se borra al importarlo;
   - las variables macro con su fuente;
-  - el archivo de Damodaran;
+  - el archivo de Damodaran (se descarga solo en cada actualización semanal);
   - los documentos «Paso a paso», «Variables macro» y «Teoría» en HTML.
   Se abre con Mercado → «Abrir biblioteca local».
 - Los datos se guardan en el equipo (`datos.json` en la carpeta de datos de la app); no se envían a ningún servidor.

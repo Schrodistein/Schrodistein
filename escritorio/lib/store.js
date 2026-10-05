@@ -25,7 +25,17 @@ const DEFAULT_ASSETS = [
   { name: 'COLTES LP', yahoo: '', news: 'TES Colombia tasas deuda pública', index: true },
   { name: 'COLIBR', yahoo: '', news: 'IBR tasa interbancaria Colombia', index: true },
 ];
-const DEFAULTS_VERSION = 3; // sube cuando se agregan activos predeterminados o se hace una limpieza
+/* Catálogo de acciones y ETF de la BVC (portafolios/js/catalogo.js, compartido con la interfaz). */
+function catalog() {
+  for (const d of [path.join(__dirname, '..', 'portafolios', 'js'), path.join(__dirname, '..', '..', 'portafolios', 'js')]) {
+    const f = path.join(d, 'catalogo.js');
+    if (fs.existsSync(f)) return require(f);
+  }
+  return [];
+}
+const catalogAsset = (c) => ({ name: c.nemo, yahoo: c.yahoo || '', news: `${c.name} ${c.type === 'accion' ? 'acción' : ''}`.trim(), index: c.type === 'indice', enabled: true, cls: c.type === 'accion' ? undefined : c.type });
+
+const DEFAULTS_VERSION = 4; // sube cuando se agregan activos predeterminados o se hace una limpieza
 
 /* Renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos) leídos con las reglas anteriores:
  * se borran una vez para volver a cargarlos con el lector corregido. */
@@ -46,9 +56,17 @@ const DEFAULT_SETTINGS = {
 };
 
 function emptyData() {
+  const assets = DEFAULT_ASSETS.map((a) => Object.assign({ enabled: true }, a));
+  const have = new Set(assets.map((a) => a.name.toUpperCase()));
+  for (const c of catalog()) {
+    if (have.has(c.nemo.toUpperCase())) continue;
+    const a = catalogAsset(c);
+    if (!a.cls) delete a.cls;
+    assets.push(a);
+  }
   return {
     version: 1,
-    assets: DEFAULT_ASSETS.map((a) => Object.assign({ enabled: true }, a)),
+    assets,
     prices: {},
     news: [],
     macro: {},
@@ -73,12 +91,27 @@ class Store {
         if (from < DEFAULTS_VERSION) {
           for (const a of DEFAULT_ASSETS) if (!this.asset(a.name)) this.data.assets.push(Object.assign({ enabled: true }, a));
           if (from < 3) this.cleanFixed();
+          if (from < 4) this.addCatalog();
           this.data.meta.defaults = DEFAULTS_VERSION;
         }
       }
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
     }
+  }
+
+  /* Agrega todas las acciones y ETF de la BVC que falten; devuelve cuántos agregó. */
+  addCatalog() {
+    let n = 0;
+    for (const c of catalog()) {
+      if (this.asset(c.nemo)) continue;
+      const a = catalogAsset(c);
+      if (!a.cls) delete a.cls;
+      this.data.assets.push(a);
+      n++;
+    }
+    if (n) this.data.meta.lastPrices = null; // descarga el historial de los nuevos al abrir
+    return n;
   }
 
   /* Limpieza: borra los históricos de renta fija e índices de tasas guardados, quita los activos
@@ -270,4 +303,4 @@ class Store {
   }
 }
 
-module.exports = { isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };
+module.exports = { catalog, isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };

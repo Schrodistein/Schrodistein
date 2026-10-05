@@ -480,3 +480,24 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 .refs ol { padding-left: 22px; display: grid; gap: 4px; font-size: 0.92rem; }
 #liq-panel input { width: 100%; min-width: 120px; padding: 4px 6px; }
 .guia td { vertical-align: top; min-width: 140px; }
+
+/* Activos del portafolio y catálogo de la BVC */
+.pick-panel > summary { cursor: pointer; list-style: revert; }
+.pick-panel > summary h2 { display: inline; }
+.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px 16px; margin-top: 10px; }
+.pick-grid .sub { color: var(--ink-2); font-size: 0.8rem; }
+.cat-ok { color: var(--pos, #1a7f37); }
+.cat-miss { color: var(--ink-2); }
+
+/* Guía para operar en la BVC */
+.guia-theory { border-left: 3px solid var(--s1); background: var(--panel-2, rgba(127,127,127,.08)); padding: 10px 14px; margin: 12px 0; border-radius: 4px; }
+.guia-theory > b { display: block; margin-bottom: 4px; }
+.guia-app { align-items: center; margin-top: 8px; }
+.guia-live { border: 1px dashed var(--s1); padding: 8px 12px; border-radius: 4px; }
+.guia-route { display: grid; gap: 6px; padding-left: 1.4em; }
+.guia-route .btn { min-width: 140px; }
+.guia-gloss { display: grid; grid-template-columns: minmax(140px, 220px) 1fr; gap: 6px 16px; }
+.guia-gloss dt { font-weight: 600; }
+.guia-gloss dd { margin: 0; }
+@media (max-width: 600px) { .guia-gloss { grid-template-columns: 1fr; } .guia-gloss dd { margin-bottom: 6px; } }
+.guia-toc { list-style: none; padding-left: 0; columns: 2 280px; }

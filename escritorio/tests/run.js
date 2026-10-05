@@ -193,6 +193,22 @@ test('quien ya usaba la app recibe los activos predeterminados nuevos (dólar, C
 });
 
 
+test('catálogo de la BVC: la app nueva y quien ya la usaba tienen todos los activos, sin repetir', () => {
+  const dir = tmp();
+  const st = new Store(dir);
+  for (const n of ['ECOPETROL', 'PFCIBEST', 'GRUPOARGOS', 'PFAVAL', 'ICOLCAP', 'HCOLSEL', 'EUR/COP']) assert(st.asset(n), 'falta ' + n);
+  const names = st.data.assets.map((a) => a.name.toUpperCase());
+  assert(new Set(names).size === names.length, 'activos repetidos');
+  assert(st.asset('PFAVAL').yahoo === 'PFAVAL.CL' && st.asset('HCOLSEL').cls === 'etf');
+  // Quien ya usaba la app (versión 3 de los predeterminados) recibe el catálogo y una descarga completa
+  st.data.assets = st.data.assets.slice(0, 5);
+  st.data.meta.defaults = 3;
+  st.data.meta.lastPrices = '2026-01-05T00:00:00Z';
+  st.save();
+  const again = new Store(dir);
+  assert(again.asset('PFAVAL') && again.data.assets.length === names.length && again.data.meta.lastPrices === null);
+});
+
 test('limpieza única: borra COLTES y renta fija leídos antes, conserva acciones y pide descargar todo', () => {
   const dir = tmp();
   const old = new Store(dir);

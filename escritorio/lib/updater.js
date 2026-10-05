@@ -14,7 +14,7 @@ function loadPF() {
   return globalThis.PF;
 }
 
-/* Precios: la primera vez 5 años; después el último mes (corrige cierres recientes). */
+/* Precios: la primera vez todo el historial disponible; después el último mes (corrige cierres recientes). */
 async function updatePrices(store, fetch, log) {
   const s = store.data.settings;
   const out = { updated: [], errors: [], newest: null };
@@ -23,7 +23,7 @@ async function updatePrices(store, fetch, log) {
     if (!a.enabled || !a.yahoo) continue;
     const have = (store.data.prices[a.name] && Object.keys(store.data.prices[a.name]).length) || 0;
     try {
-      const r = await src.fetchYahoo(fetch, a.yahoo, have > 200 ? '1mo' : '5y');
+      const r = await src.fetchYahoo(fetch, a.yahoo, have > 200 ? '1mo' : 'max');
       const n = store.mergePrices(a.name, r.dates, r.prices, 'yahoo');
       delete store.data.meta.errors[a.name];
       if (n) out.updated.push({ name: a.name, count: n, last: r.dates[r.dates.length - 1] });

@@ -153,6 +153,33 @@
   }
 
   /* Panel de Datos: índices que pide cada segmento y tipo de cada instrumento cargado. */
+  /* Activos elegidos para el portafolio: se guardan los que el usuario dejó por fuera. */
+  const skipped = () => new Set(store.get('skip') || []);
+  function setPicked(names, on) {
+    const sk = skipped();
+    for (const nm of names) on ? sk.delete(nm) : sk.add(nm);
+    store.set('skip', [...sk]);
+    st.userNames = null;
+    compute();
+  }
+  /* Candidatos a invertir: no son el índice principal ni índices, y su segmento está marcado. */
+  function candidates(s) {
+    const p = st.parsed;
+    return p ? p.names.filter((nm, i) => i !== s.market && clsOf(nm) !== 'indice' && s.segs.includes(segOf(clsOf(nm)))) : [];
+  }
+  function renderPicker(s) {
+    const box = $('pick-assets');
+    if (!box) return;
+    const all = candidates(s);
+    const sk = skipped();
+    const on = all.filter((nm) => !sk.has(nm)).length;
+    box.innerHTML = all.length
+      ? `<p class="meta">${on} de ${all.length} activos en el portafolio.</p>
+        <div class="row-btns"><button type="button" class="btn btn-ghost" data-pick-all="1">Todos</button><button type="button" class="btn btn-ghost" data-pick-all="0">Ninguno</button></div>
+        <div class="pick-grid">${all.map((nm) => `<label class="check"><input type="checkbox" data-pick="${esc(nm)}"${sk.has(nm) ? '' : ' checked'}> ${esc(nm)} <span class="sub">${esc(PF.data.CLASSES[clsOf(nm)] || '')}</span></label>`).join('')}</div>`
+      : '<p class="meta">Carga datos en la sección Datos.</p>';
+  }
+
   function renderBenchPanel(s) {
     const p = st.parsed;
     if (!p) return;
@@ -193,7 +220,7 @@
         const seg = segOf(cls);
         const opts = Object.keys(C).map((k) => `<option value="${k}"${k === cls ? ' selected' : ''}>${C[k]}</option>`).join('');
         const b = i === s.market || cls === 'indice' ? '—' : benchName(nm, cls, p.names, mainName) || mainName;
-        const why = i === s.market ? 'No: índice principal' : cls === 'indice' ? 'No: es un índice' : !s.segs.includes(seg) ? `No: ${SEGS[seg].label.toLowerCase()} desmarcada` : 'Sí';
+        const why = i === s.market ? 'No: índice principal' : cls === 'indice' ? 'No: es un índice' : !s.segs.includes(seg) ? `No: ${SEGS[seg].label.toLowerCase()} desmarcada` : `<label class="check"><input type="checkbox" data-pick="${esc(nm)}"${skipped().has(nm) ? '' : ' checked'} aria-label="Incluir ${esc(nm)} en el portafolio"> En el portafolio</label>`;
         return `<tr><td>${esc(nm)}</td><td><select data-cls="${esc(nm)}" aria-label="Tipo de ${esc(nm)}">${opts}</select></td><td>${seg ? SEGS[seg].label : 'Referencia'}</td><td>${esc(b)}</td><td>${why}</td></tr>`;
       }).join('') + '</tbody>';
   }
@@ -202,6 +229,7 @@
     if (!st.parsed) return;
     const s = settings();
     renderBenchPanel(s);
+    renderPicker(s);
     store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
     const p = st.parsed;
     const warnings = [];
@@ -213,11 +241,12 @@
       const mi = s.market;
       // Activos invertibles: los de los segmentos elegidos; los índices solo son referencia
       const clsAll = p.names.map(clsOf);
-      const inv = p.names.map((_, i) => i !== mi && clsAll[i] !== 'indice' && s.segs.includes(segOf(clsAll[i])));
+      const sk = skipped();
+      const inv = p.names.map((nm, i) => i !== mi && clsAll[i] !== 'indice' && s.segs.includes(segOf(clsAll[i])) && !sk.has(nm));
       const names = p.names.filter((_, i) => inv[i]);
       const n = names.length;
       if (!s.segs.length) throw new Error('Elige al menos un segmento en «Invertir en» (renta variable, renta fija, derivados o divisas).');
-      if (n < 2) throw new Error(`Con los segmentos elegidos quedan ${n} ${n === 1 ? 'activo' : 'activos'} para invertir; se necesitan al menos dos. Marca más segmentos en Datos o sube más archivos.`);
+      if (n < 2) throw new Error(`Con los segmentos y activos elegidos quedan ${n} ${n === 1 ? 'activo' : 'activos'} para invertir; se necesitan al menos dos. Marca más activos en «Activos del portafolio» (Portafolio o Datos), más segmentos o sube más archivos.`);
       const bench = names.map((nm) => {
         const b = benchName(nm, clsOf(nm), p.names, p.names[mi]);
         const bi = b ? p.names.indexOf(b) : -1;
@@ -521,7 +550,11 @@
   }
 
   // Secciones que se dibujan solo cuando están a la vista
-  const SCREEN_RENDERERS = { estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
+  const guiaCtx = () => ({ m: st.model, P: st.P, pct, esc, sel: st.sel, ports: PORTS });
+  function renderGuia() {
+    $('guia').innerHTML = PF.guia.render(guiaCtx());
+  }
+  const SCREEN_RENDERERS = { guia: () => renderGuia(), estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
   const renderScreen = (screen) => SCREEN_RENDERERS[screen] && SCREEN_RENDERERS[screen]();
 
   function renderSummary() {
@@ -1208,7 +1241,24 @@
     el.className = 'status ' + (kind || '');
     el.textContent = msg || '';
   }
+  /* Catálogo de la BVC: qué activos ya están en la biblioteca y cuáles faltan. */
+  function renderCatalog() {
+    const key = PF.data.assetKey;
+    const inLib = new Map(st.lib.series.map((r) => [key(r.name), r]));
+    const cat = PF.catalog || [];
+    const have = cat.filter((c) => inLib.has(key(c.nemo))).length;
+    const desk = !!globalThis.bvc;
+    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. ${desk ? '«Descargar el historial de todos» trae el historial completo de cada uno desde la fuente automática y lo guarda aquí; los índices se descargan de la BVC (Mercado → Abrir la BVC).' : 'En el navegador no hay descarga automática: descarga cada histórico en bvc.com.co (Mercados → Renta variable → el nemotécnico → Históricos; hasta 6 meses por archivo) y súbelo en Datos; los tramos de un mismo activo se unen solos. La app de escritorio los descarga todos sola.'}`;
+    $('cat-download').hidden = !desk;
+    $('cat-table').innerHTML = '<thead><tr><th>Nemotécnico</th><th>Emisor o instrumento</th><th>Sector</th><th>En la biblioteca</th><th>Desde</th><th class="n">Días</th></tr></thead><tbody>' +
+      cat.map((c) => {
+        const r = inLib.get(key(c.nemo));
+        return `<tr><td><b>${esc(c.nemo)}</b></td><td>${esc(c.name)}</td><td>${esc(c.sector)}</td><td>${r ? '<span class="cat-ok">✓ Sí</span>' : '<span class="cat-miss">Falta</span>'}</td><td>${r ? esc(r.dates[0]) : '—'}</td><td class="n">${r ? r.dates.length.toLocaleString('es-CO') : '—'}</td></tr>`;
+      }).join('') + '</tbody>';
+  }
+
   function renderLib() {
+    renderCatalog();
     const L = st.lib;
     const C = PF.data.CLASSES;
     const cut = libCut();
@@ -1233,8 +1283,50 @@
         '</tbody>'
       : '<tbody><tr><td class="sub">Sin variables macro guardadas: actualízalas o impórtalas en Macro.</td></tr></tbody>';
   }
+  /* Series de la app de escritorio → biblioteca, con la fuente de cada una (BVC o automática). */
+  const SRC_LABEL = { BVC: 'BVC', 'BVC + automática': 'BVC + Yahoo Finance', 'automática': 'Yahoo Finance' };
+  async function saveDesktopSeries(series) {
+    const out = { nuevas: 0, agregadas: 0 };
+    const groups = new Map();
+    for (const x of series || []) {
+      const src = SRC_LABEL[x.column] || 'app de escritorio';
+      if (!groups.has(src)) groups.set(src, []);
+      groups.get(src).push(x);
+    }
+    for (const [src, list] of groups) {
+      const r = await PF.lib.saveSeries(list, src);
+      out.nuevas += r.nuevas;
+      out.agregadas += r.agregadas;
+    }
+    await refreshLib();
+    return out;
+  }
+  function catStatus(msg, kind) {
+    const el = $('cat-status');
+    el.hidden = !msg;
+    el.className = 'status' + (kind ? ' ' + kind : '');
+    el.textContent = msg || '';
+  }
   function wireLib() {
     const box = $('screen-biblioteca');
+    $('cat-download').addEventListener('click', async () => {
+      const api = globalThis.bvc;
+      if (!api) return;
+      const btn = $('cat-download');
+      btn.disabled = true;
+      catStatus('Descargando el historial de todos los activos… puede tardar unos minutos.');
+      try {
+        const r = await api.actualizar();
+        const res = await saveDesktopSeries(await api.series('todos'));
+        renderLib();
+        const errs = r && r.prices ? r.prices.errors.length : 0;
+        catStatus(`Listo: ${res.nuevas} activos nuevos y ${res.agregadas.toLocaleString('es-CO')} fechas nuevas en la biblioteca.${errs ? ` ${errs} activos no tienen historial en la fuente automática: descárgalos de la BVC (Mercado → Abrir la BVC).` : ''}`, errs ? 'warn' : 'ok');
+      } catch (e) {
+        catStatus('No se pudo descargar: ' + e.message, 'bad');
+      } finally {
+        btn.disabled = false;
+      }
+    });
     box.addEventListener('change', async (ev) => {
       const t = ev.target;
       if (t.dataset.libUse) {
@@ -1487,7 +1579,7 @@
 
   /* Documentos autónomos para la biblioteca local y las descargas. */
   function documents() {
-    const docs = [];
+    const docs = [{ name: 'Guia para operar acciones y ETF en la BVC.html', html: PF.pasos.documentHTML('Guía para aprender a operar acciones y ETF en la BVC', PF.guia.render(guiaCtx()).replace(/<button[^>]*data-guia-go[^>]*>[^<]*<\/button>/g, '').replace(/<div class="row-btns guia-app">\s*<span class="sub">En la app:<\/span>\s*<\/div>/g, '')) }];
     if (st.model) {
       const tmp = document.createElement('div');
       tmp.innerHTML = pasosHTML(pasosCtx());
@@ -1564,6 +1656,16 @@
     $('csv').value = store.get('csv') || PF.sample.csv();
 
     document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.getAttribute('data-go'))));
+    $('guia').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-guia-go]');
+      if (b) return go(b.getAttribute('data-guia-go'));
+      const a = ev.target.closest('[data-guia-to]');
+      if (a) {
+        ev.preventDefault();
+        const el = document.getElementById('guia-' + a.getAttribute('data-guia-to'));
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
     $('btn-sample').addEventListener('click', () => {
       $('csv').value = PF.sample.csv();
       $('kind').value = 'prices';
@@ -1631,6 +1733,15 @@
       $('plan-safe').value = v;
       store.set('plan', Object.assign(store.get('plan') || {}, { 'plan-safe': String(v) }));
       compute();
+    });
+    for (const id of ['inst-table', 'pick-assets'])
+      $(id).addEventListener('change', (ev) => {
+        const t = ev.target.closest('[data-pick]');
+        if (t) setPicked([t.getAttribute('data-pick')], t.checked);
+      });
+    $('pick-assets').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-pick-all]');
+      if (b) setPicked(candidates(settings()), b.getAttribute('data-pick-all') === '1');
     });
     $('inst-table').addEventListener('change', (ev) => {
       const sel = ev.target.closest('[data-cls]');
@@ -1780,6 +1891,10 @@
   /* Punto de entrada para la app de escritorio (js/desktop.js): carga historiales
    * ya descargados como si se hubieran subido archivos. */
   globalThis.PFApp = {
+    // Historiales descargados por la app de escritorio: se agregan a la biblioteca (sin cambiar lo guardado)
+    async saveToLibrary(series) {
+      return saveDesktopSeries(series);
+    },
     // Variables macro descargadas por la app de escritorio
     async setMacro(data) {
       for (const [k, d] of Object.entries(data || {})) if (d && d.dates) await PF.lib.saveMacro(k, d, d.source);

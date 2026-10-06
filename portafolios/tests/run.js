@@ -947,6 +947,14 @@ test('TRM de datos.gov.co (VALOR con $ y coma decimal, VIGENCIADESDE): se lee en
 test('Matriz de precios: sin sábados ni domingos (la TRM del sábado pasa al lunes)', () => {
   const mx = PF.matriz.build([{ name: 'ECOPETROL', dates: ['2026-10-02', '2026-10-05'], prices: [1, 2] }, { name: 'TRM', dates: ['2026-10-02', '2026-10-03'], prices: [10, 11] }]);
   assert(mx.dates.join() === '2026-10-02,2026-10-05' && mx.values[1].join() === '10,11' && mx.filled[1][1], JSON.stringify(mx));
+  // Fechas corridas de un solo activo (domingo, lunes festivo) y festivos sin cambios no son ruedas
+  const base = ['2026-08-13', '2026-08-14', '2026-08-18', '2026-08-19'];
+  const mk = (n, k) => ({ name: n, dates: base.slice(), prices: base.map((_, i) => 100 + k + i * (k + 1)) });
+  const lst = [mk('A', 0), mk('B', 1), mk('C', 2), mk('D', 3), mk('F', 4), { name: 'E', dates: ['2026-08-16', '2026-08-17'], prices: [5, 6] }];
+  lst.slice(0, 5).forEach((x) => { x.dates.push('2026-08-17'); x.prices.push(x.prices[1]); });
+  lst.slice(0, 5).forEach((x) => { const o = x.dates.map((d, i) => [d, x.prices[i]]).sort(); x.dates = o.map((q) => q[0]); x.prices = o.map((q) => q[1]); });
+  const mh = PF.matriz.build(lst);
+  assert(mh.dates.join() === base.join(), 'sin domingo ni festivo: ' + mh.dates.join());
   const mf = PF.matriz.build([{ name: 'A', dates: ['2023-08-18', '2023-08-22', '2023-08-23'], prices: [1, 2, 3] }], { from: '2023-08-22' });
   assert(mf.dates[0] === '2023-08-22', 'fecha de inicio');
 });

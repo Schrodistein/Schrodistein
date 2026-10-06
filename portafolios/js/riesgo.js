@@ -24,6 +24,7 @@
   }
   const FAMILY = [
     { re: /colibr|(^|\W)ibr(\W|$)/i, label: 'Mercado monetario (IBR)', plazo: 'Overnight, capitalizado a diario', use: 'Tasa libre de riesgo de corto plazo (1 año o menos): CAPM de un año, razón de Sharpe, renta fija segura del plan.' },
+    { re: /gxtescol/i, label: 'ETF de TES en pesos (BVC)', plazo: 'Canasta de TES', use: 'Rendimiento realizado de un portafolio de TES que cotiza en la BVC; sirve como referencia de renta fija mientras cargas el COLTES o las tasas cero cupón.' },
     { re: /coltes\s*cp/i, label: 'TES tasa fija en pesos de 1 a 5 años', plazo: '1 a 5 años', use: 'Referencia de mediano plazo; su rendimiento realizado incluye el efecto precio por duración.' },
     { re: /coltes\s*lp/i, label: 'TES tasa fija en pesos de más de 5 años', plazo: 'Más de 5 años', use: 'Índice del segmento de renta fija (β de TES y bonos). Para valorar acciones a largo plazo se usa la TIR del TES de 10 años, no este rendimiento realizado.' },
     { re: /coltes\s*uvr/i, label: 'TES en UVR (tasa real)', plazo: 'Más de 1 año', use: 'Tasa libre de riesgo real (descontada la inflación).' },

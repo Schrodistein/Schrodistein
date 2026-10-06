@@ -50,6 +50,7 @@
     A('ELCONDOR', 'Construcciones El Cóndor', 'Construcción'),
     // ETF locales
     { nemo: 'ICOLCAP', name: 'iShares MSCI COLCAP (ETF)', sector: 'ETF del índice COLCAP', type: 'etf', yahoo: '' },
+    { nemo: 'GXTESCOL', name: 'ETF de TES en pesos', sector: 'ETF de renta fija (TES)', type: 'etf', yahoo: '' },
     { nemo: 'HCOLSEL', name: 'Hcolsel (ETF de acciones colombianas)', sector: 'ETF', type: 'etf', yahoo: '' },
     // Índices de referencia (se descargan de la BVC)
     { nemo: 'MSCI COLCAP', name: 'Índice MSCI COLCAP', sector: 'Índice de renta variable', type: 'indice', yahoo: '' },

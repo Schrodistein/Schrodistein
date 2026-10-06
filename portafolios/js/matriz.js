@@ -45,6 +45,21 @@
       const bvc = maps.filter((mp, j) => !/(^|\W)(trm|usd|eur|cop)(\W|$)|d[oó]lar/i.test(ordered[j].name) && ordered[j].kind !== 'divisa' && ordered[j].cls !== 'divisa');
       const base = (bvc.length ? bvc : maps).flatMap((mp) => [...mp.keys()]);
       dates = [...new Set(base)].filter(wd).sort();
+      // Como en el análisis (PF.data.mergeSeries): con cinco o más activos, una fecha cuenta como rueda si la
+      // cotizan al menos dos, y se quitan los festivos (fechas sueltas en que casi ningún precio cambió:
+      // p. ej. un activo con la fecha corrida un día cae en un lunes festivo o en un domingo).
+      const src = bvc.length ? bvc : maps;
+      if (src.length >= 5) dates = dates.filter((d) => src.filter((mp) => mp.has(d)).length >= 2);
+      if (src.length >= 4) {
+        const keep = [];
+        for (const d of dates) {
+          const prev = keep[keep.length - 1];
+          const both = prev ? src.filter((mp) => mp.has(d) && mp.has(prev)) : [];
+          if (prev && both.length >= 4 && both.filter((mp) => mp.get(d) !== mp.get(prev)).length <= 1) continue;
+          keep.push(d);
+        }
+        dates = keep;
+      }
     }
     // Precio de cada fecha: el cotizado ese día o, si no hubo operación, el último anterior
     const values = [];

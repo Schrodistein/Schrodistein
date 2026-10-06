@@ -654,7 +654,9 @@
   function classify(name, head) {
     const n = norm(name);
     const h = (head || []).map(norm).join(' | ');
-    if (/(^| )(icolcap|hcolsel|icolrisk|gxtescol|ietf)|etf/.test(n)) return 'etf';
+    // ETF de TES: es renta fija (se mide contra el COLTES, no contra el MSCI COLCAP)
+    if (/(^| )gxtescol/.test(n)) return 'tes';
+    if (/(^| )(icolcap|hcolsel|icolrisk|ietf)|etf/.test(n)) return 'etf';
     if (/(opcion|option|(^| )(call|put)( |$))/.test(n)) return 'opcion';
     if (/(futur|(^| )fut( |$))/.test(n) || /liquidacion/.test(h)) return 'futuro';
     if (/(coltes|colibr|colcap|coleqty|colir|colsc|msci|(^| )(indice|index)( |$))/.test(n)) return 'indice';

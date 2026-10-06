@@ -1057,6 +1057,9 @@ test('Números muy cercanos a cero: notación científica pasada la cuarta posic
   assert(f(0) === '0' && f(0, 6) === '0', 'cero');
   assert(f(0.00001234, 6) === '1,23 × 10⁻⁵' && f(-0.0000567) === '−5,67 × 10⁻⁵' && f(2.25e-9) === '2,25 × 10⁻⁹', [f(0.00001234, 6), f(-0.0000567), f(2.25e-9)].join(' '));
   assert(f(0.0123456, 6) === '0,012346' && f(0.0001, 4) === '0,0001' && f(1.5, 2) === '1,50', 'fijo');
+  // Un valor distinto de cero que se redondearía a cero con los decimales pedidos: notación científica
+  assert(f(-0.02, 1) === '−2,0 × 10⁻²' && f(0.03, 1) === '3,0 × 10⁻²' && f(-0.004, 2) === '−4,00 × 10⁻³', [f(-0.02, 1), f(0.03, 1), f(-0.004, 2)].join(' '));
+  assert(PF.charts === undefined || (PF.charts.num(-0.02, 1) === '−2,0 × 10⁻²' && PF.charts.num(-0.2, 1) !== '0,0'));
   assert(PF.charts === undefined || PF.charts.num(0.00002) === '2,00 × 10⁻⁵');
   const x = new TextDecoder().decode(PF.xlsx.build([{ name: 'A', rows: [[{ v: 0, s: 'num6' }, { v: 0.00002, s: 'num6' }]] }]));
   assert(/0\.00E\+00/.test(x) && /<c r="A1" s="12">/.test(x), 'Excel: científica y cero entero');

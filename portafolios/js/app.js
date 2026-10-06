@@ -312,8 +312,9 @@
       renderEmpty();
     }
   }
-  const nf2 = (x) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x);
-  const nf1 = (x) => new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 }).format(x);
+  // Sin aproximar a cero: lo que con estos decimales se vería como 0 (y no es 0) va en notación científica
+  const nf2 = (x) => (Number.isFinite(x) && x !== 0 && +Math.abs(x).toFixed(2) === 0 ? PF.data.sci(x, 2) : new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(x));
+  const nf1 = (x) => (Number.isFinite(x) && x !== 0 && +Math.abs(x).toFixed(1) === 0 ? PF.data.sci(x, 1) : new Intl.NumberFormat('es-CO', { maximumFractionDigits: 1 }).format(x));
   function equalRounded(n) {
     const w = new Array(n).fill(Math.floor(1000 / n) / 1000);
     w[0] += 1 - w.reduce((a, b) => a + b, 0);

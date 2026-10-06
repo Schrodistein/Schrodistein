@@ -207,23 +207,27 @@
     return Number.isFinite(v) ? v : NaN;
   }
 
-  /* Número para mostrar: coma decimal; el cero exacto es «0» y los valores muy cercanos a cero (su primera
-   * cifra distinta de cero va después de la cuarta posición decimal, |x| < 0,0001) en notación científica:
-   * 1,23 × 10⁻⁵. Los demás, con d decimales. */
+  /* Número para mostrar: coma decimal; el cero exacto es «0». Un valor distinto de cero nunca se muestra como
+   * cero: si su primera cifra distinta de cero va después de la cuarta posición decimal (|x| < 0,0001), o si
+   * con los decimales pedidos se redondearía a cero (p. ej. −0,02 con un decimal), va en notación científica:
+   * −2,0 × 10⁻². Los demás, con d decimales. */
   const SUP = { '-': '⁻', 0: '⁰', 1: '¹', 2: '²', 3: '³', 4: '⁴', 5: '⁵', 6: '⁶', 7: '⁷', 8: '⁸', 9: '⁹' };
+  function sci(x, d) {
+    const md = Math.min(2, Math.max(1, d));
+    const ax = Math.abs(x);
+    let e = Math.floor(Math.log10(ax));
+    let m = ax / Math.pow(10, e);
+    if (+m.toFixed(md) >= 10) {
+      m /= 10;
+      e += 1;
+    }
+    return `${x < 0 ? '−' : ''}${m.toFixed(md).replace('.', ',')} × 10${String(e).split('').map((c) => SUP[c]).join('')}`;
+  }
   function fmtNum(x, d = 4) {
     if (x == null || !Number.isFinite(x)) return '—';
     if (x === 0) return '0';
     const ax = Math.abs(x);
-    if (ax < 1e-4) {
-      let e = Math.floor(Math.log10(ax));
-      let m = ax / Math.pow(10, e);
-      if (+m.toFixed(2) >= 10) {
-        m /= 10;
-        e += 1;
-      }
-      return `${x < 0 ? '−' : ''}${m.toFixed(2).replace('.', ',')} × 10${String(e).split('').map((c) => SUP[c]).join('')}`;
-    }
+    if (ax < 1e-4 || +ax.toFixed(d) === 0) return sci(x, d);
     return x.toFixed(d).replace('.', ',').replace(/^-/, '−');
   }
 
@@ -1042,6 +1046,6 @@
 
   Object.assign(PF, {
     stats: { likert, LIKERT, LK, LK_BANDS, sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { fmtNum, roleFromName, splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { sci, fmtNum, roleFromName, splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

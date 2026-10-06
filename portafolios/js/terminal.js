@@ -13,8 +13,10 @@
   const nf = (d) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
   const fin = Number.isFinite;
   const price = (x) => (!fin(x) ? '—' : Math.abs(x) >= 1000 ? nf(0).format(x) : nf(2).format(x));
-  const pct = (x, d = 2) => (fin(x) ? `${x > 0 ? '+' : x < 0 ? '−' : ''}${nf(d).format(Math.abs(x) * 100)} %` : '—');
-  const pctPlain = (x, d = 1) => (fin(x) ? `${nf(d).format(x * 100)} %` : '—');
+  // Sin aproximar a cero: un valor distinto de cero que con d decimales se vería como 0 va en notación científica
+  const small = (v, d) => v !== 0 && +Math.abs(v).toFixed(d) === 0 && PF.data && PF.data.sci;
+  const pct = (x, d = 2) => (fin(x) ? (x === 0 ? '0 %' : small(x * 100, d) ? `${x > 0 ? '+' : ''}${PF.data.sci(x * 100, d)} %` : `${x > 0 ? '+' : x < 0 ? '−' : ''}${nf(d).format(Math.abs(x) * 100)} %`) : '—');
+  const pctPlain = (x, d = 1) => (fin(x) ? (x === 0 ? '0 %' : small(x * 100, d) ? `${PF.data.sci(x * 100, d)} %` : `${nf(d).format(x * 100)} %`) : '—');
   // Bonos de deuda pública (TES): se cotizan por tasa. y = tasa en decimal; cambio en puntos básicos
   const rateTxt = (y) => (fin(y) ? `${nf(2).format(y * 100)} %` : '—');
   const bpTxt = (d) => (fin(d) ? `${d > 0 ? '+' : d < 0 ? '−' : ''}${nf(0).format(Math.abs(d) * 1e4)} pb` : '—');

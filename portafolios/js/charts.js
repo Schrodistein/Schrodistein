@@ -7,12 +7,19 @@
 
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const nf = (d) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
-  const pct = (x, d = 1) => (Number.isFinite(x) ? nf(d).format(x * 100) + ' %' : '—');
-  // Cero exacto «0»; muy cerca de cero (|x| < 0,0001), notación científica (PF.data.fmtNum)
-  const tiny = (x) => x === 0 || (Math.abs(x) < 1e-4 && PF.data && PF.data.fmtNum);
-  // Sin «−0,0»: un negativo que se redondea a cero se muestra sin signo
-  const num = (x, d = 2) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, d) : nf(d).format(x).replace(/^-(?=0(,0+)?$)/, '')) : '—');
-  const f1 = (x) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, 2) : (x < 0 ? '−' : '') + nf(2).format(Math.abs(x))) : '—');
+  // Porcentaje: nunca «0,0 %» para un valor distinto de cero (en ese caso, notación científica: 3,0 × 10⁻³ %)
+  const pct = (x, d = 1) => {
+    if (!Number.isFinite(x)) return '—';
+    const v = x * 100;
+    if (v === 0) return '0 %';
+    if (v !== 0 && +Math.abs(v).toFixed(d) === 0 && PF.data && PF.data.sci) return PF.data.sci(v, d) + ' %';
+    return nf(d).format(v) + ' %';
+  };
+  // Cero exacto «0»; un valor distinto de cero que con d decimales se vería como cero (o |x| < 0,0001) va en
+  // notación científica (PF.data.fmtNum): nunca «0,0» ni «−0,0» para un valor que no es cero
+  const tiny = (x, d = 2) => !!(PF.data && PF.data.fmtNum) && (x === 0 || Math.abs(x) < 1e-4 || +Math.abs(x).toFixed(d) === 0);
+  const num = (x, d = 2) => (Number.isFinite(x) ? (tiny(x, d) ? PF.data.fmtNum(x, d) : nf(d).format(x)) : '—');
+  const f1 = (x) => (Number.isFinite(x) ? (tiny(x, 2) ? PF.data.fmtNum(x, 2) : (x < 0 ? '−' : '') + nf(2).format(Math.abs(x))) : '—');
 
   function ticks(min, max, count) {
     const span = max - min || 1;
@@ -270,7 +277,12 @@
         const lk = PF.stats.likert(v);
         const x = labelW + j * cell;
         s += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cell - 2}" rx="2" style="fill:${lk.color}"${tipAttr(`<b>${esc(nm)}</b> × <b>${esc(nm2)}</b><br>correlación <span class="num">${num(v, 2)}</span><br>${esc(lk.label)}`)}/>`;
-        if (cell >= 34 && i !== j) s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:${lk.text};font-size:10px">${esc(num(v, 1))}</text>`;
+        if (cell >= 34 && i !== j) {
+          // Notación científica compacta dentro de la celda (sin espacios y con letra más pequeña)
+          const txt = num(v, 1);
+          const sciTxt = /×/.test(txt);
+          s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:${lk.text};font-size:${sciTxt ? Math.max(8, Math.min(10, cell / 4.8)) : 10}px">${esc(sciTxt ? txt.replace(/\s/g, '') : txt)}</text>`;
+        }
       });
     });
     s += '</svg>';

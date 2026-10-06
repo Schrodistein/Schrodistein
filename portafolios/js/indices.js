@@ -117,7 +117,8 @@
         <li><b>Por capitalización bursátil</b>: <code>wᵢ = Pᵢ Nᵢ / Σ Pⱼ Nⱼ</code>, donde Nᵢ son las acciones en circulación (o las que flotan libremente). Es el método del MSCI COLCAP y del S&amp;P 500.</li>
         <li><b>Por liquidez o rentabilidad</b>: pesa más la acción más negociada o la más rentable.</li>
         <li><b>Por precios</b>: <code>I = Σ Pᵢ / divisor</code>, como el Dow Jones: pesa más la acción de precio más alto, sin importar el tamaño de la empresa.</li></ul></div></div>
-      <p class="formula"><code>Iₜ = I₀ · Σ qᵢ Pᵢ,ₜ / Σ qᵢ Pᵢ,₀</code> (índice de Laspeyres con base I₀ = 100 o 1.000; qᵢ son las cantidades de la canasta, que se ajustan en cada rebalanceo)</p></div>`);
+      <p class="formula"><code>Iₜ = I₀ · Σ qᵢ Pᵢ,ₜ / Σ qᵢ Pᵢ,₀</code> (índice de Laspeyres; qᵢ son las cantidades de la canasta, que se ajustan en cada rebalanceo)</p>
+      <p>I₀ es solo el valor con que arranca el índice (la BVC usa 1.000 para el COLCAP; otros usan 100): no tiene significado económico. Lo que se lee es la variación, <code>Iₜ / I₀ − 1</code>, el rendimiento acumulado de la canasta desde el inicio. Por eso la app compara siempre en porcentaje: si el índice pasa de 1.000 a 1.250, la canasta ganó 25 %.</p></div>`);
 
     out.push(`<div class="panel"><h2>7. Índices de la Bolsa de Valores de Colombia</h2>
       <div class="table-scroll"><table class="data"><thead><tr><th>Mercado</th><th>Índice</th><th>Qué mide</th><th>Criterio</th></tr></thead><tbody>
@@ -195,20 +196,25 @@
     return out.join('');
   }
 
-  function dualChart(dates, a, b, W, nameB) {
+  /* Rendimiento acumulado (%) del índice propio y del de mercado desde la primera fecha: valor / 100 − 1. */
+  function dualChart(dates, a0, b0, W, nameB) {
     const H = 200;
-    const pad = { l: 44, r: 10, t: 10, b: 22 };
-    const all = a.concat(b).filter(fin);
+    const pad = { l: 52, r: 10, t: 10, b: 22 };
+    const a = a0.map((v) => (fin(v) ? v / 100 - 1 : NaN));
+    const b = b0.map((v) => (fin(v) ? v / 100 - 1 : NaN));
+    const all = a.concat(b, [0]).filter(fin);
     const lo = Math.min(...all);
     const hi = Math.max(...all);
     const X = (i) => pad.l + (i / Math.max(1, dates.length - 1)) * (W - pad.l - pad.r);
     const Y = (v) => pad.t + (1 - (v - lo) / (hi - lo || 1)) * (H - pad.t - pad.b);
     const path = (arr) => arr.map((v, i) => (fin(v) ? `${i && fin(arr[i - 1]) ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}` : '')).join('');
-    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Índice propio frente al índice de mercado">`;
-    for (const v of [lo, 100, hi].filter((v, i, a) => i === 1 || Math.abs(v - 100) > (hi - lo) * 0.08)) if (v >= lo && v <= hi) s += `<line class="gl" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tk" x="${pad.l - 4}" y="${Y(v) + 3}" text-anchor="end">${Math.round(v)}</text>`;
+    const pc = (v) => `${v > 0 ? '+' : ''}${(v * 100).toFixed(0)} %`;
+    let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Rendimiento acumulado del índice propio frente al índice de mercado">`;
+    for (const v of [lo, 0, hi].filter((v, i) => i === 1 || Math.abs(v) > (hi - lo) * 0.08)) if (v >= lo && v <= hi) s += `<line class="gl" x1="${pad.l}" x2="${W - pad.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="tk" x="${pad.l - 4}" y="${Y(v) + 3}" text-anchor="end">${pc(v)}</text>`;
     s += `<path d="${path(a)}" fill="none" stroke="var(--s1)" stroke-width="2"/><path d="${path(b)}" fill="none" stroke="var(--s2)" stroke-width="1.6"/>`;
     s += `<text class="tk" x="${pad.l}" y="${H - 6}">${dates[0]}</text><text class="tk" x="${W - pad.r}" y="${H - 6}" text-anchor="end">${dates[dates.length - 1]}</text></svg>`;
-    s += `<div class="legend"><span><i class="line" style="background:var(--s1)"></i>Tu índice (base 100)</span><span><i class="line" style="background:var(--s2)"></i>${nameB} (base 100)</span></div>`;
+    const last = (arr) => [...arr].reverse().find(fin);
+    s += `<div class="legend"><span><i class="line" style="background:var(--s1)"></i>Tu índice: ${pc(last(a))} desde ${dates[0]}</span><span><i class="line" style="background:var(--s2)"></i>${nameB}: ${pc(last(b))}</span></div>`;
     return s;
   }
 

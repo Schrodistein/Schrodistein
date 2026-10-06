@@ -229,14 +229,15 @@
     const rm = mkt && mkt !== s ? returnsOf(mkt).filter((x) => x.d > start) : [];
     const a = rm.length ? aligned(rs, rm) : { x: rs.map((x) => x.r), y: [], d: rs.map((x) => x.d) };
     if (a.d.length < 2) return '<p class="hint">No hay fechas en común con el índice en este rango.</p>';
+    // Rendimiento acumulado desde el inicio del rango: Pₜ / P₀ − 1 (0 % al inicio, en las dos líneas)
     const cum = (arr) => {
-      let v = 100;
-      return [100].concat(arr.map((r) => (v *= Math.exp(r))));
+      let v = 0;
+      return [0].concat(arr.map((r) => (v += r))).map((x) => Math.exp(x) - 1);
     };
     const ca = cum(a.x);
     const cb = rm.length ? cum(a.y) : [];
     const dd = [start].concat(a.d);
-    const all = ca.concat(cb);
+    const all = ca.concat(cb, [0]);
     const ys = niceTicks(Math.min(...all), Math.max(...all), 5);
     const y0 = Math.min(ys[0], ...all);
     const y1 = Math.max(ys.at(-1), ...all);
@@ -245,10 +246,10 @@
     const path = (c) => c.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('');
     const bw = (W - pad.l - pad.r) / dd.length;
     let hits = '';
-    dd.forEach((x, i) => (hits += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${pad.t}" width="${bw.toFixed(2)}" height="${H - pad.t - pad.b}" class="hit"${tip(`${esc(dayTxt(x))}<br>${esc(s.name)} <span class="num">${nf(1).format(ca[i])}</span>${cb.length ? `<br>${esc(mkt.name)} <span class="num">${nf(1).format(cb[i])}</span>` : ''}`)}/>`));
-    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Rendimiento acumulado">
-      ${frame(W, H, pad, ys, Y, (v) => nf(0).format(v), dd, X)}
-      <line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(100)}" y2="${Y(100)}" class="zero"/>
+    dd.forEach((x, i) => (hits += `<rect x="${(X(i) - bw / 2).toFixed(1)}" y="${pad.t}" width="${bw.toFixed(2)}" height="${H - pad.t - pad.b}" class="hit"${tip(`${esc(dayTxt(x))}<br>${esc(s.name)} <span class="num">${pct(ca[i], 1)}</span>${cb.length ? `<br>${esc(mkt.name)} <span class="num">${pct(cb[i], 1)}</span><br>Diferencia <span class="num">${pct(ca[i] - cb[i], 1)}</span>` : ''}<br><span class="sub">desde el ${esc(dayTxt(start))}</span>`)}/>`));
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Rendimiento acumulado en porcentaje">
+      ${frame(W, H, pad, ys, Y, (v) => `${nf(0).format(v * 100)} %`, dd, X)}
+      <line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(0)}" y2="${Y(0)}" class="zero"/>
       ${cb.length ? `<path d="${path(cb)}" class="ln-mkt"/>` : ''}
       <path d="${path(ca)}" class="ln-acc"/>
       ${hits}</svg>`;
@@ -361,7 +362,16 @@
     const i0 = inRange(s.dates, state.range);
     $('tc-price-t').textContent = `Precio de ${s.name}`;
     $('tc-ret-t').textContent = `Rendimientos ${ctx.daily ? 'diarios' : 'por periodo'} de ${s.name}`;
-    $('tc-cum-t').textContent = mkt && mkt !== s ? `${s.name} frente a ${mkt.name} (base 100)` : `Rendimiento acumulado (base 100)`;
+    // Cuánto ha ganado o perdido cada uno desde el inicio del rango elegido (Pₜ / P₀ − 1)
+    {
+      const i0c = inRange(s.dates, state.range);
+      const from = s.dates[i0c];
+      const gain = (x) => {
+        const k = x.dates.findIndex((d) => d >= from);
+        return k >= 0 ? x.prices.at(-1) / x.prices[k] - 1 : NaN;
+      };
+      $('tc-cum-t').textContent = mkt && mkt !== s ? `Rendimiento acumulado desde el ${dayTxt(from)}: ${s.name} ${pct(gain(s), 1)} · ${mkt.name} ${pct(gain(mkt), 1)}` : `Rendimiento acumulado desde el ${dayTxt(from)}: ${pct(gain(s), 1)}`;
+    }
     $('tc-roll-t').textContent = mkt ? `Correlación móvil con ${mkt.name}` : 'Correlación móvil';
     const W = (id) => Math.max(280, width($(id)));
     if (width($('tc-price'))) {

@@ -277,10 +277,9 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   assert(w.matrix && w.matrix.assets >= 1 && fs.existsSync(path.join(dir, 'Matriz de precios.xlsx')), 'matriz de precios en la biblioteca');
   const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
   // Formato de Excel en español: punto y coma, punto de miles y coma decimal
-  assert(/Fecha;Cierre;Fuente;Negociación;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;Sí;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
-  // Todos los días calendario: el viernes 14 queda para el sábado 15, el domingo 16 y el festivo 17
-  for (const d of ['2026-08-15', '2026-08-16', '2026-08-17']) assert(csv.includes(`${d};2.745;BVC;No (último precio);;`), 'falta ' + d);
-  assert(csv.trim().split('\r\n').length === 1 + 6, 'del 13 al 18 de agosto: 6 días');
+  assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
+  // Fiel a la fuente: solo los días negociados (sin fines de semana ni festivos)
+  assert(!/2026-08-1[567]/.test(csv) && csv.trim().split('\r\n').length === 1 + 3, 'solo 13, 14 y 18 de agosto');
   assert(bib.excelNum(4230.25) === '4.230,25' && bib.excelNum(0.105 * 100) === '10,5');
   // El CSV de la biblioteca se vuelve a leer con los mismos valores
   const reread = updater.loadPF().data.parseSeriesText(csv, 'ECOPETROL.csv')[0];
@@ -296,8 +295,8 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   bib.write(st, dir, null);
   const ecoFiles = fs.readdirSync(path.join(dir, 'acciones')).filter((f) => /ECOPETROL/.test(f));
   const lines = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8').trim().split('\n');
-  // Un solo archivo con los dos tramos y todos los días calendario entre ellos (13 de julio a 18 de agosto)
-  assert(ecoFiles.length === 1 && lines.length === 1 + 37 && lines.filter((l) => /;Sí;/.test(l)).length === 6 && !fs.existsSync(path.join(dir, 'acciones', 'originales')), ecoFiles.join() + ' / ' + lines.length);
+  // Un solo archivo con los dos tramos (solo los días negociados)
+  assert(ecoFiles.length === 1 && lines.length === 1 + 6 && !fs.existsSync(path.join(dir, 'acciones', 'originales')), ecoFiles.join() + ' / ' + lines.length);
   // El respaldo lleva las variables macro a otro equipo
   const st2 = new Store(tmp());
   st2.importData(JSON.parse(JSON.stringify(st.exportData())));

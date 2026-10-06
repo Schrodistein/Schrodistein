@@ -36,33 +36,24 @@ function write(store, dir, docs) {
   for (const a of store.data.assets) {
     const h = store.history(a.name);
     if (!h.dates.length) continue;
-    // Todos los días calendario desde la primera cotización: los días sin negociación llevan el último precio
-    const head = (a.kind === 'tasa' ? 'Fecha;Tasa (%);Fuente;Negociación' : 'Fecha;Cierre;Fuente;Negociación') + (h.qty ? ';Cantidad;Volumen' : '');
+    // Fiel a la fuente: solo los días en que el activo se negoció (la matriz completa las ruedas)
+    const head = (a.kind === 'tasa' ? 'Fecha;Tasa (%);Fuente' : 'Fecha;Cierre;Fuente') + (h.qty ? ';Cantidad;Volumen' : '');
     const val = (x) => excelNum(a.kind === 'tasa' ? x * 100 : x);
-    const rows = [];
-    const at = new Map(h.dates.map((d, i) => [d, i]));
-    let last = -1;
-    for (let t = Date.parse(h.dates[0]), t1 = Date.parse(h.dates[h.dates.length - 1]); t <= t1; t += 864e5) {
-      const d = new Date(t).toISOString().slice(0, 10);
-      const i = at.get(d);
-      if (i != null) last = i;
-      const src = h.sources[last] === 'bvc' ? 'BVC' : 'Yahoo Finance';
-      rows.push(`${d};${val(h.prices[last])};${src};${i != null ? 'Sí' : 'No (último precio)'}${h.qty ? (i != null ? `;${excelNum(h.qty[i])};${excelNum(h.vol[i])}` : ';;') : ''}`);
-    }
+    const rows = h.dates.map((d, i) => `${d};${val(h.prices[i])};${h.sources[i] === 'bvc' ? 'BVC' : 'Yahoo Finance'}${h.qty ? `;${excelNum(h.qty[i])};${excelNum(h.vol[i])}` : ''}`);
     fs.writeFileSync(path.join(acc, safe(a.name) + '.csv'), '\ufeff' + [head].concat(rows).join('\r\n'));
     written.add(safe(a.name) + '.csv');
     assets++;
   }
   // Archivos de activos que ya no están o se limpiaron (p. ej. COLTES leídos con reglas anteriores)
   for (const f of fs.readdirSync(acc)) if (f.toLowerCase().endsWith('.csv') && !written.has(f)) fs.rmSync(path.join(acc, f), { force: true });
-  // Matriz de precios como la hoja «M. PRECIOS»: todos los días calendario, último precio cotizado en los días sin negociación
+  // Matriz de precios como la hoja «M. PRECIOS»: una fila por rueda de la BVC, último precio cotizado en los días sin negociación
   let matrix = null;
   try {
     const PF = require('./updater').loadPF();
     const list = store.series();
     const mi = PF.data.guessMarket(list.map((x) => x.name));
     const market = list[mi] && PF.data.isMarketName(list[mi].name) ? list[mi].name : null;
-    const { bytes, mx } = PF.matriz.workbook(list, { calendar: 'calendario', market });
+    const { bytes, mx } = PF.matriz.workbook(list, { calendar: 'ruedas', market });
     if (bytes) {
       fs.writeFileSync(path.join(dir, 'Matriz de precios.xlsx'), Buffer.from(bytes));
       matrix = { assets: mx.names.length, dates: mx.dates.length };
@@ -97,7 +88,7 @@ function write(store, dir, docs) {
       'Biblioteca local de Frontera Eficiente',
       `Actualizada: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       '',
-      'Matriz de precios.xlsx   hoja «M. PRECIOS»: ITEM, FECHA, índice y una columna por activo, todos los días calendario, con el último precio cotizado en los días sin negociación.',
+      'Matriz de precios.xlsx   hoja «M. PRECIOS»: ITEM, FECHA, índice y una columna por activo, una fila por rueda de la BVC (242 al año); si un activo no se negoció en una rueda, lleva su último precio cotizado.',
       'acciones/       un solo CSV por acción, ETF o índice con todo su historial: los tramos de 6 meses que descarga la BVC quedan unidos (fecha, cierre o tasa, fuente, cantidad y volumen).',
       'macro/          PIB, inflación, desempleo y TRM de Colombia, con la fuente y la fecha de descarga.',
       'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',

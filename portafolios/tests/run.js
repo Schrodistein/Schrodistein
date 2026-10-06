@@ -702,7 +702,7 @@ test('guía de la BVC y catálogo de activos', () => {
   assert(con.includes('Con tus datos') && con.includes('Máxima Sharpe') && /Gordon \(1959\)/.test(con) && /Tobin \(1958\)/.test(con));
 });
 
-test('matriz de precios como «M. PRECIOS»: días hábiles, último precio en días sin negociación, vacío antes de cotizar', () => {
+test('matriz de precios como «M. PRECIOS»: ruedas de la BVC, último precio cuando un activo no negoció, vacío antes de cotizar', () => {
   // COLCAP negocia lun 2026-08-10 a vie 08-14 y mar 08-18 (lunes 17 festivo); NUEVA empieza a cotizar el 13
   const colcap = { name: 'MSCI COLCAP', dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'], prices: [2372.5, 2423.37, 2430.45, 2432.1, 2452.46, 2461.23] };
   const eco = { name: 'ECOPETROL', dates: ['2026-08-10', '2026-08-12', '2026-08-14', '2026-08-18'], prices: [2735, 2665, 2745, 2770] };
@@ -716,15 +716,16 @@ test('matriz de precios como «M. PRECIOS»: días hábiles, último precio en d
   assert(mx.values[1][2] === 2665 && !mx.filled[1][2] && mx.filled[1][1], 'los precios cotizados no cambian');
   assert(isNaN(mx.values[2][0]) && isNaN(mx.values[2][2]) && mx.values[2][3] === 100 && mx.values[2][5] === 100, 'vacío antes de la primera cotización');
   const cal = PF.matriz.build([eco, colcap], { calendar: 'calendario', market: 'MSCI COLCAP' });
-  assert(cal.dates.length === 9 && cal.values[1][5] === 2745 && cal.values[1][6] === 2745, 'calendario: sábado y domingo con el precio del viernes');
-  // Predeterminado: todos los días calendario (el viernes 7 queda para el sábado 8 y el domingo 9)
+  assert(!cal.dates.includes('2026-08-15') && !cal.dates.includes('2026-08-16'), 'nunca se agregan fines de semana');
+  // Predeterminado: ruedas de la BVC (días en que se negoció algún activo). Sin fines de semana ni
+  // festivos: la base de 242 ruedas al año con que se anualiza no cambia.
+  const ru = PF.matriz.build([eco, nueva, colcap], { market: 'MSCI COLCAP' });
+  assert(ru.dates.join() === '2026-08-10,2026-08-11,2026-08-12,2026-08-13,2026-08-14,2026-08-18', 'ruedas: ' + ru.dates.join());
+  assert(ru.values[1].join() === '2735,2735,2665,2665,2745,2770' && ru.filled[1][1], 'ECOPETROL no negoció el 11: lleva el precio del 10');
   const fri = { name: 'X', dates: ['2026-08-07', '2026-08-10'], prices: [17400, 18900] };
-  const all = PF.matriz.build([fri]);
-  assert(all.dates.join() === '2026-08-07,2026-08-08,2026-08-09,2026-08-10' && all.values[0].join() === '17400,17400,17400,18900' && all.filled[0].join() === 'false,true,true,false');
-  const fh = PF.matriz.fullHistory({ name: 'X', dates: fri.dates, prices: fri.prices, qty: [5, 7], vol: [87000, 132300] });
-  assert(fh.length === 4 && fh[1].price === 17400 && !fh[1].traded && fh[1].qty === null && fh[3].traded && fh[3].vol === 132300);
-  // El CSV exportado con «Negociación = No» se vuelve a leer sin contar esos días como cotización
-  const back = PF.data.parseSeriesText('Fecha;Nemotécnico;Precio cierre;Negociación\r\n' + fh.map((x) => `${x.date};X;${PF.data.excelNum(x.price)};${x.traded ? 'Sí' : 'No (último precio)'}`).join('\r\n'), 'X.csv')[0];
+  assert(PF.matriz.build([fri]).dates.join() === '2026-08-07,2026-08-10', 'el sábado y el domingo no se agregan');
+  // Un archivo con columna «Negociación = No» no cuenta esos días como cotización
+  const back = PF.data.parseSeriesText('Fecha;Nemotécnico;Precio cierre;Negociación\r\n2026-08-07;X;17.400;Sí\r\n2026-08-08;X;17.400;No (último precio)\r\n2026-08-10;X;18.900;Sí', 'X.csv')[0];
   assert(back.dates.join() === '2026-08-07,2026-08-10' && back.prices.join() === '17400,18900', 'relectura: ' + back.dates.join());
   const cut = PF.matriz.build([eco, colcap], { market: 'MSCI COLCAP', cut: '2026-08-12' });
   assert(cut.dates[cut.dates.length - 1] === '2026-08-12');

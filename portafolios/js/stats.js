@@ -441,7 +441,7 @@
     // Cantidad de acciones y monto negociado de cada día (para medir la liquidez del COLEQTY)
     const ci = hd.head.findIndex((h, i) => i !== hd.pi && /^cantidad( |$)/.test(norm(h)));
     const mi = hd.head.findIndex((h, i) => i !== hd.pi && /^(volumen|monto|volume)( |$)/.test(norm(h)));
-    // Archivos que exporta la app con todos los días calendario: «Negociación = No» es un día sin
+    // Archivos con columna «Negociación» (p. ej. exportados por otras versiones): «No» es un día sin
     // operación con el último precio repetido; al volver a leerlos esos días no cuentan como cotización
     const ni = hd.head.findIndex((h) => /^negociacion( |$)/.test(norm(h)));
     let noTrade = 0;

@@ -15,8 +15,8 @@ Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye t
 - **Variables macro**: descarga PIB, inflación, desempleo y TRM de Colombia: la TRM diaria de datos.gov.co, la inflación y el desempleo mensuales y el PIB trimestral de FRED (OCDE) y, como respaldo, las series anuales del Banco Mundial. Las actualiza con los cierres.
 - **Betas de Damodaran**: descarga el archivo de betas por industria de mercados emergentes de NYU Stern para comparar la beta de Damodaran con la de Sharpe.
 - **Biblioteca local** en `Documentos/Frontera Eficiente/Biblioteca`, que se reescribe en cada actualización:
-  - un solo CSV por acción, ETF o índice con todo su historial, en formato de Excel en español (punto y coma, punto de miles y coma decimal), con todos los días calendario y la columna «Negociación» (Sí, o No con el último precio): los tramos de 6 meses que descarga la BVC se unen y el archivo temporal de cada descarga se borra al importarlo;
-  - `Matriz de precios.xlsx`, con la hoja «M. PRECIOS» (todos los días calendario, con el último precio cotizado en los días sin negociación);
+  - un solo CSV por acción, ETF o índice con todo su historial, en formato de Excel en español (punto y coma, punto de miles y coma decimal), con los días en que se negoció: los tramos de 6 meses que descarga la BVC se unen y el archivo temporal de cada descarga se borra al importarlo;
+  - `Matriz de precios.xlsx`, con la hoja «M. PRECIOS» (una fila por rueda de la BVC; si un activo no se negoció en una rueda, lleva su último precio cotizado);
   - las variables macro con su fuente;
   - el archivo de Damodaran (se descarga solo en cada actualización semanal);
   - los documentos «Paso a paso», «Variables macro» y «Teoría» en HTML.

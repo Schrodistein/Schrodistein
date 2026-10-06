@@ -1367,10 +1367,9 @@
       if (t.dataset.libDl) {
         // Un solo archivo con todo el historial del activo, con los valores tal como vienen de la fuente
         const r = st.lib.series.find((x) => x.name === t.dataset.libDl);
-        // Todos los días calendario: los días sin negociación llevan el último precio cotizado
-        const head = (r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre') + ';Negociación' + (r.qty && r.kind !== 'tasa' ? ';Cantidad;Volumen' : '');
-        const full = PF.matriz.fullHistory({ name: r.name, dates: r.dates, prices: r.prices.map((x) => (x == null ? NaN : x)), qty: r.qty, vol: r.vol });
-        const rows = full.map((x) => `${x.date};${r.name};${cell(r.kind === 'tasa' ? x.price * 100 : x.price)};${x.traded ? 'Sí' : 'No (último precio)'}${r.qty && r.kind !== 'tasa' ? `;${cell(x.qty)};${cell(x.vol)}` : ''}`);
+        // Fiel a la fuente: solo los días en que el activo se negoció
+        const head = r.kind === 'tasa' ? 'Fecha;Nemotécnico;Tasa' : 'Fecha;Nemotécnico;Precio cierre' + (r.qty ? ';Cantidad;Volumen' : '');
+        const rows = r.dates.map((d, i) => `${d};${r.name};${cell(r.kind === 'tasa' ? r.prices[i] * 100 : r.prices[i])}${r.qty && r.kind !== 'tasa' ? `;${cell(r.qty[i])};${cell(r.vol[i])}` : ''}`);
         download('\ufeff' + [head].concat(rows).join('\r\n'), `${r.name.replace(/[\\/:*?"<>|]+/g, '-')}.csv`, 'text/csv;charset=utf-8');
         return;
       }

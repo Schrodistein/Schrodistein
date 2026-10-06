@@ -28,7 +28,9 @@
     const at = ref(r, c);
     if (typeof cell === 'number') return Number.isFinite(cell) ? `<c r="${at}"><v>${cell}</v></c>` : '';
     if (typeof cell === 'string') return `<c r="${at}" t="inlineStr"><is><t xml:space="preserve">${esc(cell)}</t></is></c>`;
-    const s = cell.s != null ? ` s="${STYLE[cell.s] || 0}"` : '';
+    // Valores muy cercanos a cero: notación científica (formato de 4 y 6 decimales); el cero exacto, «0»
+    const sty = cell.v === 0 && (cell.s === 'num4' || cell.s === 'num6') ? 'int' : cell.s;
+    const s = sty != null ? ` s="${STYLE[sty] || 0}"` : '';
     if (cell.f) {
       const v = cell.v;
       if (typeof v === 'string') return `<c r="${at}"${s} t="str"><f>${esc(cell.f)}</f><v>${esc(v)}</v></c>`;
@@ -67,7 +69,7 @@
   }
 
   const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="8"><numFmt numFmtId="164" formatCode="0.00%"/><numFmt numFmtId="165" formatCode="0.0000"/><numFmt numFmtId="166" formatCode="0.000000"/><numFmt numFmtId="167" formatCode="&quot;$&quot; #,##0"/><numFmt numFmtId="168" formatCode="0.00"/><numFmt numFmtId="169" formatCode="#,##0"/><numFmt numFmtId="170" formatCode="[$-409]m/d/yyyy"/><numFmt numFmtId="171" formatCode="#,##0.00"/></numFmts>
+<numFmts count="8"><numFmt numFmtId="164" formatCode="0.00%"/><numFmt numFmtId="165" formatCode="[&gt;=0.0001]0.0000;[&lt;=-0.0001]-0.0000;0.00E+00"/><numFmt numFmtId="166" formatCode="[&gt;=0.0001]0.000000;[&lt;=-0.0001]-0.000000;0.00E+00"/><numFmt numFmtId="167" formatCode="&quot;$&quot; #,##0"/><numFmt numFmtId="168" formatCode="0.00"/><numFmt numFmtId="169" formatCode="#,##0"/><numFmt numFmtId="170" formatCode="[$-409]m/d/yyyy"/><numFmt numFmtId="171" formatCode="#,##0.00"/></numFmts>
 <fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF1D4F91"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF4A5651"/><name val="Calibri"/></font></fonts>
 <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE3EBF6"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FF9AA5B4"/></bottom><diagonal/></border></borders>

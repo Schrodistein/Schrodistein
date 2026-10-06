@@ -431,7 +431,7 @@
   function interpret(res, key, marketName) {
     const V = VARS[key];
     if (!res.ok) return `Hay ${res.n} periodos en común con ${marketName}; se necesitan al menos 4. Carga más historia del índice o de la variable.`;
-    const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 2) => PF.data.fmtNum(x, d);
     const strength = Math.abs(res.corr) >= 0.5 ? 'fuerte' : Math.abs(res.corr) >= 0.3 ? 'moderada' : Math.abs(res.corr) >= 0.1 ? 'débil' : 'prácticamente nula';
     const sig = res.p < 0.05 ? 'estadísticamente significativa al 5 %' : res.p < 0.1 ? 'significativa solo al 10 %' : 'no significativa con estos datos';
     const sign = res.corr > 0 ? 'positiva' : 'negativa';
@@ -497,7 +497,7 @@
   function render(ctx) {
     const { data, market, assets, esc } = ctx;
     const width = ctx.width || 340;
-    const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 2) => PF.data.fmtNum(x, d);
     const cards = [];
     const results = relateAll(market, data);
     for (const key of Object.keys(VARS)) {

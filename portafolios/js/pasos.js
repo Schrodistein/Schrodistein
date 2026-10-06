@@ -85,7 +85,7 @@
   function render(ctx) {
     const { m, table, esc, pct } = ctx;
     const f = m.f;
-    const nf = (x, d = 6) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 6) => PF.data.fmtNum(x, d);
     const n4 = (x) => nf(x, 4);
     const log = ctx.retType !== 'simple';
     const ix = (name) => table.names.indexOf(name);
@@ -115,10 +115,11 @@
     };
     const rows = show.map((k) => {
       if (k === -1) return `<tr><td colspan="11" class="sub">… ${pc.n - 15} periodos más (incluidos en las sumas) …</td></tr>`;
-      const t = pc.idx[k];
+      // El rendimiento t sale de los precios t y t + 1 de la tabla: la fila lleva la fecha y el precio del día t + 1
+      const t = pc.idx[k] + 1;
       return `<tr><td class="n">${k + 1}</td><td>${esc(table.dates[t])}</td><td class="n">${nf(pr(A, t), 2)}</td><td class="n">${nf(pr(B, t), 2)}</td><td class="n">${nf(pc.a[k])}</td><td class="n">${nf(pc.b[k])}</td><td class="n">${nf(pc.da[k])}</td><td class="n">${nf(pc.db[k])}</td><td class="n">${nf(pc.da[k] ** 2, 8)}</td><td class="n">${nf(pc.db[k] ** 2, 8)}</td><td class="n">${nf(pc.da[k] * pc.db[k], 8)}</td></tr>`;
     });
-    const t0 = pc.idx[0];
+    const t0 = pc.idx[0] + 1;
     out.push(`<div class="panel"><h2>2. Tabla de cálculo: ${esc(A)} (A) y ${esc(B)} (B)</h2>
       <p class="hint">Ejemplo con el primer periodo: r<sub>A</sub> = ${log ? 'ln' : ''}(${nf(pr(A, t0), 2)} / ${nf(prevPrice(A, t0), 2)})${log ? '' : ' − 1'} = ${nf(pc.a[0])}.</p>
       <div class="table-scroll"><table class="data"><thead><tr><th class="n">t</th><th>Fecha</th><th class="n">P<sub>A</sub></th><th class="n">P<sub>B</sub></th><th class="n">r<sub>A</sub></th><th class="n">r<sub>B</sub></th><th class="n">r<sub>A</sub> − r̄<sub>A</sub></th><th class="n">r<sub>B</sub> − r̄<sub>B</sub></th><th class="n">(r<sub>A</sub> − r̄<sub>A</sub>)²</th><th class="n">(r<sub>B</sub> − r̄<sub>B</sub>)²</th><th class="n">(r<sub>A</sub> − r̄<sub>A</sub>)(r<sub>B</sub> − r̄<sub>B</sub>)</th></tr></thead>

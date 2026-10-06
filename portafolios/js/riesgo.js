@@ -180,7 +180,7 @@
     const { m, table, esc, pct } = ctx;
     if (!m || !table) return '';
     const f = m.f;
-    const nf = (x, d = 4) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 4) => PF.data.fmtNum(x, d);
     const ix = (name) => table.names.indexOf(name);
     const R = PF.data.toReturns(table.values, ctx.kind === 'returns' ? 'returns' : 'prices', ctx.retType !== 'simple');
     const mk = m.marketName;
@@ -365,7 +365,7 @@
   };
   function sourcesHTML(ctx, pa) {
     const { esc } = ctx;
-    const nf = (x, d) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d) => PF.data.fmtNum(x, d);
     const rows = Object.keys(LABELS).map((k) => {
       const u = pa.used && pa.used[k];
       const [lab, unit] = LABELS[k];
@@ -392,7 +392,7 @@
   /* Tabla de cálculo de las primas (se usa en Datos → Renta fija y en Paso a paso). */
   function premiumHTML(ctx, q) {
     const { pct } = ctx;
-    const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 2) => PF.data.fmtNum(x, d);
     const row = (a, b, c) => `<tr><td>${a}</td><td><code>${b}</code></td><td class="n"><b>${c}</b></td></tr>`;
     return `<h3>Cálculo</h3><div class="hscroll"><table class="data wrap"><thead><tr><th>Paso</th><th>Fórmula</th><th class="n">Resultado</th></tr></thead><tbody>
       ${row('1. Tasa libre de riesgo en dólares llevada a pesos (paridad de Fisher)', '(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1', pct(q.rfUsdInCop, 2))}

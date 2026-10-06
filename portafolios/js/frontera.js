@@ -200,7 +200,7 @@
     const { m, P, esc, pct } = ctx;
     if (!m || !P || !P.frontier) return '';
     const C = PF.charts;
-    const nf = (x, d = 4) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const nf = (x, d = 4) => PF.data.fmtNum(x, d);
     const ports = (ctx.ports || []).filter((p) => P[p.key]);
     const sel = P[ctx.sel] ? ctx.sel : 'recommended';
     const selP = ports.find((p) => p.key === sel) || { label: 'Recomendado', key: 'recommended' };

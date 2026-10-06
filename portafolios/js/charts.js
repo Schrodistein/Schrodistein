@@ -8,8 +8,10 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const nf = (d) => new Intl.NumberFormat('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
   const pct = (x, d = 1) => (Number.isFinite(x) ? nf(d).format(x * 100) + ' %' : '—');
-  const num = (x, d = 2) => (Number.isFinite(x) ? nf(d).format(x) : '—');
-  const f1 = (x) => (Number.isFinite(x) ? (x < 0 ? '−' : '') + nf(2).format(Math.abs(x)) : '—');
+  // Cero exacto «0»; muy cerca de cero (|x| < 0,0001), notación científica (PF.data.fmtNum)
+  const tiny = (x) => x === 0 || (Math.abs(x) < 1e-4 && PF.data && PF.data.fmtNum);
+  const num = (x, d = 2) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, d) : nf(d).format(x)) : '—');
+  const f1 = (x) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, 2) : (x < 0 ? '−' : '') + nf(2).format(Math.abs(x))) : '—');
 
   function ticks(min, max, count) {
     const span = max - min || 1;

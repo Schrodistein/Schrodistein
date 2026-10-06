@@ -92,6 +92,10 @@ test('almacén: la BVC tiene prioridad sobre la fuente automática', () => {
 
 test('actualización: solo divisas de la fuente automática; acciones, índices y ETF solo de la BVC', async () => {
   const st = new Store(tmp());
+  // La app arranca vacía: el usuario agrega sus activos (aquí, el dólar, el euro y una acción)
+  st.ensureAsset('USD/COP').yahoo = 'COP=X';
+  st.ensureAsset('EUR/COP').yahoo = 'EURCOP=X';
+  st.ensureAsset('ECOPETROL');
   const f = fakeFetch(FIX);
   let asked = '';
   const p = await updater.updatePrices(st, async (url) => {
@@ -131,7 +135,7 @@ test('quien ya usaba la app pierde los cierres automáticos de acciones y conser
   const st = new Store(dir);
   const h = st.history('ECOPETROL');
   assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((x) => x === 'bvc') && h.prices[1] === 1520, 'ECOPETROL: ' + h.dates.join());
-  assert(st.asset('ECOPETROL').yahoo === '' && st.history('USD/COP').dates.length === 3, 'el dólar se conserva');
+  assert(st.asset('ECOPETROL').yahoo === '' && !st.asset('USD/COP') && !st.data.prices['USD/COP'], 'el dólar descargado solo se quita (2.6.4: sin datos predeterminados)');
 });
 
 test('importación de un CSV de la BVC', () => {
@@ -202,32 +206,20 @@ test('renta fija por tasas: se guarda la tasa y el análisis recibe el índice d
   assert(st2.asset('TFIT16240728').kind === 'tasa' && st2.asset('TFIT16240728').dur === 6);
 });
 
-test('quien ya usaba la app recibe los activos predeterminados nuevos (dólar, COLTES, COLIBR)', () => {
+test('la app arranca sin activos ni divisas predeterminados; quien ya la usaba conserva solo lo que subió', () => {
+  const nuevo = new Store(tmp());
+  assert(nuevo.data.assets.length === 0 && !Object.keys(nuevo.data.prices).length, 'la app nueva arranca vacía');
   const dir = tmp();
   const old = new Store(dir);
-  old.data.assets = old.data.assets.filter((a) => !['USD/COP', 'COLTES LP', 'COLIBR'].includes(a.name));
-  delete old.data.meta.defaults;
+  for (const n of ['MSCI COLCAP', 'ECOPETROL', 'PFAVAL', 'USD/COP', 'EUR/COP', 'COLTES LP']) old.ensureAsset(n);
+  old.asset('USD/COP').yahoo = 'COP=X';
+  old.mergePrices('USD/COP', ['2026-08-13', '2026-08-14'], [4000, 4010], 'yahoo');
+  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14'], [2400, 2410], 'bvc');
+  old.data.meta.defaults = 5;
   old.save();
   const st = new Store(dir);
-  assert(st.asset('USD/COP') && st.asset('USD/COP').yahoo === 'COP=X' && st.asset('COLIBR').index && st.asset('COLTES LP').index);
-  assert(st.data.settings.intervalHours === 168 || typeof st.data.settings.intervalHours === 'number');
-});
-
-
-test('catálogo de la BVC: la app nueva y quien ya la usaba tienen todos los activos, sin repetir', () => {
-  const dir = tmp();
-  const st = new Store(dir);
-  for (const n of ['ECOPETROL', 'PFCIBEST', 'GRUPOARGOS', 'PFAVAL', 'ICOLCAP', 'HCOLSEL', 'EUR/COP']) assert(st.asset(n), 'falta ' + n);
-  const names = st.data.assets.map((a) => a.name.toUpperCase());
-  assert(new Set(names).size === names.length, 'activos repetidos');
-  assert(st.asset('PFAVAL').yahoo === '' && st.asset('EUR/COP').yahoo === 'EURCOP=X' && st.asset('HCOLSEL').cls === 'etf', 'solo las divisas tienen fuente automática');
-  // Quien ya usaba la app (versión 3 de los predeterminados) recibe el catálogo y una descarga completa
-  st.data.assets = st.data.assets.slice(0, 5);
-  st.data.meta.defaults = 3;
-  st.data.meta.lastPrices = '2026-01-05T00:00:00Z';
-  st.save();
-  const again = new Store(dir);
-  assert(again.asset('PFAVAL') && again.data.assets.length === names.length && again.data.meta.lastPrices === null);
+  assert(st.data.assets.map((a) => a.name).join() === 'ECOPETROL', 'solo queda lo subido: ' + st.data.assets.map((a) => a.name).join());
+  assert(!st.data.prices['USD/COP'] && st.history('ECOPETROL').dates.length === 2);
 });
 
 test('tramos con número de descarga (1790829234836-COLTES LP): un solo índice, nuevo o ya guardado', () => {
@@ -264,7 +256,7 @@ test('limpieza única: borra COLTES y renta fija leídos antes, conserva accione
   old.data.meta.defaults = 2;
   old.save();
   const st = new Store(dir);
-  assert(!st.data.prices['COLTES LP'] && st.asset('COLTES LP'), 'COLTES LP queda vacío para volver a cargarlo');
+  assert(!st.data.prices['COLTES LP'] && !st.asset('COLTES LP'), 'COLTES LP se borra para volver a cargarlo');
   assert(!st.asset('TES 2032') && !st.data.prices['TES 2032'], 'el TES importado se quita');
   assert(st.history('ECOPETROL').dates.length === 2, 'las acciones no se tocan');
   assert(st.data.meta.lastPrices === null, 'se descarga todo al abrir');

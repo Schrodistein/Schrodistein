@@ -120,13 +120,14 @@
       s += p.shape === 'diamond'
         ? `<path class="g-port${p.sel ? ' sel' : ''}" d="M${cx},${cy - r - 1.5}L${cx + r + 1.5},${cy}L${cx},${cy + r + 1.5}L${cx - r - 1.5},${cy}Z" pointer-events="none"/>`
         : `<circle class="g-port${p.sel ? ' sel' : ''}" cx="${cx}" cy="${cy}" r="${r}" pointer-events="none"/>`;
-      s += `<circle class="hit" cx="${cx}" cy="${cy}" r="13"${tipAttr(p.tip)}/>`;
+      // Con clave: al hacer clic se abre la composición del portafolio
+      s += `<circle class="hit${p.key ? ' port-hit' : ''}" cx="${cx}" cy="${cy}" r="13"${p.key ? ` data-port="${esc(p.key)}"` : ''}${tipAttr((p.tip || `<b>${esc(p.label)}</b>`) + (p.key ? '<br><i>Clic para ver su composición</i>' : ''))}/>`;
       pts.push({ cx, cy, label: p.label, main: true });
     }
     if (o.user) {
       const cx = X(o.user.vol);
       const cy = Y(o.user.ret);
-      s += `<circle class="g-user" cx="${cx}" cy="${cy}" r="7" pointer-events="none"/><circle class="hit" cx="${cx}" cy="${cy}" r="14"${tipAttr(o.user.tip)}/>`;
+      s += `<circle class="g-user" cx="${cx}" cy="${cy}" r="7" pointer-events="none"/><circle class="hit${o.user.key ? ' port-hit' : ''}" cx="${cx}" cy="${cy}" r="14"${o.user.key ? ` data-port="${esc(o.user.key)}"` : ''}${tipAttr((o.user.tip || '<b>Tu portafolio</b>') + (o.user.key ? '<br><i>Clic para ver su composición</i>' : ''))}/>`;
       pts.unshift({ cx, cy, label: 'Tu portafolio', main: true });
     }
     // Etiquetas: primero los portafolios, luego los activos si caben

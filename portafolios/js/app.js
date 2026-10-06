@@ -1026,8 +1026,8 @@
           : '') +
         '</tbody>';
       const notes = [];
-      if (has.some((r) => !r.hit.exact && !r.hit.after)) notes.push('* Ese día no hubo negociación del activo; se usó el último cierre anterior.');
-      if (has.some((r) => r.hit.after)) notes.push('Alguna fecha es posterior al último dato cargado; se usó el último cierre disponible.');
+      if (has.some((r) => !r.hit.exact && !r.hit.after)) notes.push('* El cierre usado no es el del día de compra: ese día no hubo negociación del activo y se usó el último cierre anterior.');
+      if (has.some((r) => r.hit.after)) notes.push('* Alguna fecha de compra es posterior al último dato cargado: se usó el último cierre disponible.');
       if (has.some((r) => !priceSeries(r.n).daily)) notes.push('Los precios salen de la tabla agrupada por periodo; para el cierre exacto de un día, carga los CSV diarios de la BVC.');
       notes.push(`La ganancia por activo no incluye dividendos ni comisiones; la fila «Neto si vendes hoy» descuenta la comisión que pagaste en cada compra (${money(buyFees)}; puedes cambiarla en cada fila si hubo promoción) y ${money(st.s ? st.s.feeSell : 0)} por cada venta. Los pesos del portafolio salen del monto invertido en cada activo.`);
       $('buy-notes').textContent = notes.join(' ');
@@ -1475,7 +1475,7 @@
     const P = st.P;
     const assets = m.assets.map((a) => ({ name: a.name, short: short(a.name, 16), vol: a.vol, ret: a.expRet, beta: a.betaM, tip: assetTip(a) }));
     if (st.screen === 'frontera' && width('chart-front')) {
-      const ports = PORTS.filter((p) => P[p.key]).map((p) => ({ label: p.short, vol: P[p.key].vol, ret: P[p.key].ret, sel: p.key === st.sel, shape: p.shape, tip: portTip(p.title, P[p.key]) }));
+      const ports = PORTS.filter((p) => P[p.key]).map((p) => ({ key: 'front:' + p.key, label: p.short, vol: P[p.key].vol, ret: P[p.key].ret, sel: p.key === st.sel, shape: p.shape, tip: portTip(p.title, P[p.key]) }));
       ports.sort((a, b) => a.sel - b.sel);
       $('chart-front').innerHTML = C.riskReturn({ width: width('chart-front'), front: P.frontier, rf: m.rf, tangent: P.tangency, assets, ports: ports.reverse() });
       $('legend-front').innerHTML = `<span><i class="line" style="background:var(--s1)"></i>Frontera eficiente</span><span><i class="line" style="background:var(--s2)"></i>Línea del mercado de capitales (desde rf)</span><span><i class="dot" style="background:var(--asset)"></i>Activos</span><span><i class="dot" style="background:var(--ink)"></i>Portafolios de referencia</span><span><i class="dot" style="background:var(--s1)"></i>Seleccionado</span>`;
@@ -1501,8 +1501,8 @@
         tangent: c.tangency,
         assets,
         labelAssets: false,
-        ports: c.tangency ? [{ label: 'Tangente', vol: c.tangency.vol, ret: c.tangency.ret, tip: portTip('Tangente (máx. Sharpe)', c.tangency) }] : [],
-        user: { vol: c.me.vol, ret: c.me.ret, tip: portTip('Tu portafolio', c.me) },
+        ports: c.tangency ? [{ key: 'conf:tangent', label: 'Tangente', vol: c.tangency.vol, ret: c.tangency.ret, tip: portTip('Tangente (máx. Sharpe)', c.tangency) }] : [],
+        user: { key: 'conf:me', vol: c.me.vol, ret: c.me.ret, tip: portTip('Tu portafolio', c.me) },
         guides,
         aria: 'Tu portafolio frente a la frontera eficiente',
       });
@@ -1781,6 +1781,12 @@
     await PF.lib.mergeDuplicates().catch(() => 0);
     // La app no trae datos: la biblioteca empieza vacía y se llena con los archivos que se suben. Las series
     // que versiones anteriores (2.4 a 2.5.5) cargaban solas se quitan una vez; lo subido por el usuario no se toca.
+    // 2.6.4: tampoco quedan las divisas que la app de escritorio descargaba sola (USD/COP, EUR/COP)
+    if (store.get('autoFxPurge') !== 1) {
+      const all = await PF.lib.all().catch(() => ({ series: [] }));
+      for (const r of all.series || []) if ((r.source || '') === 'fuente automática (divisas)') await PF.lib.remove('series', r.name).catch(() => {});
+      store.set('autoFxPurge', 1);
+    }
     if (store.get('seedPurge') !== 1) {
       const SEEDED = /^(Banco de la República \(fuente: DANE(, GEIH)?\) · |Superintendencia Financiera \(datos\.gov\.co\) · Tasa de cambio representativa del mercado \(TRM\), diaria$|Banco de la República · Tasas cero cupón TES$)/;
       const all = await PF.lib.all().catch(() => ({ series: [], macro: {} }));
@@ -2120,6 +2126,101 @@
   }
 
   /* ---------- Tooltip ---------- */
+  /* ---------- Ventana emergente: composición de un portafolio y gráficas ampliadas ---------- */
+  function openModal(html, wide) {
+    const m = $('modal');
+    $('modal-body').innerHTML = html;
+    m.classList.toggle('wide', !!wide);
+    m.hidden = false;
+    $('tip').hidden = true;
+    $('modal-close').focus();
+  }
+  function closeModal() {
+    $('modal').hidden = true;
+    $('modal-body').innerHTML = '';
+  }
+  // Portafolio por clave: front:<portafolio de referencia>, conf:me (el tuyo), conf:tangent
+  function portByKey(key) {
+    const [kind, k] = String(key).split(':');
+    if (kind === 'front' && st.P && st.P[k]) {
+      const def = PORTS.find((p) => p.key === k);
+      return { title: def ? def.title : k, desc: def ? def.desc : '', e: st.P[k] };
+    }
+    if (kind === 'conf' && st.conf) {
+      if (k === 'me') return { title: 'Tu portafolio', desc: 'Los pesos de las compras que registraste en Confirmar.', e: st.conf.me };
+      if (k === 'tangent' && st.conf.tangency) return { title: 'Portafolio tangente (máxima razón de Sharpe)', desc: '', e: st.conf.tangency };
+    }
+    return null;
+  }
+  function portfolioHTML(p) {
+    const m = st.model;
+    const e = p.e;
+    const cap = st.s && Number.isFinite(st.s.capital) ? st.s.capital : 0;
+    const rows = m.names.map((n, i) => ({ n, w: e.w[i] })).filter((x) => Math.abs(x.w) > 5e-4).sort((a, b) => b.w - a.w);
+    const max = Math.max(...rows.map((x) => Math.abs(x.w)), 1e-9);
+    const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
+    return `<h2 id="modal-title">${esc(p.title)}</h2>${p.desc ? `<p class="hint">${esc(p.desc)}</p>` : ''}
+      <div class="modal-kv">${kv('Rendimiento esperado', pct(e.ret))}${kv('Riesgo σ', pct(e.vol))}${kv('Sharpe', num(e.sharpe))}${kv('β', num(e.beta))}${kv('Activos', rows.length)}${Number.isFinite(e.effN) ? kv('N efectivo', num(e.effN, 1)) : ''}</div>
+      <div class="table-scroll"><table class="data comp"><thead><tr><th>Activo</th><th class="n">Peso</th><th></th>${cap ? '<th class="n">Monto</th>' : ''}</tr></thead><tbody>${rows
+        .map((x) => `<tr><td>${esc(x.n)}</td><td class="n"><b>${pct(x.w)}</b></td><td class="barcell"><span class="bar" style="width:${Math.round((Math.abs(x.w) / max) * 100)}%"></span></td>${cap ? `<td class="n">${esc(money(cap * x.w))}</td>` : ''}</tr>`)
+        .join('')}</tbody></table></div>
+      ${cap ? `<p class="hint">Montos con el capital de Supuestos: ${esc(money(cap))}.</p>` : ''}`;
+  }
+  // Botón «Ampliar» en cada gráfica (también las que se dibujan después)
+  function addZoomButtons() {
+    document.querySelectorAll('.chart-box, .term-chart').forEach((box) => {
+      if (!box.querySelector('svg') || box.querySelector(':scope > .zoom-btn')) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'zoom-btn';
+      b.setAttribute('aria-label', 'Ampliar la gráfica');
+      b.title = 'Ampliar la gráfica';
+      b.innerHTML = '⤢ Ampliar';
+      box.appendChild(b);
+    });
+  }
+  function zoomChart(box) {
+    const fig = box.closest('figure, .panel');
+    const cap = fig && fig.querySelector('figcaption h2, h2, h3');
+    const clone = box.cloneNode(true);
+    clone.querySelectorAll('.zoom-btn').forEach((x) => x.remove());
+    clone.querySelectorAll('svg').forEach((svg) => {
+      svg.removeAttribute('width');
+      svg.removeAttribute('height');
+      svg.style.width = '100%';
+      svg.style.height = 'auto';
+    });
+    const legend = fig && fig.querySelector('.legend');
+    openModal(`<h2 id="modal-title">${esc(cap ? cap.textContent : 'Gráfica')}</h2>
+      <div class="zoom-tools" role="group" aria-label="Tamaño"><button type="button" data-zoom="-1" aria-label="Reducir">−</button><span id="zoom-lvl">100 %</span><button type="button" data-zoom="1" aria-label="Ampliar">+</button></div>
+      <div class="zoom-stage"><div class="zoom-inner" style="width:100%">${clone.innerHTML}</div></div>${legend ? `<div class="legend">${legend.innerHTML}</div>` : ''}
+      <p class="hint">Pasa el puntero sobre los puntos para ver sus datos; en un portafolio, haz clic para ver su composición.</p>`, true);
+  }
+  function wireModal() {
+    $('modal-close').addEventListener('click', closeModal);
+    $('modal').addEventListener('click', (ev) => {
+      if (ev.target === $('modal')) closeModal();
+      const z = ev.target.closest('[data-zoom]');
+      if (z) {
+        const inner = $('modal-body').querySelector('.zoom-inner');
+        const cur = parseInt(inner.style.width, 10) || 100;
+        const next = Math.max(100, Math.min(250, cur + 25 * +z.dataset.zoom));
+        inner.style.width = next + '%';
+        $('zoom-lvl').textContent = next + ' %';
+      }
+    });
+    document.addEventListener('keydown', (ev) => ev.key === 'Escape' && !$('modal').hidden && closeModal());
+    document.addEventListener('click', (ev) => {
+      const zb = ev.target.closest('.zoom-btn');
+      if (zb) return zoomChart(zb.parentElement);
+      const pt = ev.target.closest('[data-port]');
+      if (!pt) return;
+      const p = portByKey(pt.getAttribute('data-port'));
+      if (p && st.model) openModal(portfolioHTML(p));
+    });
+    new MutationObserver(debounce(addZoomButtons, 120)).observe(document.querySelector('main') || document.body, { childList: true, subtree: true });
+  }
+
   function initTip() {
     const tip = $('tip');
     let cur = null;
@@ -2247,6 +2348,7 @@
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
     wirePasos();
     wireRf();
+    wireModal();
     wireMacro();
     wireLib();
     $('sistema').addEventListener('change', (ev) => {

@@ -146,6 +146,15 @@ const shots = process.argv[3];
     if (shots) await page.screenshot({ path: `${shots}/${label}-guia.png`, fullPage: false });
     await page.click('#guia [data-guia-go="frontera"]');
     if (await page.isHidden('#screen-frontera')) errors.push(label + ': el botón de la guía no lleva a Portafolio');
+    // Gráficas: botón para ampliar y composición del portafolio al hacer clic en su punto (ventana que se cierra)
+    await page.waitForSelector('#chart-front .zoom-btn');
+    await page.click('#chart-front [data-port="front:recommended"]', { force: true });
+    if (await page.$eval('#modal', (m) => m.hidden) || !/Peso/.test(await page.textContent('#modal-body'))) errors.push(label + ': el clic en el portafolio no muestra su composición');
+    await page.click('#modal-close');
+    if (!(await page.$eval('#modal', (m) => m.hidden))) errors.push(label + ': la ventana no se cierra');
+    await page.click('#chart-front .zoom-btn');
+    if (!(await page.$('#modal-body .zoom-inner svg'))) errors.push(label + ': la gráfica no se amplía');
+    await page.keyboard.press('Escape');
     // Elegir activos: quitar uno recalcula con uno menos, y «Todos» lo devuelve
     const nAll = await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length);
     await page.click('#pick-assets [data-pick] >> nth=0');

@@ -534,7 +534,9 @@
         });
         return `<tr${a === market ? ' class="hl"' : ''}><td>${esc(a.name)}${a === market ? ' (índice)' : ''}</td>${cells.join('')}</tr>`;
       });
-      table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th>${keys.map((k) => `<th class="n">${VARS[k].label}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>${PF.charts && PF.charts.likertLegend ? PF.charts.likertLegend() : ''}
+      table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th>${keys.map((k) => `<th class="n">${VARS[k].label}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>
+        <p class="table-note"><b>*</b> Correlación <b>estadísticamente significativa al 5 %</b>: la probabilidad de ver una relación así de fuerte por azar, si en realidad no hubiera ninguna, es menor del 5 % (valor p &lt; 0,05). Se prueba con la t de la pendiente de la regresión <code>rᵢ = a + b · Δx + ε</code>, <code>t = b / error estándar(b)</code>, con n − 2 grados de libertad. Sin asterisco, la correlación puede ser solo ruido de la muestra: no se distingue de cero con estos datos. Cada celda es la correlación de Pearson (ρ) entre el rendimiento del activo y el cambio de la variable en el mismo periodo (mensual, o trimestral para el PIB); pasa el puntero sobre ella para ver R², la pendiente b (puntos de rendimiento por cada punto de la variable), la t y el número de periodos n.</p>
+        ${PF.charts && PF.charts.likertLegend ? PF.charts.likertLegend() : ''}
         `;
     }
     return { cards: cards.join(''), table, results };

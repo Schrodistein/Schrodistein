@@ -43,7 +43,7 @@ function catalog() {
 }
 const catalogAsset = (c) => ({ name: c.nemo, yahoo: c.type === 'divisa' ? c.yahoo || '' : '', news: `${c.name} ${c.type === 'accion' ? 'acción' : ''}`.trim(), index: c.type === 'indice', enabled: true, cls: c.type === 'accion' ? undefined : c.type });
 
-const DEFAULTS_VERSION = 5; // sube cuando se agregan activos predeterminados o se hace una limpieza
+const DEFAULTS_VERSION = 6; // sube cuando se agregan activos predeterminados o se hace una limpieza
 
 /* Renta fija e índices de tasas (COLTES, COLIBR, TES, CDT, bonos) leídos con las reglas anteriores:
  * se borran una vez para volver a cargarlos con el lector corregido. */
@@ -64,17 +64,11 @@ const DEFAULT_SETTINGS = {
 };
 
 function emptyData() {
-  const assets = DEFAULT_ASSETS.map((a) => Object.assign({ enabled: true }, a));
-  const have = new Set(assets.map((a) => a.name.toUpperCase()));
-  for (const c of catalog()) {
-    if (have.has(c.nemo.toUpperCase())) continue;
-    const a = catalogAsset(c);
-    if (!a.cls) delete a.cls;
-    assets.push(a);
-  }
+  // La app arranca vacía: Mercado no trae activos ni divisas predeterminados; se llena con los archivos
+  // que sube el usuario (el catálogo de la BVC sigue disponible como referencia en Biblioteca)
   return {
     version: 1,
-    assets,
+    assets: [],
     prices: {},
     news: [],
     macro: {},
@@ -101,6 +95,7 @@ class Store {
           if (from < 3) this.cleanFixed();
           if (from < 4) this.addCatalog();
           if (from < 5) this.bvcOnly();
+          if (from < 6) this.purgeDefaults();
           this.data.meta.defaults = DEFAULTS_VERSION;
         }
         this.mergeDuplicates();
@@ -108,6 +103,26 @@ class Store {
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
     }
+  }
+
+  /* 2.6.4: sin datos predeterminados. Se borran los cierres de la fuente automática (USD/COP, EUR/COP…)
+   * y los activos que nunca tuvieron un historial subido por el usuario (lista predeterminada y catálogo). */
+  purgeDefaults() {
+    const removed = [];
+    for (const a of this.data.assets) {
+      const book = this.data.prices[a.name];
+      if (book) for (const d of Object.keys(book)) if (book[d][1] !== 'bvc') delete book[d];
+    }
+    this.data.assets = this.data.assets.filter((a) => {
+      const book = this.data.prices[a.name];
+      if (book && Object.keys(book).length) return true;
+      delete this.data.prices[a.name];
+      delete this.data.meta.errors[a.name];
+      removed.push(a.name);
+      return false;
+    });
+    this.data.meta.purged = removed;
+    return removed;
   }
 
   /* Solo la BVC para acciones, índices y ETF: quita los cierres de la fuente automática y su símbolo. */

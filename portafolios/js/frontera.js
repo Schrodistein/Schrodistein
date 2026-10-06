@@ -220,10 +220,10 @@
     for (let k = 0; k < P.frontier.length; k += step) show.push(k);
     if (show[show.length - 1] !== P.frontier.length - 1) show.push(P.frontier.length - 1);
     const width = ctx.width || 640;
-    const chartPorts = ports.map((p) => ({ label: p.short || p.label, vol: P[p.key].vol, ret: P[p.key].ret, sel: p.key === sel, shape: p.shape }));
+    const chartPorts = ports.map((p) => ({ key: 'front:' + p.key, label: p.short || p.label, vol: P[p.key].vol, ret: P[p.key].ret, sel: p.key === sel, shape: p.shape }));
     chartPorts.sort((a, b) => a.sel - b.sel);
     const assets = m.assets.map((a) => ({ name: a.name, short: a.name.slice(0, 14), vol: a.vol, ret: a.expRet, beta: a.betaM }));
-    const user = ctx.user ? { vol: ctx.user.vol, ret: ctx.user.ret, label: 'Tu portafolio' } : null;
+    const user = ctx.user ? { key: 'conf:me', vol: ctx.user.vol, ret: ctx.user.ret, label: 'Tu portafolio' } : null;
     let chart = '';
     try {
       chart = C ? C.riskReturn({ width, front: P.frontier, rf: m.rf, tangent: tan, assets, ports: chartPorts.reverse(), user }) : '';

@@ -52,7 +52,7 @@ const shots = process.argv[2];
   if (!/activos con cierres nuevos/.test(st)) errors.push('estado: ' + st);
   const table = await win.textContent('#mk-table');
   if (!/ECOPETROL/.test(table) || /GEB\.CL/.test(table)) errors.push('tabla de mercado: las acciones no deben pedirse a la fuente automática');
-  if ((await win.$$('#mk-table input[data-f="yahoo"]')).length !== 2) errors.push('solo el dólar y el euro tienen símbolo automático');
+  if ((await win.$$('#mk-table input[data-f="yahoo"]')).length !== 0) errors.push('sin divisas predeterminadas: no debe haber símbolos automáticos');
   if (shots) await win.screenshot({ path: path.join(shots, 'escritorio-mercado.png'), fullPage: true });
 
   await win.click('#tab-noticias');
@@ -69,14 +69,11 @@ const shots = process.argv[2];
   if (market !== 'ICOLCAP') errors.push('índice de mercado: ' + market);
   if (shots) await win.screenshot({ path: path.join(shots, 'escritorio-portafolio.png'), fullPage: true });
 
-  // Cambiar un símbolo se guarda en disco
+  // Lo de Mercado queda guardado en disco (sin activos ni divisas predeterminados)
   await win.click('#tab-mercado');
-  const input = await win.$('#mk-table input[data-f="yahoo"]');
-  await input.fill('USDCOP=X');
-  await input.dispatchEvent('change');
-  await win.waitForTimeout(500);
+  await win.waitForTimeout(300);
   const saved = JSON.parse(fs.readFileSync(path.join(userData, 'datos.json'), 'utf8'));
-  if (!saved.assets.some((a) => a.yahoo === 'USDCOP=X')) errors.push('el símbolo editado no se guardó');
+  if (saved.assets.some((a) => /\/(COP|USD)$/.test(a.name) || a.yahoo)) errors.push('quedaron divisas predeterminadas: ' + saved.assets.map((a) => a.name).join());
   if (Object.entries(saved.prices).some(([n, b]) => !/\//.test(n) && Object.values(b).some((x) => x[1] !== 'bvc'))) errors.push('hay cierres de acciones que no son de la BVC');
   if (!saved.news.length || !Object.keys(saved.prices).length) errors.push('datos no guardados');
 

@@ -683,7 +683,7 @@ test('frontera paso a paso: correlación promedio implícita reproduce σp y cad
   });
   const ports = [{ key: 'recommended', label: 'Recomendado' }, { key: 'tangency', label: 'Máxima Sharpe' }, { key: 'minVar', label: 'Mínima varianza' }];
   const html = PF.frontera.render({ m, P, esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', sel: 'tangency', ports, tb: PF.model.treynorBlack(m), width: 600 });
-  for (const t of ['frontera eficiente', 'mercado de capitales', 'mercado de valores', 'Cómo se eligen', 'Por qué un activo entra', 'Dónde queda', 'promedian las correlaciones', 'Máximo rendimiento', 'Máxima Sharpe (elegido)']) assert(html.includes(t), 'falta ' + t);
+  for (const t of ['11.1 La idea común', '11.2 Mínima varianza', '11.4 Máxima razón de Sharpe', '11.5 Recomendado', '11.7 Paridad de riesgo', '11.10 ¿Cuál elegir?', 'separación de Tobin', 'Michaud', 'frontera eficiente', 'mercado de capitales', 'mercado de valores', 'Cómo se eligen', 'Por qué un activo entra', 'Dónde queda', 'promedian las correlaciones', 'Máximo rendimiento', 'Máxima Sharpe (elegido)']) assert(html.includes(t), 'falta ' + t);
 });
 
 test('guía de la BVC y catálogo de activos', () => {

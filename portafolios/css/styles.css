@@ -517,3 +517,4 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 .t-segs button[aria-selected="true"] { background: var(--s1); color: #fff; border-color: var(--s1); }
 .t-segs .sub { opacity: .75; font-size: .8em; margin-left: 4px; }
 .guia-wrap { margin-top: 28px; } .guia-title { font-size: 1.6rem; margin: 8px 0; }
+.pf-sel { border-color: var(--s1); box-shadow: 0 0 0 1px var(--s1) inset; }

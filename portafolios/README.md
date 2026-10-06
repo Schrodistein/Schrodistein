@@ -8,6 +8,9 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.1**
+- **Cómo se elige cada portafolio, en detalle** (Paso a paso, 11.1 a 11.10): la frontera eficiente y la separación de Tobin; para cada portafolio (mínima varianza, máximo rendimiento, tangente, recomendado, máxima diversificación, paridad de riesgo, 1/N y Treynor-Black) su teoría y autores, el problema que resuelve, el cálculo paso a paso, el resultado con tus datos (qué activos entran y cuáles quedan fuera, con sus pesos) y cuándo usarlo; una guía para elegir y las referencias.
+
 **Versión 2.0**
 - **Terminal por segmento**: renta variable (acciones, ETF e índices de acciones, frente al MSCI COLCAP), renta fija (TES, bonos, CDT, COLTES y COLIBR, frente al COLTES) y divisas (dólar y euro, frente al USD/COP o la TRM), cada una con su lista, su ficha, sus gráficas y su mapa de correlaciones.
 - **Cotizaciones diarias, siempre**: el análisis usa cada rueda de la BVC y anualiza con 242 ruedas; no se agrupan por semana ni por mes.

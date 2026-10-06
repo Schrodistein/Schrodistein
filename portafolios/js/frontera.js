@@ -43,6 +43,159 @@
     return Sw.map((x) => x / v);
   }
 
+
+  /* Activos que entran (peso > 0,5 %) ordenados por peso, y los que quedan fuera. */
+  function holdings(m, w, pct, esc) {
+    const idx = m.names.map((_, i) => i).sort((a, b) => w[b] - w[a]);
+    const inn = idx.filter((i) => Math.abs(w[i]) > 0.005);
+    const out = idx.filter((i) => Math.abs(w[i]) <= 0.005);
+    return `<p><b>Entran</b> (${inn.length}): ${inn.map((i) => `${esc(m.names[i])} ${pct(w[i], 1)}`).join(' · ')}.${out.length ? ` <b>Quedan fuera</b> (${out.length}): ${out.map((i) => esc(m.names[i])).join(', ')}.` : ''}</p>`;
+  }
+
+  function detail(c) {
+    const { m, P, ports, sel, tan, top, tb, pct, esc, nf, N } = c;
+    const lbl = (k) => (ports.find((p) => p.key === k) || {}).label || k;
+    const res = (e) => `<ul class="sym"><li>Rendimiento esperado <code>E(Rₚ) = Σ wᵢ E(Rᵢ)</code> = <b>${pct(e.ret)}</b>; riesgo <code>σₚ = √(wᵀΣw)</code> = <b>${pct(e.vol)}</b>.</li><li>Sharpe <code>(E(Rₚ) − rf)/σₚ</code> = ${nf(e.sharpe, 3)} · β = ${nf(e.beta, 3)} · Treynor = ${pct(e.treynor)} · α de Jensen = ${pct(e.jensen, 2)} · N efectivo <code>1/Σwᵢ²</code> = ${nf(e.effN, 1)}.</li></ul>`;
+    const box = (k, title, theory, problem, steps, data, use) => {
+      const e = P[k];
+      return `<div class="panel pf-detail${k === sel ? ' pf-sel' : ''}" id="pf-${k}"><h2>${title}${k === sel ? ' <span class="pos">· elegido</span>' : ''}</h2>
+        <h3>Teoría</h3>${theory}
+        <h3>Problema que resuelve</h3>${problem}
+        <h3>Cómo se calcula, paso a paso</h3><ol>${steps.map((x) => `<li>${x}</li>`).join('')}</ol>
+        ${e ? `<h3>Resultado con tus datos</h3>${holdings(m, e.w, pct, esc)}${res(e)}${data || ''}` : data || ''}
+        <h3>Cuándo usarlo</h3>${use}</div>`;
+    };
+    const out = [];
+    const Sw = (w) => m.Sigma.map((row) => row.reduce((q, x, j) => q + x * w[j], 0));
+
+    out.push(`<div class="panel"><h2>11.1 La idea común: la frontera eficiente y la separación de Tobin</h2>
+      <p><b>Markowitz (1952)</b> describe cada portafolio con dos números: su rendimiento esperado <code>E(Rₚ) = wᵀμ</code> y su riesgo <code>σₚ² = wᵀΣw</code>. Un inversionista racional y averso al riesgo prefiere más rendimiento con igual riesgo y menos riesgo con igual rendimiento. Los portafolios que nadie puede mejorar en las dos cosas a la vez forman la <b>frontera eficiente</b> (sección 8): todos los portafolios que siguen, menos los de referencia (pesos iguales y paridad de riesgo), son puntos de esa curva.</p>
+      <p>Lo que cambia entre ellos es <b>qué punto de la curva</b> se elige, y eso depende de qué se le pide al portafolio:</p>
+      <ul><li><b>Sin renta fija segura</b>: cada inversionista elige su punto según su aversión al riesgo. El extremo de menor riesgo es el de mínima varianza y el de mayor rendimiento es el de máximo rendimiento.</li>
+      <li><b>Con renta fija segura</b> (Tobin, 1958): todos deberían tener el <b>mismo</b> portafolio de acciones, el tangente, y ajustar el riesgo solo con la proporción en renta fija. Es el <b>teorema de separación</b>: la decisión de <i>qué</i> acciones comprar no depende del gusto por el riesgo; solo la de <i>cuánto</i> poner en ellas.</li>
+      <li><b>Con utilidad media-varianza</b> <code>U = E(Rₚ) − ½·A·σₚ²</code> (A = aversión al riesgo), la proporción óptima en el tangente es <code>y* = (E(R_T) − rf) / (A·σ_T²)</code>${tan ? `: con tus datos, A = 2 → ${pct((tan.ret - m.rf) / (2 * tan.vol * tan.vol), 0)}, A = 4 → ${pct((tan.ret - m.rf) / (4 * tan.vol * tan.vol), 0)}, A = 8 → ${pct((tan.ret - m.rf) / (8 * tan.vol * tan.vol), 0)} en el tangente y el resto en renta fija (más de 100 % significa pedir prestado)` : ''}.</li></ul>
+      <p>Todos los portafolios usan los mismos datos (μ y Σ de la sección 4), los mismos límites (mínimo ${pct(Math.min(...P.lo), 0)}, tope ${pct(P.cap, 0)} por activo) y <code>Σwᵢ = 1</code>.</p></div>`);
+
+    // Mínima varianza
+    if (P.minVar) {
+      const e = P.minVar;
+      const g = Sw(e.w);
+      const v = e.vol * e.vol;
+      out.push(box('minVar', '11.2 Mínima varianza', `<p>Es el punto más a la izquierda de la frontera de <b>Markowitz (1952)</b>: el de menor riesgo posible. No usa los rendimientos esperados, que son el dato más incierto de todo el modelo (Merton, 1980; Jagannathan y Ma, 2003): por eso suele ser el portafolio más estable cuando se recalcula con datos nuevos.</p>`,
+        `<p class="formula"><code>min wᵀΣw &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        ['Se arma la matriz Σ de varianzas y covarianzas anual.', 'Se resuelve el problema cuadrático: se busca la combinación de pesos que deja la suma <code>Σᵢ Σⱼ wᵢwⱼσᵢⱼ</code> en su mínimo (método de conjunto activo).', 'En el óptimo, todo activo que se compra sin tocar sus límites tiene el mismo <b>riesgo marginal</b> <code>(Σw)ᵢ = σₚ²</code>: si uno tuviera menos, convendría subirle el peso y bajar el riesgo total.', 'Un activo con riesgo marginal mayor que σₚ² queda en el mínimo; uno con menor sube hasta el tope.'],
+        `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso</th><th class="n">σᵢ</th><th class="n">Riesgo marginal (Σw)ᵢ</th><th class="n">σₚ²</th></tr></thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(e.w[i], 1)}</td><td class="n">${pct(m.vol[i])}</td><td class="n">${nf(g[i], 5)}</td><td class="n">${nf(v, 5)}</td></tr>`).join('')}</tbody></table></div>`,
+        '<p>Inversionistas muy aversos al riesgo, horizontes cortos o cuando no se confía en los rendimientos esperados. Su desventaja: puede tener poco rendimiento y concentrarse en los activos menos volátiles.</p>'));
+    }
+
+    // Máximo rendimiento
+    if (top) {
+      const order = m.names.map((_, i) => i).sort((a, b) => m.mu[b] - m.mu[a]);
+      out.push(box('__maxret', '11.3 Máximo rendimiento', `<p>Es el extremo derecho de la frontera. Sin límites de peso sería un solo activo, el de mayor E(R): no hay diversificación. Con un tope por activo, reparte entre los de mayor rendimiento esperado.</p>`,
+        `<p class="formula"><code>max wᵀμ &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ ${pct(P.cap, 0)}</code></p>`,
+        ['Se ordenan los activos por rendimiento esperado, de mayor a menor.', `Se llena cada uno hasta el tope (${pct(P.cap, 0)}) en ese orden, hasta completar el 100 %.`, 'El riesgo no interviene: es el punto de la frontera con mayor E(R) y, casi siempre, el de mayor σ.'],
+        `${holdings(m, top.w, pct, esc)}<ul class="sym"><li>Orden por E(R): ${order.map((i) => `${esc(m.names[i])} ${pct(m.mu[i])}`).join(' > ')}.</li><li>E(Rₚ) = <b>${pct(top.ret)}</b>, σₚ = <b>${pct(top.vol)}</b>, Sharpe = ${nf((top.ret - m.rf) / top.vol, 3)}.</li></ul>`,
+        '<p>Solo como referencia del máximo alcanzable con los límites de peso. Es el más sensible a errores en los rendimientos esperados.</p>'));
+    }
+
+    // Tangente
+    if (tan) {
+      const slope = (tan.ret - m.rf) / tan.vol;
+      out.push(box('tangency', '11.4 Máxima razón de Sharpe (portafolio tangente)', `<p><b>Tobin (1958)</b> mostró que, si se puede invertir o pedir prestado a la tasa libre de riesgo, el mejor portafolio de activos riesgosos es uno solo: el que maximiza la prima por unidad de riesgo. <b>Sharpe (1964)</b> y <b>Lintner (1965)</b> lo llevaron al equilibrio del mercado (CAPM): si todos piensan igual, el tangente es el portafolio de mercado. Su pendiente es la <b>razón de Sharpe</b> (Sharpe, 1966).</p>`,
+        `<p class="formula"><code>max (wᵀμ − rf) / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        ['Se calcula la frontera eficiente (sección 8).', 'Para cada punto se calcula su razón de Sharpe: (E(Rₚ) − rf) / σₚ.', 'La razón sube y luego baja a lo largo de la curva (es unimodal): se toma el punto más alto con una rejilla y se afina con búsqueda de sección áurea.', 'Geométricamente es el punto donde la recta que sale de rf toca la curva sin cortarla: la línea del mercado de capitales (sección 9).', 'Qué activos entran: los que pagan su aporte al riesgo del portafolio (condición de primer orden, sección 12).'],
+        `<p>rf = ${pct(m.rf)} → pendiente de la CML = (${pct(tan.ret)} − ${pct(m.rf)}) / ${pct(tan.vol)} = <b>${nf(slope, 3)}</b>: ningún otro portafolio de la frontera da más rendimiento extra por cada punto de riesgo.</p>`,
+        '<p>El portafolio de acciones de quien combina con renta fija segura (CDT, TES): la parte riesgosa siempre es esta, y el riesgo total se ajusta con la proporción en renta fija. Es el más defendible en teoría, pero depende mucho de los rendimientos esperados.</p>'));
+    }
+
+    // Recomendado
+    if (P.recommended) {
+      const d = P.recommended.div || {};
+      out.push(box('recommended', '11.5 Recomendado: máximo rendimiento sin perder diversificación', `<p>Combina la frontera de <b>Markowitz (1952)</b> con una restricción de diversificación. Markowitz advirtió que el optimizador tiende a concentrarse en pocos activos (los de mayor rendimiento estimado), y que esas estimaciones tienen error (Michaud, 1989, lo llamó «maximizador de errores»). Medir la concentración con el <b>número efectivo de activos</b> <code>N = 1/Σwᵢ²</code> (el inverso del índice de Herfindahl-Hirschman) evita poner casi todo en dos o tres acciones.</p>`,
+        `<p class="formula"><code>max wᵀμ &nbsp; sujeto a &nbsp; w eficiente, &nbsp; 1/Σwᵢ² ≥ N* = ${nf(d.target, 1)}, &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ tope</code></p>`,
+        [`Se fija el nivel de diversificación (Datos → «${esc(d.level || 'media')}»): N* = ${nf(d.target, 1)} de ${N} activos.`, 'Se sube por la frontera desde el punto de mínima varianza, hacia más rendimiento, mientras el N efectivo siga siendo al menos N*.', 'Se toma el último punto que cumple y se afina por bisección entre ese y el siguiente, que ya no cumple.', `El tope por activo no es fijo: se prueba primero sin tope (o con el tuyo) y se baja de 5 en 5 puntos hasta que la frontera tenga portafolios con N ≥ N*. Aquí quedó en ${pct(P.cap, 0)}.`, 'Por construcción está sobre la frontera: es eficiente.'],
+        tan ? `<p>Frente al tangente: rendimiento ${pct(P.recommended.ret)} vs ${pct(tan.ret)}, riesgo ${pct(P.recommended.vol)} vs ${pct(tan.vol)}, N efectivo ${nf(P.recommended.effN, 1)} vs ${nf(tan.effN, 1)}.</p>` : '',
+        '<p>Para quien quiere el mayor rendimiento esperado sin apostar a pocos activos. Es menos sensible a errores de estimación que el de máximo rendimiento y suele rendir más que el de mínima varianza.</p>'));
+    }
+
+    // Máxima diversificación
+    if (P.maxDiv) {
+      const e = P.maxDiv;
+      out.push(box('maxDiv', '11.6 Máxima diversificación', `<p><b>Choueifaty y Coignard (2008)</b> proponen maximizar la <b>razón de diversificación</b>: cuánto riesgo se elimina al combinar los activos. Si todos tuvieran correlación 1, el riesgo sería el promedio ponderado de las volatilidades <code>Σwᵢσᵢ</code>; el portafolio tiene σₚ, que es menor cuanto menos correlacionados estén.</p>`,
+        `<p class="formula"><code>max DR = Σ wᵢσᵢ / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        ['Es el mismo cálculo que el tangente, pero cambiando los rendimientos μ por las volatilidades σ y rf por 0: se busca el máximo de (Σwᵢσᵢ)/σₚ a lo largo de la frontera «de volatilidades».', 'En el óptimo, todos los activos que entran tienen la misma correlación con el portafolio: ninguno se mueve más con él que los demás.', 'No usa los rendimientos esperados.'],
+        `<p>Razón de diversificación DR = ${nf(e.divRatio, 3)}: el riesgo real es ${pct(1 - 1 / e.divRatio, 0)} menor que si todo estuviera perfectamente correlacionado.</p>`,
+        '<p>Cuando la prioridad es aprovechar la baja correlación entre activos (por ejemplo, acciones de sectores distintos, renta fija y dólar) y no se confía en los rendimientos esperados.</p>'));
+    }
+
+    // Paridad de riesgo
+    if (P.riskParity) {
+      const e = P.riskParity;
+      out.push(box('riskParity', '11.7 Paridad de riesgo', `<p>Popularizada por <b>Qian (2005)</b> y estudiada por <b>Maillard, Roncalli y Teïletche (2010)</b>: en vez de repartir el dinero, se reparte el <b>riesgo</b>. Cada activo aporta la misma parte de la varianza del portafolio.</p>`,
+        `<p class="formula"><code>CRᵢ = wᵢ·(Σw)ᵢ / σₚ² = 1/N &nbsp; para todo i, &nbsp; Σwᵢ = 1</code></p>`,
+        ['La contribución al riesgo de cada activo es su peso por su riesgo marginal: <code>wᵢ(Σw)ᵢ</code>; las contribuciones suman σₚ².', 'Se busca el peso de cada activo que iguala todas las contribuciones (descenso cíclico por coordenadas, hasta que ningún peso cambie).', 'Los activos más volátiles o más correlacionados con los demás reciben menos dinero.', 'No usa los rendimientos esperados ni aplica los límites de peso.'],
+        `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso</th><th class="n">Contribución al riesgo</th></tr></thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(e.w[i], 1)}</td><td class="n">${pct(e.riskContrib[i], 1)}</td></tr>`).join('')}</tbody></table></div>${P.riskParityInBounds ? '' : '<p>Sus pesos salen de tus límites, así que no se compara con la frontera de esos límites (sección 13).</p>'}`,
+        '<p>Para un portafolio equilibrado en riesgo que no dependa de los rendimientos esperados. Suele quedar cerca de la frontera, pero no sobre ella.</p>'));
+    }
+
+    // Pesos iguales
+    if (P.equal) {
+      out.push(box('equal', '11.8 Pesos iguales (1/N)', `<p>La diversificación ingenua: el mismo dinero en cada activo. <b>DeMiguel, Garlappi y Uppal (2009)</b> mostraron que, con pocos datos, le gana fuera de muestra a muchos modelos optimizados, porque no tiene error de estimación. Sirve como punto de comparación.</p>`,
+        `<p class="formula"><code>wᵢ = 1/N = ${pct(1 / N, 1)}</code> (ajustado a los límites)</p>`,
+        ['No se optimiza nada: cada uno de los N activos recibe 1/N.', 'Con N activos de igual varianza y covarianza, <code>σₚ² = σ̄²/N + (1 − 1/N)·cov̄</code> (Elton y Gruber, 1977): el riesgo propio se diluye y queda la covarianza promedio.'],
+        '',
+        '<p>Como referencia: si un portafolio optimizado no le gana a 1/N, conviene desconfiar de sus estimaciones. Rara vez está sobre la frontera.</p>'));
+    }
+
+    // Treynor-Black
+    if (tb) {
+      const idx = m.assets.map((_, i) => i).filter((i) => Math.abs(tb.wA[i]) > 1e-6).sort((a, b) => Math.abs(tb.wA[b]) - Math.abs(tb.wA[a])).slice(0, 12);
+      out.push(`<div class="panel pf-detail" id="pf-tb"><h2>11.9 Treynor-Black (índice + cartera activa)</h2>
+        <h3>Teoría</h3><p><b>Treynor y Black (1973)</b> parten de que el mercado es casi eficiente: la base es el índice ${esc(m.marketName)}. Si el análisis indica que algunos activos tienen α de Jensen distinto de cero, se arma una <b>cartera activa</b> con ellos y se combina con el índice. Usa el modelo de índice único de <b>Sharpe (1963)</b>: <code>rᵢ = αᵢ + βᵢ rₘ + εᵢ</code>.</p>
+        <h3>Cómo se calcula, paso a paso</h3><ol>
+          <li>Para cada activo: α (Jensen), β y varianza residual σ²(εᵢ) de la regresión contra el índice.</li>
+          <li>Peso dentro de la cartera activa: <code>wᵢ ∝ αᵢ / σ²(εᵢ)</code> (la «razón de valoración»: α por unidad de riesgo propio). Un α negativo da peso negativo (venta en corto).</li>
+          <li>α, β y riesgo propio de la cartera activa: α_A = ${pct(tb.alphaA, 2)}, β_A = ${nf(tb.betaA, 3)}, σ²(e_A) = ${nf(tb.resA, 5)}.</li>
+          <li>Peso de la cartera activa: <code>w₀ = [α_A/σ²(e_A)] / [(E(Rₘ) − rf)/σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β_A)·w₀]</code> = <b>${pct(tb.wActive)}</b>; en el índice: ${pct(tb.wIndex)}.</li>
+          <li>Sharpe resultante: <code>√(Sₘ² + IR²)</code> = √(${nf(tb.sharpeMkt, 3)}² + ${nf(tb.ir, 3)}²) = <b>${nf(tb.sharpeP, 3)}</b>, donde IR es la razón de información de la cartera activa.</li></ol>
+        <h3>Resultado con tus datos</h3>
+        <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">α de Jensen</th><th class="n">σ²(ε)</th><th class="n">Peso en la cartera activa</th><th class="n">Peso total</th></tr></thead><tbody>${idx.map((i) => `<tr><td>${esc(m.names[i])}</td><td class="n">${pct(m.assets[i].jensenM, 2)}</td><td class="n">${nf(m.assets[i].residVarM, 5)}</td><td class="n">${pct(tb.wA[i], 1)}</td><td class="n">${pct(tb.assetW[i], 1)}</td></tr>`).join('')}</tbody></table></div>
+        <p>${tb.significant} de ${N} alfas son significativos (|t| ≥ 2)${tb.shorts ? '; hay pesos negativos (ventas en corto)' : ''}.</p>
+        <h3>Cuándo usarlo</h3><p>Cuando se tiene un análisis propio que justifica alfas (por ejemplo, valoración fundamental) y se quiere apostar a ellos sin abandonar el índice. Con alfas históricos poco significativos, sus pesos son inestables.</p></div>`);
+    }
+
+    // Guía para elegir
+    out.push(`<div class="panel"><h2>11.10 ¿Cuál elegir?</h2>
+      <div class="table-scroll"><table class="data"><thead><tr><th>Si tu situación es…</th><th>Portafolio</th><th>Por qué</th></tr></thead><tbody>
+        <tr><td>Vas a combinar acciones con CDT o TES</td><td>${esc(lbl('tangency'))}</td><td>Separación de Tobin: es la mejor parte riesgosa; ajusta el riesgo con la renta fija (sección 9).</td></tr>
+        <tr><td>Quieres el mayor rendimiento sin concentrarte</td><td>${esc(lbl('recommended'))}</td><td>Eficiente y con un N efectivo mínimo.</td></tr>
+        <tr><td>Quieres el menor riesgo posible o no confías en los rendimientos esperados</td><td>${esc(lbl('minVar'))}</td><td>No usa μ; es el más estable.</td></tr>
+        <tr><td>Quieres aprovechar activos poco correlacionados</td><td>${esc(lbl('maxDiv'))}</td><td>Maximiza el riesgo eliminado por la diversificación.</td></tr>
+        <tr><td>Quieres que ningún activo domine el riesgo</td><td>${esc(lbl('riskParity'))}</td><td>Cada activo aporta lo mismo al riesgo.</td></tr>
+        <tr><td>Crees tener información que el mercado no tiene (alfas)</td><td>Treynor-Black</td><td>Índice más una cartera activa según α/σ²(ε).</td></tr>
+        <tr><td>Quieres una referencia sin estimaciones</td><td>${esc(lbl('equal'))}</td><td>Si los optimizados no le ganan, desconfía de los datos.</td></tr>
+      </tbody></table></div>
+      <p>En todos los casos, revisa en la sección 13 dónde queda frente a la frontera, la CML y la SML, y en Confirmar si lo que compraste sigue siendo eficiente.</p>
+      <h3>Referencias</h3><ul class="refs">
+        <li>Choueifaty, Y. y Coignard, Y. (2008). Toward maximum diversification. <i>Journal of Portfolio Management, 35</i>(1), 40-51.</li>
+        <li>DeMiguel, V., Garlappi, L. y Uppal, R. (2009). Optimal versus naive diversification: How inefficient is the 1/N portfolio strategy? <i>Review of Financial Studies, 22</i>(5), 1915-1953.</li>
+        <li>Elton, E. J. y Gruber, M. J. (1977). Risk reduction and portfolio size: An analytical solution. <i>Journal of Business, 50</i>(4), 415-437.</li>
+        <li>Jagannathan, R. y Ma, T. (2003). Risk reduction in large portfolios: Why imposing the wrong constraints helps. <i>Journal of Finance, 58</i>(4), 1651-1683.</li>
+        <li>Lintner, J. (1965). The valuation of risk assets and the selection of risky investments in stock portfolios and capital budgets. <i>Review of Economics and Statistics, 47</i>(1), 13-37.</li>
+        <li>Maillard, S., Roncalli, T. y Teïletche, J. (2010). The properties of equally weighted risk contribution portfolios. <i>Journal of Portfolio Management, 36</i>(4), 60-70.</li>
+        <li>Markowitz, H. (1952). Portfolio selection. <i>Journal of Finance, 7</i>(1), 77-91.</li>
+        <li>Merton, R. C. (1980). On estimating the expected return on the market. <i>Journal of Financial Economics, 8</i>(4), 323-361.</li>
+        <li>Michaud, R. O. (1989). The Markowitz optimization enigma: Is «optimized» optimal? <i>Financial Analysts Journal, 45</i>(1), 31-42.</li>
+        <li>Qian, E. (2005). <i>Risk parity portfolios: Efficient portfolios through true diversification</i>. PanAgora Asset Management.</li>
+        <li>Sharpe, W. F. (1963). A simplified model for portfolio analysis. <i>Management Science, 9</i>(2), 277-293.</li>
+        <li>Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. <i>Journal of Finance, 19</i>(3), 425-442.</li>
+        <li>Sharpe, W. F. (1966). Mutual fund performance. <i>Journal of Business, 39</i>(1), 119-138.</li>
+        <li>Tobin, J. (1958). Liquidity preference as behavior towards risk. <i>Review of Economic Studies, 25</i>(2), 65-86.</li>
+        <li>Treynor, J. L. y Black, F. (1973). How to use security analysis to improve portfolio selection. <i>Journal of Business, 46</i>(1), 66-86.</li>
+      </ul></div>`);
+    return out.join('');
+  }
+
   function render(ctx) {
     const { m, P, esc, pct } = ctx;
     if (!m || !P || !P.frontier) return '';
@@ -162,6 +315,9 @@
       ${tb ? `<p><b>Treynor y Black (1973)</b>: parte del índice ${esc(m.marketName)} y le agrega una cartera activa con los activos de α de Jensen distinto de cero. Peso de cada activo en la cartera activa: <code>wᵢ ∝ αᵢ / σ²(εᵢ)</code> (α sobre su riesgo propio). Peso de la cartera activa: <code>w₀ = [α_A / σ²(e_A)] / [(E(Rₘ) − rf) / σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β_A) w₀]</code> = ${pct(tb.wActive)}; el resto, ${pct(tb.wIndex)}, va al índice. Sharpe resultante: √(Sₘ² + IR²) = ${nf(tb.sharpeP, 3)}.</p>` : ''}
       <h3>Pesos de cada portafolio</h3>
       ${wTable(cols)}</div>`);
+
+    /* 11.1–11.9 Detalle de cada portafolio: teoría, problema, pasos, resultado con tus datos y cuándo usarlo */
+    out.push(detail({ m, P, ports, sel, tan, top, tb, pct, esc, nf, N }));
 
     /* 12. Por qué entra o no cada activo (condición de primer orden del tangente) */
     if (tan) {

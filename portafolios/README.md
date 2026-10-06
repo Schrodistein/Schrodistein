@@ -4,6 +4,8 @@ Aplicación web para construir y **confirmar portafolios eficientes** con la teo
 
 Ábrela con `portafolios/index.html` (o con `npm start` en `http://localhost:8080/portafolios/`).
 
+Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son de sus autores (Markowitz, Tobin, Sharpe, Lintner, Treynor, Jensen, Treynor y Black, Damodaran y los demás), citados en la app con sus referencias.
+
 ## Qué hace
 
 - **Guía** (segunda pestaña): manual para aprender a operar acciones y ETF en la BVC, en 10 capítulos (qué se negocia, objetivo y riesgo, abrir la cuenta, órdenes y liquidación, datos, análisis de cada activo, construir el portafolio, pasar a las órdenes, seguimiento e impuestos, errores comunes), cada uno con la teoría que lo sostiene (Fama, Tobin, Roy, Markowitz, Sharpe, Lintner, Treynor y Black, Gordon, Chen, Roll y Ross, Kahneman y Tversky), ejemplos con tus datos, botones a la sección donde se practica, glosario y referencias.

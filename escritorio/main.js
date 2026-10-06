@@ -343,6 +343,7 @@ app.on('window-all-closed', () => {
 });
 
 app.whenReady().then(() => {
+  app.setAboutPanelOptions({ applicationName: 'Frontera Eficiente', applicationVersion: app.getVersion(), copyright: '© Schrödistein', authors: ['Schrödistein'] });
   store = new Store(app.getPath('userData'));
   registerIpc();
   handleDownloads();

@@ -15,6 +15,25 @@
 
   /* ctx: { m, P, table:{names,dates,values}, marketIdx, s:{freq,retType,agg,history,muModel,covModel,wmin,wmax,capital},
    *        extra:[{label, w}] (portafolios adicionales: el del usuario, el del plan), plan, generated } */
+  const REFS = [
+    'Blume, M. E. (1975). Betas and their regression tendencies. Journal of Finance, 30(3), 785-795.',
+    'Choueifaty, Y. y Coignard, Y. (2008). Toward maximum diversification. Journal of Portfolio Management, 35(1), 40-51.',
+    'Damodaran, A. (2012). Investment valuation (3.ª ed.). Wiley.',
+    'Elton, E. J. y Gruber, M. J. (1977). Risk reduction and portfolio size: An analytical solution. Journal of Business, 50(4), 415-437.',
+    'Hamada, R. S. (1972). The effect of the firm\'s capital structure on the systematic risk of common stocks. Journal of Finance, 27(2), 435-452.',
+    'Jensen, M. C. (1968). The performance of mutual funds in the period 1945-1964. Journal of Finance, 23(2), 389-416.',
+    'Lintner, J. (1965). The valuation of risk assets and the selection of risky investments in stock portfolios and capital budgets. Review of Economics and Statistics, 47(1), 13-37.',
+    'Markowitz, H. (1952). Portfolio selection. Journal of Finance, 7(1), 77-91.',
+    'Pearson, K. (1896). Mathematical contributions to the theory of evolution. III. Regression, heredity, and panmixia. Philosophical Transactions of the Royal Society A, 187, 253-318.',
+    'Roy, A. D. (1952). Safety first and the holding of assets. Econometrica, 20(3), 431-449.',
+    'Sharpe, W. F. (1963). A simplified model for portfolio analysis. Management Science, 9(2), 277-293.',
+    'Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. Journal of Finance, 19(3), 425-442.',
+    'Sharpe, W. F. (1966). Mutual fund performance. Journal of Business, 39(1), 119-138.',
+    'Tobin, J. (1958). Liquidity preference as behavior towards risk. Review of Economic Studies, 25(2), 65-86.',
+    'Treynor, J. L. (1965). How to rate management of investment funds. Harvard Business Review, 43(1), 63-75.',
+    'Treynor, J. L. y Black, F. (1973). How to use security analysis to improve portfolio selection. Journal of Business, 46(1), 66-86.',
+  ];
+
   function build(ctx) {
     const { m, P, table } = ctx;
     const s = ctx.s;
@@ -403,6 +422,7 @@
     /* ---------- Resumen ---------- */
     const Rs = [];
     Rs.push([{ v: 'Frontera Eficiente · cálculos del portafolio', s: 't' }]);
+    Rs.push([{ v: 'Aplicación de Schrödistein. La teoría y los modelos son de los autores citados en la hoja Formulas.', s: 'n' }]);
     Rs.push([{ v: `Generado el ${ctx.generated || new Date().toISOString().slice(0, 10)}. Todas las cifras son anuales salvo que se indique.`, s: 'n' }]);
     Rs.push([]);
     Rs.push([{ v: 'Datos', s: 'b' }]);
@@ -436,6 +456,9 @@
       { name: 'Frontera', rows: Fr, cols: [12, 12, 10].concat(wide(N, 12)) },
     ];
     if (Pl.length) sheets.push({ name: 'Plan_compra', rows: Pl, cols: [44, 14, 13, 14, 11, 16, 11, 16, 16, 14] });
+    // Referencias de la teoría usada (APA)
+    Fo.push([], [{ v: 'Referencias', s: 'b' }]);
+    for (const r of REFS) Fo.push([r]);
     sheets.push({ name: 'Formulas', rows: Fo, cols: [34, 48, 52, 30, 26] });
     return { sheets, bytes: () => X().build(sheets) };
   }

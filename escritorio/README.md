@@ -2,6 +2,8 @@
 
 Aplicación instalable (Windows, macOS y Linux) de Frontera Eficiente. Incluye todo el análisis de la app web: Markowitz, Sharpe, Treynor y Jensen, confirmación de portafolios y compras por acciones y fecha. Además se conecta a internet para alimentarse día a día:
 
+Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son de sus autores (Markowitz, Tobin, Sharpe, Lintner, Treynor, Jensen, Treynor y Black, Damodaran y los demás), citados en la app con sus referencias.
+
 - **Catálogo de la BVC**: la lista trae todas las acciones y ETF locales, los índices de referencia y el dólar y el euro. **Los precios de acciones, índices y ETF salen solo de la BVC**: en Biblioteca, «Abrir la BVC para descargar los que faltan» abre el sitio dentro de la app y cada histórico descargado se importa solo y queda en la biblioteca local.
 - **Mercado**: cierres diarios de los activos que sigues. Tienen prioridad los datos oficiales de la Bolsa de Valores de Colombia:
   - **Abrir la BVC y descargar** abre el sitio de la BVC dentro de la app. Cada histórico que descargas ahí (CSV) se importa y se une solo.

@@ -501,3 +501,6 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 .guia-gloss dd { margin: 0; }
 @media (max-width: 600px) { .guia-gloss { grid-template-columns: 1fr; } .guia-gloss dd { margin-bottom: 6px; } }
 .guia-toc { list-style: none; padding-left: 0; columns: 2 280px; }
+
+/* Autor */
+.app-foot { text-align: center; color: var(--ink-2); font-size: 0.85rem; padding: 18px 16px 28px; }

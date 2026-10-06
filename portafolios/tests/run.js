@@ -1045,6 +1045,12 @@ test('Documentos para la tasa libre de riesgo y el riesgo país: FRED, EMBIG, Da
   assert(PF.data.roleFromName('TES cero cupón UVR 10 años') === 'tes-uvr-10' && PF.data.roleFromName('Tesoro de EE. UU. 10 años (DGS10)') === 'ust10');
 });
 
+test('Betas por industria de Damodaran reconocidas al subirlas con los documentos de renta fija', () => {
+  const rows = [['Date updated:', 'x'], [], ['Industry Name', 'Number of firms', 'Beta', 'D/E Ratio', 'Effective Tax rate', 'Unlevered beta', 'Cash/Firm value', 'Unlevered beta corrected for cash'], ['Bank (Money Center)', 20, 0.9, 1.2, 0.25, 0.5, 0.1, 0.55], ['Oil/Gas (Integrated)', 30, 1.1, 0.4, 0.3, 0.85, 0.05, 0.9], ['Utility (General)', 25, 0.7, 0.8, 0.25, 0.45, 0.03, 0.47], ['Building Materials', 15, 1, 0.5, 0.22, 0.75, 0.04, 0.78], ['Diversified', 18, 0.95, 0.6, 0.2, 0.68, 0.05, 0.71]];
+  const r = PF.riesgo.readReference([rows], 'betaemerg.xls');
+  assert(r && r.kind === 'betas' && r.data.list.length === 5 && r.data.list[1].unlev === 0.9, JSON.stringify(r));
+});
+
 Promise.all(pending).then(() => {
   console.log(`${passed} pruebas correctas, ${failed} fallidas`);
   if (failed) process.exit(1);

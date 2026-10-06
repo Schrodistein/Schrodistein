@@ -437,10 +437,13 @@
     const refs = results.filter((r) => r.reference).map((r) => r.reference);
     if (refs.length) {
       const all = store.get('damRef') || {};
-      for (const r of refs) all[r.kind] = Object.assign({ file: r.file, loaded: new Date().toISOString().slice(0, 10) }, r.data, { series: undefined });
+      for (const r of refs) {
+        if (r.kind === 'betas') store.set('damodaran', { list: r.data.list, source: r.file, date: new Date().toISOString().slice(0, 10) });
+        else all[r.kind] = Object.assign({ file: r.file, loaded: new Date().toISOString().slice(0, 10) }, r.data, { series: undefined });
+      }
       store.set('damRef', all);
     }
-    const refText = refs.map((r) => (r.kind === 'ctryprem' ? `«${r.file}»: ${r.data.country} (${r.data.rating}), diferencial ${pct(r.data.spread, 2)}, prima país ${pct(r.data.crp, 2)}, prima total ${pct(r.data.erp, 2)}, prima madura ${pct(r.data.mature, 2)}` : `«${r.file}»: prima implícita del S&P 500 ${r.data.year} = ${pct(r.data.erp, 2)} (${r.data.method})`)).join('; ');
+    const refText = refs.map((r) => (r.kind === 'betas' ? `«${r.file}»: betas por industria de Damodaran (${r.data.list.length} industrias), ya disponibles en Paso a paso → sección 7` : r.kind === 'ctryprem' ? `«${r.file}»: ${r.data.country} (${r.data.rating}), diferencial ${pct(r.data.spread, 2)}, prima país ${pct(r.data.crp, 2)}, prima total ${pct(r.data.erp, 2)}, prima madura ${pct(r.data.mature, 2)}` : `«${r.file}»: prima implícita del S&P 500 ${r.data.year} = ${pct(r.data.erp, 2)} (${r.data.method})`)).join('; ');
     if (refs.length && results.every((r) => r.reference || r.error)) {
       status(`Documentos de Damodaran leídos: ${refText}. Se usan en Datos → Renta fija → Prima de riesgo y riesgo país.${errors.length ? ' No se pudieron leer: ' + errors.map((e) => e.error).join(' ') : ''}`, errors.length ? 'warn' : 'ok');
       if (st.screen === 'datos') renderRf();
@@ -676,6 +679,17 @@
     }
     return { inp, auto, used };
   }
+  function crpForPasos() {
+    const D = store.get('damRef') || {};
+    const tax = D.ctryprem && Number.isFinite(D.ctryprem.tax) ? D.ctryprem.tax : null;
+    if (store.get('crpManual') && Number.isFinite(store.get('crp'))) return { crp: store.get('crp'), crpSrc: 'escrita por ti', taxDefault: tax };
+    const pa = prpAuto();
+    const rf = parseFloat($('rf').value) / 100;
+    const q = PF.riesgo.premiums(pa.inp, { rf, volRatio: pa.inp.ratio });
+    if (Number.isFinite(q.prp)) return { crp: q.prp, crpSrc: `calculada en Datos → Renta fija: ${q.spreadSrc === 'EMBI' ? 'EMBIG' : 'diferencial de los TES'} ${pct(q.spread, 2)} × ${String(q.ratio.toFixed(2)).replace('.', ',')} (σ acciones / σ bonos)`, taxDefault: tax };
+    if (D.ctryprem && Number.isFinite(D.ctryprem.crp)) return { crp: D.ctryprem.crp, crpSrc: `de Damodaran (${D.ctryprem.country}, ${D.ctryprem.rating})`, taxDefault: tax };
+    return { crp: 0, crpSrc: '', taxDefault: tax };
+  }
   function setRf(v) {
     // Una tasa absurda (p. ej. un índice leído como tasa) nunca se aplica
     if (!(+v > -5 && +v < 50)) {
@@ -763,6 +777,7 @@
         compute();
       } else if (b.dataset.usePrp) {
         store.set('crp', parseFloat(b.dataset.usePrp) / 100);
+        store.set('crpManual', true);
         renderPasos();
       }
       b.textContent = '✓ Aplicado';
@@ -1793,8 +1808,10 @@
       num,
       a: pa.a < n ? pa.a : 0,
       b: pa.b < n ? pa.b : Math.min(1, n - 1),
-      dam: { list: (store.get('damodaran') || {}).list || null, inputs: store.get('dam') || {} },
-      crp: store.get('crp') || 0,
+      dam: { list: (store.get('damodaran') || {}).list || null, source: (store.get('damodaran') || {}).source || '', inputs: store.get('dam') || {} },
+      // Prima por riesgo país: la calculada en Datos → Renta fija pasa sola al Paso a paso (sección 7),
+      // salvo que el usuario escriba otra ahí
+      ...crpForPasos(),
       desktop: !!globalThis.bvc,
       sel: st.sel,
       ports: PORTS,
@@ -1871,8 +1888,10 @@
         const el = $('paso-de');
         if (el) el.scrollIntoView({ block: 'nearest' });
       } else if (t.id === 'dam-crp') {
+        // Vacío: vuelve a la prima calculada en Datos → Renta fija
         const v = parseFloat(String(t.value).replace(',', '.'));
-        store.set('crp', Number.isFinite(v) ? v / 100 : 0);
+        store.set('crp', Number.isFinite(v) ? v / 100 : null);
+        store.set('crpManual', Number.isFinite(v));
         renderPasos();
       } else if (t.id === 'dam-file' && t.files && t.files[0]) {
         const file = t.files[0];

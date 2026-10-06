@@ -131,6 +131,16 @@
       const i = parseImpliedErp(rows);
       if (i) return { kind: 'implied', file: fileName, data: i };
     }
+    // Betas por industria de Damodaran (betaemerg.xls, betaGlobal.xls…): para la beta de Damodaran (Paso a paso 7)
+    if (PF.pasos && PF.pasos.parseDamodaran) {
+      for (const rows of sheets) {
+        try {
+          return { kind: 'betas', file: fileName, data: { list: PF.pasos.parseDamodaran(rows) } };
+        } catch (e) {
+          /* otra hoja */
+        }
+      }
+    }
     return null;
   }
 

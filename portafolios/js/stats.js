@@ -981,13 +981,15 @@
     [-0.15, [236, 118, 42]], // naranja rojizo
     [-0.02, [247, 166, 60]], // naranja
     [0, [255, 222, 70]], // amarillo
-    [0.02, [184, 224, 100]], // verde amarillento
-    [0.15, [160, 214, 110]], // verde claro
-    [0.35, [96, 186, 98]], // verde
-    [0.6, [46, 140, 72]], // verde intenso
-    [1, [20, 92, 48]], // verde oscuro
+    [0.02, [196, 230, 110]], // verde muy claro
+    [0.15, [150, 212, 98]], // verde claro
+    [0.3, [100, 188, 84]], // verde medio
+    [0.45, [58, 160, 70]], // verde
+    [0.6, [30, 134, 60]], // verde intenso
+    [0.8, [14, 112, 50]], // verde fuerte
+    [1, [0, 96, 44]], // verde: correlación perfecta directa
   ];
-  const LK = { red: LK_STOPS[0][1], yellow: LK_STOPS[5][1], green: LK_STOPS[10][1], stops: LK_STOPS };
+  const LK = { red: LK_STOPS[0][1], yellow: LK_STOPS[5][1], green: LK_STOPS[LK_STOPS.length - 1][1], stops: LK_STOPS };
   const hexOf = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   function likert(r) {
     const x = Math.max(-1, Math.min(1, Number.isFinite(r) ? r : 0));
@@ -1003,7 +1005,7 @@
     return { color: hexOf(rgb), text: lum < 0.5 ? '#ffffff' : '#1d1d1f', label: LIKERT[lv].label, desc: LIKERT[lv].desc, point: 5 - lv };
   }
   /* Bandas para Excel (formato condicional por rangos, con el color del centro de cada banda). */
-  const LK_BANDS = [[-1, -0.6], [-0.6, -0.35], [-0.35, -0.15], [-0.15, -0.02], [-0.02, 0.02], [0.02, 0.15], [0.15, 0.35], [0.35, 0.6], [0.6, 1]].map(([a, b]) => {
+  const LK_BANDS = [[-1, -0.6], [-0.6, -0.35], [-0.35, -0.15], [-0.15, -0.02], [-0.02, 0.02], [0.02, 0.15], [0.15, 0.3], [0.3, 0.45], [0.45, 0.6], [0.6, 0.8], [0.8, 1]].map(([a, b]) => {
     const lk = likert(a === -1 ? -0.8 : b === 1 ? 0.8 : (a + b) / 2);
     return { from: a, to: b, color: lk.color, text: lk.text };
   });

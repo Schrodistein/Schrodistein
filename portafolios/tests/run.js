@@ -978,7 +978,7 @@ test('Escala de Likert de las correlaciones: rojizos negativos, amarillo 0, verd
   assert(L(-1).text === '#ffffff' && L(0).text === '#1d1d1f' && L(1).text === '#ffffff', 'texto legible');
   assert(L(0.9).label === 'Totalmente de acuerdo' && L(0).label === 'Ni de acuerdo ni en desacuerdo' && L(-0.9).label === 'Totalmente en desacuerdo' && L(0.4).point === 4);
   const x = new TextDecoder().decode(PF.xlsx.build([{ name: 'C', rows: [[1, 0.5], [0.5, 1]], colorScale: ['A1:B2'] }]));
-  assert(x.includes('<cfRule type="cellIs" dxfId="0"') && x.includes('<dxfs count="9">') && PF.stats.LK_BANDS.length === 9, 'bandas de color en el xlsx');
+  assert(x.includes('<cfRule type="cellIs" dxfId="0"') && x.includes('<dxfs count="11">') && PF.stats.LK_BANDS.length === 11, 'bandas de color en el xlsx');
 });
 
 test('Tasa libre de riesgo y primas: candidatas de renta fija, Fisher, PRP de Damodaran', () => {

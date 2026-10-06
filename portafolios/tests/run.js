@@ -979,7 +979,7 @@ test('Tasa libre de riesgo y primas: candidatas de renta fija, Fisher, PRP de Da
   assert(near(c[1].value, 0.09, 1e-6), 'COLIBR ' + c[1].value);
   assert(near(PF.riesgo.fisher(0.04, 0.05, 0.02), (1.04 * 1.05) / 1.02 - 1, 1e-12));
   const q = PF.riesgo.premiums({ tes10: 11, ust10: 4, picol: 5, pius: 2, erp: 4.5, embi: 250, ratio: 1.5 }, { rf: 0.09 });
-  assert(near(q.spread, 0.025, 1e-12) && near(q.prp, 0.0375, 1e-12) && near(q.rfLocal, 0.085, 1e-12) && near(q.em, 0.09 + 0.045 + 0.0375, 1e-12), JSON.stringify(q));
+  assert(near(q.spread, 0.025, 1e-12) && near(q.prp, 0.0375, 1e-12) && near(q.rfLocal, 0.085, 1e-12) && near(q.em, 0.085 + 0.045 + 0.0375, 1e-12), JSON.stringify(q));
   const q2 = PF.riesgo.premiums({ tes10: 11, ust10: 4, picol: 5, pius: 2 }, { volRatio: 2 });
   assert(near(q2.spread, 0.11 - PF.riesgo.fisher(0.04, 0.05, 0.02), 1e-12) && q2.ratio === 2 && q2.spreadSrc === 'TES');
 });
@@ -1012,6 +1012,24 @@ test('Tasas cero cupón TES del Banco de la República (CSV de suameca): seis se
   const c = PF.riesgo.rfCandidates(back);
   assert(back[0].ref && near(c[0].value, 0.133, 1e-12), JSON.stringify(c));
   assert(Object.keys(PF.tesBanrep.series).length === 6, 'semilla de TES');
+});
+
+test('Documentos para la tasa libre de riesgo y el riesgo país: FRED, EMBIG, Damodaran', () => {
+  const ust = PF.data.readText('observation_date,DGS10\n2026-08-19,4.65\n2026-08-20,\n2026-08-21,4.74\n', 'TES_EEUU.csv').series[0];
+  assert(ust.role === 'ust10' && ust.ref && ust.kind === 'tasa' && near(ust.prices[1], 0.0474, 1e-12) && ust.dates.length === 2, JSON.stringify(ust));
+  const ie = PF.data.readText('observation_date,T10YIE\n2026-08-20,2.34\n2026-08-21,2.34\n', 'x.csv').series[0];
+  assert(ie.role === 'infl-us' && near(ie.prices[0], 0.0234, 1e-12));
+  const em = PF.data.readText('"","PD04715XD"\n"","Tasas de interés: EMBIG (variación en pbs) - Spread - EMBIG Colombia (pbs)"\n29Ago25,282\n01Set25,282\n21Ago26,188\n', 'EMBG.csv').series[0];
+  assert(em.role === 'embi' && em.dates.join() === '2025-08-29,2025-09-01,2026-08-21' && near(em.prices[2], 0.0188, 1e-12), JSON.stringify(em));
+  // Ninguna de las tres es candidata a tasa libre de riesgo en pesos
+  assert(PF.riesgo.rfCandidates(PF.data.combineSeries([ust, ie, em]).map((x) => Object.assign(x, { dates: x.dates.concat(['2026-08-24']), rates: (x.rates || x.prices).concat([0.05]) }))).length === 0);
+  const ctry = [["Country","Moody's rating","Adj. Default Spread","Country Risk Premium","Equity Risk Premium","Corporate Tax Rate","Sovereignn CDS ","ERP based on sovereign CDSS"],["Australia","Aaa","0.00%","0.00%","4.23%","30.00%","0.05%","4.31%"],["Colombia","Baa3","1.87%","2.85%","7.08%","35.00%","3.20%","9.09%"]];
+  const c = PF.riesgo.readReference([ctry], 'ctryprem.xlsx');
+  assert(c.kind === 'ctryprem' && c.data.rating === 'Baa3' && near(c.data.crp, 0.0285, 1e-12) && near(c.data.mature, 0.0423, 1e-12) && near(c.data.ratio, 0.0285 / 0.0187, 1e-12) && near(c.data.tax, 0.35, 1e-12), JSON.stringify(c));
+  const impl = [['Date updated:', 'x'], ['Year', 'Earnings Yield', 'T.Bond Rate', 'Implied Premium (DDM)', 'Implied ERP (FCFE)'], [2024, 0.04, 0.0458, 0.0433, 0.0433], [2025, 0.039, 0.0418, 0.0423, 0.0423], ['', '']];
+  const i = PF.riesgo.readReference([impl], 'histimpl.xls');
+  assert(i.kind === 'implied' && i.data.year === 2025 && near(i.data.erp, 0.0423, 1e-12) && near(i.data.tbond, 0.0418, 1e-12), JSON.stringify(i));
+  assert(PF.data.roleFromName('TES cero cupón UVR 10 años') === 'tes-uvr-10' && PF.data.roleFromName('Tesoro de EE. UU. 10 años (DGS10)') === 'ust10');
 });
 
 Promise.all(pending).then(() => {

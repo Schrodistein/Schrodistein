@@ -35,6 +35,8 @@
     const out = [];
     for (const s of series || []) {
       if (!s || !s.dates || s.dates.length < 3) continue;
+      // Series en dólares o de inflación (Tesoro de EE. UU., T10YIE, EMBIG): no son tasas libres de riesgo en pesos
+      if (s.role && /^(ust|infl|embi)/.test(s.role)) continue;
       if (s.kind === 'tasa') {
         // Al pasar por la biblioteca, prices es el índice de rendimiento total y rates la tasa original
         const y = s.rates || s.prices;
@@ -76,6 +78,61 @@
     }
     return out.sort((a, b) => a.pri - b.pri || (a.dur || 0) - (b.dur || 0) || a.name.localeCompare(b.name));
   }
+  /* ---------- Documentos de Damodaran (no son series diarias: datos de referencia) ---------- */
+  const pctNum = (v) => {
+    if (typeof v === 'number') return v;
+    const t = String(v == null ? '' : v).trim();
+    if (!t || /^n\/?a$/i.test(t)) return NaN;
+    const x = parseFloat(t.replace('%', '').replace(',', '.'));
+    return /%/.test(t) ? x / 100 : x;
+  };
+  /* «Country Default Spreads and Risk Premiums» (ctryprem): fila de un país y la prima madura implícita. */
+  function parseCountryRisk(rows, country) {
+    const low = (x) => String(x == null ? '' : x).toLowerCase().trim();
+    const hr = rows.findIndex((r) => r && r.some((c) => low(c) === 'country') && r.some((c) => /country risk premium/i.test(String(c))));
+    if (hr < 0) return null;
+    const h = rows[hr].map(low);
+    const col = (re) => h.findIndex((x) => re.test(x));
+    const ci = { country: col(/^country$/), rating: col(/rating/), spread: col(/default spread/), crp: col(/country risk premium/), erp: col(/^equity risk premium/), tax: col(/tax/), cds: col(/^sovereign+ cds/), erpCds: col(/erp based on/) };
+    const want = country || 'Colombia';
+    const row = rows.slice(hr + 1).find((r) => r && low(r[ci.country]) === want.toLowerCase());
+    if (!row) return null;
+    const g = (k) => (ci[k] >= 0 ? pctNum(row[ci[k]]) : NaN);
+    const out = { country: want, rating: ci.rating >= 0 ? String(row[ci.rating]).trim() : '', spread: g('spread'), crp: g('crp'), erp: g('erp'), tax: g('tax'), cds: g('cds'), erpCds: g('erpCds') };
+    // Prima de un mercado maduro: la de un país Aaa (CRP = 0), o ERP − CRP de Colombia
+    const aaa = rows.slice(hr + 1).find((r) => r && /^aaa$/i.test(String(r[ci.rating]).trim()) && pctNum(r[ci.crp]) === 0);
+    out.mature = aaa ? pctNum(aaa[ci.erp]) : out.erp - out.crp;
+    out.ratio = out.spread > 0 ? out.crp / out.spread : NaN; // σ acciones / σ bonos que usa Damodaran
+    return out;
+  }
+  /* «Implied ERP» (histimpl): prima implícita del S&P 500 por año (FCFE) y la tasa del Tesoro. */
+  function parseImpliedErp(rows) {
+    const hr = rows.findIndex((r) => r && /^year$/i.test(String(r[0]).trim()) && r.some((c) => /implied (erp|premium)/i.test(String(c))));
+    if (hr < 0) return null;
+    const h = rows[hr].map((x) => String(x).toLowerCase());
+    const ci = h.findIndex((x) => /^implied erp \(fcfe\)$/.test(x.trim()));
+    const ddm = h.findIndex((x) => /implied premium \(ddm\)/.test(x));
+    const tb = h.findIndex((x) => /t\.?bond rate/.test(x));
+    const k = ci >= 0 ? ci : ddm;
+    const series = rows
+      .slice(hr + 1)
+      .filter((r) => r && Number.isInteger(+r[0]) && +r[0] > 1900 && fin(+r[k]) && r[k] !== '')
+      .map((r) => ({ year: +r[0], erp: +r[k], tbond: tb >= 0 ? +r[tb] : NaN }));
+    if (!series.length) return null;
+    const last = series[series.length - 1];
+    return { year: last.year, erp: last.erp, tbond: last.tbond, method: ci >= 0 ? 'FCFE (dividendos + recompras)' : 'DDM', series };
+  }
+  /* Busca en las hojas de un libro un documento de referencia de Damodaran. */
+  function readReference(sheets, fileName) {
+    for (const rows of sheets) {
+      const c = parseCountryRisk(rows);
+      if (c) return { kind: 'ctryprem', file: fileName, data: c };
+      const i = parseImpliedErp(rows);
+      if (i) return { kind: 'implied', file: fileName, data: i };
+    }
+    return null;
+  }
+
   /* rf en pesos a partir de la tasa en dólares (paridad de Fisher). */
   const fisher = (rUsd, piCol, piUs) => ((1 + rUsd) * (1 + piCol)) / (1 + piUs) - 1;
   /* rf de Damodaran: tasa del bono local menos el diferencial por riesgo de impago del país. */
@@ -101,8 +158,10 @@
     const prp = fin(spread) ? spread * ratio : NaN;
     const rfLocal = fin(tes10) && fin(spread) ? damodaranRf(tes10, spread) : NaN;
     const rf = ctx && fin(ctx.rf) ? ctx.rf : NaN;
-    const em = fin(rf) && fin(erpM) ? rf + erpM + (fin(prp) ? prp : 0) : NaN;
-    return { tes10, ust10, picol, pius, erpM, embi, ratio, ratioFromData: !fin(ratioIn) && ctx && fin(ctx.volRatio), rfUsdInCop, implicit, spread, spreadSrc: fin(embi) ? 'EMBI' : fin(implicit) ? 'TES' : '', prp, rfLocal, em };
+    // E(Rm) en pesos (Damodaran): sobre la rf local sin riesgo de impago si se conoce; si no, la rf en uso
+    const rfBase = fin(rfLocal) ? rfLocal : rf;
+    const em = fin(rfBase) && fin(erpM) ? rfBase + erpM + (fin(prp) ? prp : 0) : NaN;
+    return { rfBase, rfBaseSrc: fin(rfLocal) ? 'local' : 'uso', tes10, ust10, picol, pius, erpM, embi, ratio, ratioFromData: !fin(ratioIn) && ctx && fin(ctx.volRatio), rfUsdInCop, implicit, spread, spreadSrc: fin(embi) ? 'EMBI' : fin(implicit) ? 'TES' : '', prp, rfLocal, em };
   }
 
   /* ---------- Paso a paso: secciones 15 a 18 ---------- */
@@ -283,19 +342,55 @@
     return out.join('');
   }
 
+  /* Datos que entran al cálculo, con su fuente y fecha. */
+  const LABELS = {
+    tes10: ['TES en pesos a 10 años (cero cupón)', '%'],
+    ust10: ['Tesoro de EE. UU. a 10 años', '%'],
+    picol: ['Inflación esperada de Colombia', '%'],
+    pius: ['Inflación esperada de EE. UU.', '%'],
+    embi: ['EMBIG Colombia (riesgo país)', 'pb'],
+    ratio: ['σ acciones / σ bonos', 'veces'],
+    erp: ['Prima de un mercado maduro (PRM)', '%'],
+  };
+  function sourcesHTML(ctx, pa) {
+    const { esc } = ctx;
+    const nf = (x, d) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
+    const rows = Object.keys(LABELS).map((k) => {
+      const u = pa.used && pa.used[k];
+      const [lab, unit] = LABELS[k];
+      return `<tr><td>${lab}</td><td class="n"><b>${u ? nf(u.v, unit === 'pb' ? 0 : 2) + ' ' + unit : '—'}</b></td><td>${u ? esc(u.from) : '<span class="neg">Falta: carga el archivo o escríbelo arriba</span>'}</td><td>${u && u.date ? esc(u.date) : ''}</td></tr>`;
+    });
+    return `<h3>Datos usados</h3><div class="table-scroll"><table class="data wrap"><thead><tr><th>Dato</th><th class="n">Valor</th><th>Fuente</th><th>Fecha</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+  }
+  /* Comparación con la tabla de Damodaran (prima por calificación y por CDS). */
+  function damodaranHTML(ctx, D, q) {
+    const c = D && D.ctryprem;
+    if (!c) return '';
+    const { pct, esc } = ctx;
+    return `<h3>Comparación con Damodaran (${esc(c.file || 'ctryprem')})</h3>
+      <div class="table-scroll"><table class="data wrap"><thead><tr><th>Medida</th><th class="n">Damodaran</th><th class="n">Con tus datos</th><th>Cómo se obtiene</th></tr></thead><tbody>
+        <tr><td>Calificación de Moody's</td><td class="n">${esc(c.rating)}</td><td class="n">—</td><td>Riesgo de impago del Estado colombiano según la calificadora.</td></tr>
+        <tr><td>Diferencial por impago</td><td class="n">${pct(c.spread, 2)}</td><td class="n">${pct(q.spread, 2)}</td><td>Damodaran: diferencial típico de los países con la misma calificación. Tus datos: ${q.spreadSrc === 'EMBI' ? 'EMBIG Colombia (J.P. Morgan)' : 'TES 10 años menos el Tesoro llevado a pesos'}.</td></tr>
+        <tr><td>Prima por riesgo país (PRP)</td><td class="n"><b>${pct(c.crp, 2)}</b></td><td class="n"><b>${pct(q.prp, 2)}</b></td><td>Diferencial × σ acciones / σ bonos.</td></tr>
+        <tr><td>Prima total de Colombia (PRM + PRP)</td><td class="n">${pct(c.erp, 2)}</td><td class="n">${pct(fin(q.erpM) && fin(q.prp) ? q.erpM + q.prp : NaN, 2)}</td><td>Prima de un mercado maduro más la prima por riesgo país.</td></tr>
+        <tr><td>CDS soberano y prima total con CDS</td><td class="n">${pct(c.cds, 2)} · ${pct(c.erpCds, 2)}</td><td class="n">—</td><td>Otra medida del riesgo de impago: el costo de asegurar la deuda de Colombia.</td></tr>
+        <tr><td>Tasa de impuestos de las sociedades</td><td class="n">${pct(c.tax, 0)}</td><td class="n">—</td><td>La <code>t</code> de la beta de Damodaran, <code>βL = βU [1 + (1 − t) D/E]</code>.</td></tr>
+      </tbody></table></div>`;
+  }
+
   /* Tabla de cálculo de las primas (se usa en Datos → Renta fija y en Paso a paso). */
   function premiumHTML(ctx, q) {
     const { pct } = ctx;
     const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
     const row = (a, b, c) => `<tr><td>${a}</td><td><code>${b}</code></td><td class="n"><b>${c}</b></td></tr>`;
-    return `<div class="table-scroll"><table class="data"><thead><tr><th>Paso</th><th>Fórmula</th><th class="n">Resultado</th></tr></thead><tbody>
+    return `<h3>Cálculo</h3><div class="table-scroll"><table class="data wrap"><thead><tr><th>Paso</th><th>Fórmula</th><th class="n">Resultado</th></tr></thead><tbody>
       ${row('1. Tasa libre de riesgo en dólares llevada a pesos (paridad de Fisher)', '(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1', pct(q.rfUsdInCop, 2))}
       ${row('2. Diferencial implícito del TES de 10 años', 'TIR TES 10 años − paso 1', pct(q.implicit, 2))}
       ${row('3. Diferencial por riesgo de impago (default spread)', fin(q.embi) ? 'EMBI de Colombia (pb) / 10.000' : 'si no hay EMBI, el del paso 2', pct(q.spread, 2))}
       ${row('4. Volatilidad relativa acciones / bonos', 'σ ' + 'acciones / σ bonos' + (q.ratioFromData ? ' (con tus datos)' : ''), nf(q.ratio, 2) + ' veces')}
       ${row('5. <b>Prima por riesgo país (PRP)</b>', 'diferencial × σ acciones / σ bonos', pct(q.prp, 2))}
       ${row('6. Tasa libre de riesgo local sin riesgo de impago (Damodaran)', 'TIR TES 10 años − diferencial', pct(q.rfLocal, 2))}
-      ${row('7. <b>Rendimiento esperado del mercado</b>', 'rf + PRM madura + PRP', pct(q.em, 2))}
+      ${row('7. <b>Rendimiento esperado del mercado (β = 1)</b>', (q.rfBaseSrc === 'local' ? 'rf local (paso 6)' : 'rf en uso') + ' + PRM madura + PRP', pct(q.em, 2))}
     </tbody></table></div>`;
   }
 
@@ -352,7 +447,8 @@
 
   function premiumSection(ctx, nf) {
     const { m, esc, pct } = ctx;
-    const q = premiums(ctx.prp, { rf: m.rf, volRatio: ctx.volRatio });
+    const pa = ctx.prpAll || { inp: {}, used: {} };
+    const q = premiums(pa.inp, { rf: m.rf, volRatio: pa.inp.ratio });
     const hist = m.mktHist - m.rf;
     return `<div class="panel" id="paso-primas"><h2>18. Prima de riesgo del mercado y prima por riesgo país</h2>
       <p><b>Prima de riesgo del mercado (PRM)</b>: <code>E(Rm) − rf</code>, lo que se exige por invertir en acciones en lugar de en el activo sin riesgo. Es la pendiente de la línea del mercado de valores y lo que multiplica la β en el CAPM. <b>Prima por riesgo país (PRP)</b>: lo que se exige además por invertir en Colombia y no en un mercado maduro (Estados Unidos): riesgo de impago del Estado, inestabilidad fiscal o política, convertibilidad de la moneda. Con las dos, el costo del patrimonio de una acción colombiana es</p>
@@ -372,10 +468,12 @@
         <li><b>Implícito en los TES</b>: la TIR del TES a 10 años en pesos menos la tasa del Tesoro de EE. UU. llevada a pesos con la diferencia de inflaciones (Fisher). Es lo que la tabla de abajo calcula si no hay EMBI.</li>
       </ol>
       <p>El diferencial de bonos mide el riesgo de impago, pero las acciones son más riesgosas que los bonos, así que Damodaran lo escala con la volatilidad relativa: <code>PRP = diferencial × σ acciones / σ bonos</code>${fin(ctx.volRatio) ? `. Con tus datos, σ del ${esc(m.marketName)} / σ del índice COLTES = <b>${nf(ctx.volRatio, 2)}</b>` : ''}. La misma lógica da la <b>tasa libre de riesgo local</b>: el TES no está libre de riesgo de impago, por eso <code>rf = TIR TES − diferencial</code>.</p>
+      ${sourcesHTML(ctx, pa)}
       ${premiumHTML(ctx, q)}
-      <p class="hint">Los datos se escriben en Datos → Renta fija → «Prima de riesgo y riesgo país». La PRP calculada se usa en la beta de Damodaran (sección 7) y el rendimiento esperado del mercado se puede pasar a Supuestos.</p>
+      ${damodaranHTML(ctx, ctx.damRef, q)}
+      <p class="hint">Los datos salen de los archivos cargados en Datos → Renta fija (o se escriben ahí). La PRP calculada se usa en la beta de Damodaran (sección 7) y el rendimiento esperado del mercado se puede pasar a Supuestos.</p>
     </div>`;
   }
 
-  PF.riesgo = { render, premiums, premiumHTML, rfCandidates, annualFrom, fisher, damodaranRf, dailyLog, FAMILY };
+  PF.riesgo = { render, premiums, premiumHTML, sourcesHTML, damodaranHTML, rfCandidates, parseCountryRisk, parseImpliedErp, readReference, annualFrom, fisher, damodaranRf, dailyLog, FAMILY };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

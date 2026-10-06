@@ -388,6 +388,9 @@
       } catch (e) {
         throw new Error(`«${f.name}» no se pudo abrir como Excel (${e.message}).`);
       }
+      // Documentos de Damodaran (prima por país, prima implícita): datos de referencia, no series de precios
+      const ref = PF.riesgo.readReference(wb.SheetNames.map((n) => X.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: '' })), f.name);
+      if (ref) return { reference: ref };
       const prices = [];
       const rets = [];
       let lastErr = null;
@@ -423,6 +426,19 @@
       files.map((f) => seriesFromFile(f).then((r) => r, (e) => ({ error: e.message || String(e), name: f.name })))
     );
     const errors = results.filter((r) => r.error);
+    // Documentos de referencia (Damodaran): se guardan para las primas de riesgo
+    const refs = results.filter((r) => r.reference).map((r) => r.reference);
+    if (refs.length) {
+      const all = store.get('damRef') || {};
+      for (const r of refs) all[r.kind] = Object.assign({ file: r.file, loaded: new Date().toISOString().slice(0, 10) }, r.data, { series: undefined });
+      store.set('damRef', all);
+    }
+    const refText = refs.map((r) => (r.kind === 'ctryprem' ? `«${r.file}»: ${r.data.country} (${r.data.rating}), diferencial ${pct(r.data.spread, 2)}, prima país ${pct(r.data.crp, 2)}, prima total ${pct(r.data.erp, 2)}, prima madura ${pct(r.data.mature, 2)}` : `«${r.file}»: prima implícita del S&P 500 ${r.data.year} = ${pct(r.data.erp, 2)} (${r.data.method})`)).join('; ');
+    if (refs.length && results.every((r) => r.reference || r.error)) {
+      status(`Documentos de Damodaran leídos: ${refText}. Se usan en Datos → Renta fija → Prima de riesgo y riesgo país.${errors.length ? ' No se pudieron leer: ' + errors.map((e) => e.error).join(' ') : ''}`, errors.length ? 'warn' : 'ok');
+      if (st.screen === 'datos') renderRf();
+      return;
+    }
     const tables = results.filter((r) => r.table != null);
     const series = results.filter((r) => r.series).flatMap((r) => r.series);
     const errText = errors.map((e) => e.error).join(' ');
@@ -449,7 +465,7 @@
     const usable = libSeries();
     // Solo curvas de referencia (tasas cero cupón de TES): quedan para la tasa libre de riesgo
     if (combined.every((x) => x.ref)) {
-      status(`Tasas de referencia guardadas en la biblioteca: ${combined.map((x) => `${x.name} (${x.dates[0]} a ${x.dates[x.dates.length - 1]})`).join('; ')}. Se usan en Datos → Renta fija para la tasa libre de riesgo y la prima por riesgo país; no entran al portafolio.${allErr ? ' No se pudieron leer: ' + allErr : ''}`, 'ok');
+      status(`Series de referencia guardadas en la biblioteca: ${combined.map((x) => `${x.name} (${x.dates[0]} a ${x.dates[x.dates.length - 1]})`).join('; ')}${refText ? '. ' + refText : ''}. Se usan en Datos → Renta fija para la tasa libre de riesgo y la prima por riesgo país; no entran al portafolio.${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
       if (st.screen === 'datos') renderRf();
       return;
     }
@@ -586,7 +602,57 @@
   };
   // Tasa del TES en pesos más cercana a 10 años (no UVR: esa es tasa real)
   const tes10Of = (list) => list.filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name) && !/uvr/i.test(s.name)).sort((a, b) => Math.abs((a.dur || 0) - 10) - Math.abs((b.dur || 0) - 10))[0];
+  /* Datos para las primas: los de los archivos de referencia (con su fuente y fecha, hasta la fecha de
+   * corte) y, encima, lo que el usuario escriba. inp en % (embi en pb, ratio en veces). */
+  function prpAuto() {
+    const refs = libRefSeries();
+    const last = (role) => {
+      const x = refs.find((r) => r.role === role);
+      if (!x) return null;
+      const y = x.rates || x.prices;
+      return { v: y[y.length - 1], date: x.dates[x.dates.length - 1], name: x.name };
+    };
+    const auto = {};
+    const put = (k, v, from, date) => Number.isFinite(v) && (auto[k] = { v, from, date });
+    const t10 = last('tes-cop-10') || (() => {
+      const t = tes10Of(libSeries().concat(refs));
+      return t ? { v: (t.rates || t.prices).at(-1), date: t.dates.at(-1), name: t.name } : null;
+    })();
+    if (t10) put('tes10', t10.v * 100, t10.name, t10.date);
+    const u10 = last('ust10');
+    if (u10) put('ust10', u10.v * 100, u10.name, u10.date);
+    const ie = last('infl-us');
+    if (ie) put('pius', ie.v * 100, ie.name, ie.date);
+    const uvr = last('tes-uvr-10');
+    if (t10 && uvr) put('picol', ((1 + t10.v) / (1 + uvr.v) - 1) * 100, 'Inflación implícita en los TES: (1 + TES pesos 10 años) / (1 + TES UVR 10 años) − 1', uvr.date);
+    else if (Number.isFinite(lastInflation())) put('picol', lastInflation() * 100, 'Última inflación anual (Banco de la República)', '');
+    const em = last('embi');
+    if (em) put('embi', em.v * 1e4, em.name, em.date);
+    const D = store.get('damRef') || {};
+    if (D.implied && Number.isFinite(D.implied.erp)) put('erp', D.implied.erp * 100, `Damodaran, prima implícita del S&P 500 (${D.implied.year}, ${D.implied.file})`, String(D.implied.year));
+    else if (D.ctryprem && Number.isFinite(D.ctryprem.mature)) put('erp', D.ctryprem.mature * 100, `Damodaran, prima de un mercado maduro (${D.ctryprem.file})`, D.ctryprem.loaded);
+    if (D.ctryprem && Number.isFinite(D.ctryprem.ratio)) put('ratio', D.ctryprem.ratio, `Damodaran: prima país / diferencial de ${D.ctryprem.country} (${pct(D.ctryprem.crp, 2)} / ${pct(D.ctryprem.spread, 2)})`, D.ctryprem.loaded);
+    else if (Number.isFinite(volRatio())) put('ratio', volRatio(), 'Tus datos: σ del MSCI COLCAP / σ del COLTES', '');
+    const user = store.get('prp') || {};
+    const inp = {};
+    const used = {};
+    for (const k of ['tes10', 'ust10', 'picol', 'pius', 'embi', 'ratio', 'erp']) {
+      if (user[k] != null && user[k] !== '' && Number.isFinite(+user[k])) {
+        inp[k] = +user[k];
+        used[k] = { v: +user[k], from: 'Escrito por ti', date: '' };
+      } else if (auto[k]) {
+        inp[k] = auto[k].v;
+        used[k] = auto[k];
+      }
+    }
+    return { inp, auto, used };
+  }
   function setRf(v) {
+    // Una tasa absurda (p. ej. un índice leído como tasa) nunca se aplica
+    if (!(+v > -5 && +v < 50)) {
+      showBanner(`La tasa ${String(v).replace('.', ',')} % no es una tasa libre de riesgo válida (debe estar entre −5 % y 50 % efectivo anual). Revisa el archivo de origen.`);
+      return;
+    }
     $('rf').value = v;
     compute();
   }
@@ -598,27 +664,26 @@
     const c = PF.riesgo.rfCandidates(list);
     const use = (x) => (Number.isFinite(x) ? `<button type="button" class="btn btn-ghost" data-use-rf="${(Math.round(x * 10000) / 100).toFixed(2)}">Usar ${pct(x, 2)}</button>` : '');
     $('rf-cands').innerHTML = c.length
-      ? `<div class="table-scroll"><table class="data"><thead><tr><th>Instrumento</th><th>Tipo</th><th>Plazo</th><th class="n">Último año / último dato</th><th class="n">Promedio (ventana o 20 ruedas)</th><th>Fecha</th><th>Cómo se usa</th><th></th></tr></thead><tbody>${c
+      ? `<div class="table-scroll"><table class="data wrap rf-cands"><thead><tr><th>Instrumento</th><th>Tipo</th><th>Plazo</th><th class="n">Último dato</th><th class="n">Promedio</th><th>Fecha</th><th>Cómo se usa</th><th></th></tr></thead><tbody>${c
           .map((x) => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.tipo)}</td><td>${esc(x.plazo)}</td><td class="n">${pct(x.value, 2)}</td><td class="n">${pct(x.avg, 2)}</td><td>${esc(x.date || '')}</td><td class="sub">${esc(x.note)}</td><td>${use(x.value)}</td></tr>`)
           .join('')}</tbody></table></div><p class="hint">Los índices COLTES y COLIBR son de rendimiento total: su cifra es lo que <i>rindió</i> mantenerlos (efectivo anual, base 365 días), no la tasa a la que se negocian hoy. La TIR de un TES sí es la tasa de hoy. Para un análisis a un año, la referencia es el COLIBR o la TIR del TES de 1 año; para valorar acciones a largo plazo, la TIR del TES de 10 años menos el diferencial por riesgo de impago (abajo).</p>`
       : '<p class="hint">Todavía no hay renta fija en la biblioteca. Sube el COLIBR, los COLTES (CP, LP, UVR) o las tasas de los TES con el botón de arriba.</p>';
-    // Primas
-    const inp = Object.assign({}, store.get('prp') || {});
-    const tes = tes10Of(list);
-    const infl = lastInflation();
+    // Primas: datos tomados de los archivos cargados (o escritos por el usuario)
+    const pa = prpAuto();
+    const rfOk = Number.isFinite(rfNow) && rfNow > -0.05 && rfNow < 0.5;
     document.querySelectorAll('#prp-form [data-prp]').forEach((el) => {
       const k = el.getAttribute('data-prp');
-      if (document.activeElement !== el) el.value = inp[k] != null ? inp[k] : '';
-      if (k === 'tes10' && tes) el.placeholder = `${((tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100).toFixed(2)} (${tes.name})`;
-      if (k === 'picol' && Number.isFinite(infl)) el.placeholder = `${(infl * 100).toFixed(2)} (última inflación)`;
+      const u = (store.get('prp') || {})[k];
+      if (document.activeElement !== el) el.value = u != null ? u : '';
+      const a = pa.auto[k];
+      el.placeholder = a ? `${String(+a.v.toFixed(k === 'embi' ? 0 : 2)).replace('.', ',')} (del archivo)` : '';
+      el.title = a ? `${a.from}${a.date ? ', ' + a.date : ''}` : '';
     });
-    if ((inp.tes10 == null || inp.tes10 === '') && tes) inp.tes10 = (tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100;
-    if ((inp.picol == null || inp.picol === '') && Number.isFinite(infl)) inp.picol = infl * 100;
-    const vr = volRatio();
-    if (Number.isFinite(vr)) $('prp-ratio').placeholder = vr.toFixed(2) + ' (con tus datos)';
-    const q = PF.riesgo.premiums(inp, { rf: rfNow, volRatio: vr });
-    $('prp-out').innerHTML = PF.riesgo.premiumHTML({ pct, esc }, q);
+    const q = PF.riesgo.premiums(pa.inp, { rf: rfOk ? rfNow : NaN, volRatio: pa.inp.ratio });
+    $('prp-out').innerHTML = PF.riesgo.sourcesHTML({ pct, esc }, pa) + PF.riesgo.premiumHTML({ pct, esc }, q) + PF.riesgo.damodaranHTML({ pct, esc }, store.get('damRef'), q);
+    const dr = (store.get('damRef') || {}).ctryprem;
     $('prp-btns').innerHTML = [
+      dr && Number.isFinite(dr.crp) ? `<button type="button" class="btn" data-use-prp="${(dr.crp * 100).toFixed(2)}">Usar PRP de Damodaran ${pct(dr.crp, 2)}</button>` : '',
       Number.isFinite(q.prp) ? `<button type="button" class="btn" data-use-prp="${(q.prp * 100).toFixed(2)}">Usar PRP ${pct(q.prp, 2)} en la beta de Damodaran</button>` : '',
       Number.isFinite(q.rfLocal) ? `<button type="button" class="btn" data-use-rf="${(q.rfLocal * 100).toFixed(2)}">Usar rf local ${pct(q.rfLocal, 2)} como tasa libre de riesgo</button>` : '',
       Number.isFinite(q.em) ? `<button type="button" class="btn btn-primary" data-use-em="${(q.em * 100).toFixed(2)}">Usar E(Rm) = ${pct(q.em, 2)} en Supuestos</button>` : '',
@@ -1663,14 +1728,8 @@
       tb: st.model ? PF.model.treynorBlack(st.model) : null,
       inflation: lastInflation(),
       macroRel: st.model ? PF.macro.relateAll(marketSeries(), macroData()) : {},
-      prp: Object.assign({}, store.get('prp') || {}, (() => {
-        const o = {};
-        const p = store.get('prp') || {};
-        const tes = tes10Of(libSeries().concat(libRefSeries()));
-        if ((p.tes10 == null || p.tes10 === '') && tes) o.tes10 = (tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100;
-        if ((p.picol == null || p.picol === '') && Number.isFinite(lastInflation())) o.picol = lastInflation() * 100;
-        return o;
-      })()),
+      prpAll: prpAuto(),
+      damRef: store.get('damRef') || null,
       volRatio: volRatio(),
       shares: store.get('shares') || {},
       deCalc: store.get('deCalc') || {},

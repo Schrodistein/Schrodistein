@@ -596,7 +596,10 @@
         Object.assign(s, { kind: 'tasa', cls: 'tes', rank: 3, dur: y ? parseFloat(y[1].replace(',', '.')) : DEFAULT_DUR.tes });
         if (/uvr/i.test(nm)) s.real = true;
         // Curva del Banco de la República: referencia para la tasa libre de riesgo, no un título que se compre
-        if (/cero cup/i.test(nm)) s.ref = true;
+        if (/cero cup/i.test(nm)) {
+          s.ref = true;
+          s.role = `tes-${/uvr/i.test(nm) ? 'uvr' : 'cop'}-${s.dur}`;
+        }
       } else Object.assign(s, { rank: 3, cls: classify(nm) });
       out.push(s);
     }
@@ -604,7 +607,56 @@
     return out;
   }
 
+  /* Series de referencia para las primas de riesgo (no se compran; no entran al portafolio):
+   *   FRED: «observation_date, DGS10» (Tesoro de EE. UU.) o «T10YIE» (inflación implícita en los bonos)
+   *   BCRPData (Banco Central de Reserva del Perú): EMBIG Colombia en puntos básicos, fechas «22Ago23», «01Set23»
+   * Todas se guardan como tasa en decimal (el EMBI: pb / 10.000). */
+  const FRED = {
+    dgs: (n) => ({ name: `Tesoro de EE. UU. ${n} años (DGS${n})`, role: n === '10' ? 'ust10' : 'ust' + n, dur: +n }),
+    t10yie: () => ({ name: 'Inflación implícita EE. UU. 10 años (T10YIE)', role: 'infl-us', dur: 10 }),
+    t5yie: () => ({ name: 'Inflación implícita EE. UU. 5 años (T5YIE)', role: 'infl-us5', dur: 5 }),
+  };
+  const MES = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, jan: 1, apr: 4, aug: 8, dec: 12 };
+  function referenceSeries(rows, fileName) {
+    const r0 = (rows[0] || []).map(clean);
+    let meta = null;
+    let start = 1;
+    let scale = 0.01;
+    if (/^observation_?date$/i.test(r0[0] || '') && r0[1]) {
+      const c = r0[1].toUpperCase();
+      const m = c.match(/^DGS(\d+)$/);
+      meta = m ? FRED.dgs(m[1]) : c === 'T10YIE' ? FRED.t10yie() : c === 'T5YIE' ? FRED.t5yie() : null;
+      if (meta) meta.column = 'FRED ' + c;
+    } else {
+      const head = rows.slice(0, 4).map((r) => (r || []).map(clean).join(' ')).join(' ');
+      if (/embi/i.test(head)) {
+        meta = { name: 'EMBIG Colombia (riesgo país, pb)', role: 'embi', dur: 10, column: 'BCRPData (Banco Central de Reserva del Perú, con datos de J.P. Morgan) · EMBIG Colombia (pbs)' };
+        scale = 1e-4;
+        start = rows.findIndex((r) => r && /^\d{1,2}[a-z]{3}\d{2,4}$/i.test(clean(r[0])));
+        if (start < 0) return null;
+      }
+    }
+    if (!meta) return null;
+    const pts = [];
+    for (const r of rows.slice(start)) {
+      if (!r) continue;
+      const t = clean(r[0]);
+      let d = null;
+      let m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) d = `${m[1]}-${m[2]}-${m[3]}`;
+      else if ((m = t.match(/^(\d{1,2})([a-z]{3})(\d{2,4})$/i)) && MES[m[2].toLowerCase()]) d = `${m[3].length === 2 ? '20' + m[3] : m[3]}-${String(MES[m[2].toLowerCase()]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      else d = cellDate(r[0]);
+      const v = typeof r[1] === 'number' ? r[1] : parseNumber(clean(r[1]), /,\d+$/.test(clean(r[1])) && !/\./.test(clean(r[1])));
+      if (d && Number.isFinite(v)) pts.push([d, v * scale]);
+    }
+    const s = finishSeries(pts, meta.name, meta.column);
+    if (!s) throw new Error(`«${fileName}» no tiene fechas y valores.`);
+    return [Object.assign(s, { kind: 'tasa', cls: 'bono', ref: true, role: meta.role, dur: meta.dur, rank: 3 })];
+  }
+
   function readRows(rows, fileName) {
+    const rs = referenceSeries(rows, fileName);
+    if (rs) return { series: rs, layout: 'referencia', returnsLike: false };
     const br = banrepSeries(rows, fileName);
     if (br) return { series: br, layout: 'banrep', returnsLike: false };
     if (findHeader(rows)) return { series: seriesFromRows(rows, fileName), layout: 'largo', returnsLike: false };
@@ -659,11 +711,21 @@
       .replace(/[\s_]+/g, ' ')
       .trim();
 
+  // Papel de una serie de referencia según su nombre (para las guardadas antes de tener «role»)
+  function roleFromName(n) {
+    const m = String(n).match(/cero cup[oó]n (pesos|uvr) (\d+) a/i);
+    if (m) return `tes-${m[1].toLowerCase() === 'uvr' ? 'uvr' : 'cop'}-${m[2]}`;
+    if (/\(DGS(\d+)\)/.test(n)) return RegExp.$1 === '10' ? 'ust10' : 'ust' + RegExp.$1;
+    if (/T10YIE/.test(n)) return 'infl-us';
+    if (/T5YIE/.test(n)) return 'infl-us5';
+    if (/embi/i.test(n)) return 'embi';
+    return null;
+  }
   function combineSeries(list) {
     const by = new Map();
     for (const s of list) {
       const k = assetKey(s.name);
-      if (!by.has(k)) by.set(k, { name: cleanName(s.name), column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur, ref: !!s.ref });
+      if (!by.has(k)) by.set(k, { name: cleanName(s.name), column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur, ref: !!s.ref || !!roleFromName(s.name), role: s.role || roleFromName(s.name) });
       const g = by.get(k);
       g.parts++;
       g.noTrade += s.noTrade || 0;
@@ -678,6 +740,7 @@
       const f = finishSeries(g.pts, g.name, g.column);
       const out = Object.assign(f, { parts: g.parts, noTrade: g.noTrade, cls: g.cls || classify(g.name) });
       if (g.ref) out.ref = true;
+      if (g.role) out.role = g.role;
       if (g.kind !== 'tasa') return out;
       const dur = g.dur || DEFAULT_DUR[out.cls] || DEFAULT_DUR.bono;
       const rates = f.prices;
@@ -930,6 +993,6 @@
 
   Object.assign(PF, {
     stats: { likert, LIKERT, LK, sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { roleFromName, splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

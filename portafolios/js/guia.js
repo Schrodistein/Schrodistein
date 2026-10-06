@@ -211,6 +211,8 @@
       <div class="panel"><h2>Referencias</h2><ul class="refs">
         <li>Chen, N.-F., Roll, R. y Ross, S. A. (1986). Economic forces and the stock market. <i>Journal of Business, 59</i>(3), 383-403.</li>
         <li>Damodaran, A. (2003). Country risk and company exposure: Theory and practice. <i>Journal of Applied Finance, 13</i>(2), 63-76.</li>
+        <li>Damodaran, A. (2008). <i>What is the riskfree rate? A search for the basic building block</i>. Documento de trabajo, Stern School of Business, New York University.</li>
+        <li>Damodaran, A. (2025). <i>Equity risk premiums (ERP): Determinants, estimation, and implications – The 2025 edition</i>. SSRN.</li>
         <li>Evans, J. L. y Archer, S. H. (1968). Diversification and the reduction of dispersion: An empirical analysis. <i>Journal of Finance, 23</i>(5), 761-767.</li>
         <li>Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. <i>Journal of Finance, 25</i>(2), 383-417.</li>
         <li>Fisher, I. (1930). <i>The theory of interest</i>. Macmillan.</li>

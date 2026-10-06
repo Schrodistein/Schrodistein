@@ -217,6 +217,9 @@
         <tr><td><b>COLTES LP</b></td><td>TES tasa fija en pesos de más de 5 años.</td><td>bvc.com.co → Índices → Renta fija → COLTES LP</td><td>Índice de referencia del segmento de renta fija (β de TES y bonos) y σ de los bonos para la prima por riesgo país.</td></tr>
         <tr><td><b>COLTES UVR</b></td><td>TES denominados en UVR (indexados a la inflación).</td><td>bvc.com.co → Índices → Renta fija → COLTES UVR</td><td>Tasa libre de riesgo real.</td></tr>
         <tr><td><b>Tasas cero cupón TES en pesos a 1 y a 10 años</b></td><td>Tasa de los TES a plazo fijo, de la curva que estima el Banco de la República con el modelo de Nelson y Siegel. En la BVC no hay un «TES a 1 año» ni «a 10 años»: cada referencia vence en una fecha fija y la mayoría de los TES se negocia en el SEN del Banco de la República.</td><td>suameca.banrep.gov.co → Deuda pública → «Tasas cero cupón TES» → descargar en Excel (graficador de series). No sirve el «BID-ASK Spread TES», que es una medida de liquidez.</td><td>La TIR del TES de 1 año es la rf de corto plazo; la del TES de 10 años, la rf de largo plazo para valorar acciones (Damodaran).</td></tr>
+        <tr><td><b>Tesoro de EE. UU. 10 años (DGS10)</b> e <b>inflación implícita (T10YIE)</b></td><td>Tasa libre de riesgo en dólares e inflación esperada de EE. UU.</td><td>fred.stlouisfed.org → series DGS10 y T10YIE → Download CSV</td><td>Paridad de Fisher: la tasa en dólares llevada a pesos y el diferencial implícito de los TES.</td></tr>
+        <tr><td><b>EMBIG Colombia</b></td><td>Riesgo país en puntos básicos (J.P. Morgan).</td><td>BCRPData (estadisticas.bcrp.gob.pe, serie del EMBIG Colombia) u otro proveedor</td><td>Diferencial por impago: rf local y prima por riesgo país.</td></tr>
+        <tr><td><b>Implied ERP</b> y <b>Country Default Spreads and Risk Premiums</b> (Damodaran)</td><td>Prima de un mercado maduro y tabla de primas por país.</td><td>pages.stern.nyu.edu/~adamodar → Data → «Implied ERP» (histimpl.xls) y «Country Default Spreads and Risk Premiums» (ctryprem.xlsx)</td><td>PRM madura, factor σ acciones / σ bonos, comparación de la PRP y tasa de impuestos.</td></tr>
         <tr><td><b>Bonos corporativos y CDT</b> (opcional)</td><td>Tasa de negociación de bonos de empresas y CDT.</td><td>bvc.com.co → Renta fija → Deuda privada</td><td>Comparar con los TES: la diferencia es la prima por riesgo de crédito de la empresa.</td></tr>
       </tbody></table></div>
       <p class="hint">Los archivos con columna de tasa (TIR, tasa de negociación, tasa de valoración) se guardan como tasas; los de los índices COLTES y COLIBR, como precios del índice. Todo queda en la biblioteca y se usa con la ventana de análisis (Biblioteca).</p>
@@ -228,7 +231,7 @@
     </div>
     <div class="panel" id="prp-panel" data-sub="fija">
       <h2>Prima de riesgo del mercado y prima por riesgo país</h2>
-      <p>Escribe los datos que no salen de la BVC; la app arma la prima por riesgo país (PRP) desde la renta fija, como Damodaran, y el rendimiento esperado del mercado <code>E(Rm) = rf + PRM + PRP</code>. Paso a paso → sección 18 explica cada paso.</p>
+      <p>Los datos salen solos de los archivos que subas arriba (tasas cero cupón TES, DGS10, T10YIE, EMBIG, Implied ERP y Country Default Spreads de Damodaran). Cada campo muestra el valor tomado y su fuente; escribe en un campo solo si quieres reemplazar ese dato. Con ellos la app arma la prima por riesgo país (PRP) desde la renta fija, como Damodaran, y el rendimiento esperado del mercado <code>E(Rm) = rf + PRM + PRP</code>. Paso a paso → sección 18 explica cada paso.</p>
       <div class="form" id="prp-form">
         <label class="field" for="prp-tes10"><span>TIR del TES tasa fija a 10 años (%)</span><input id="prp-tes10" data-prp="tes10" type="number" step="0.01" inputmode="decimal"></label>
         <label class="field" for="prp-ust10"><span>Tesoro de EE. UU. a 10 años (%) · FRED: DGS10</span><input id="prp-ust10" data-prp="ust10" type="number" step="0.01" inputmode="decimal"></label>
@@ -245,8 +248,41 @@
         <li><b>Tasa del TES a 10 años</b>: serie «Tasas cero cupón TES» del Banco de la República (suameca), en Excel. Si cargas ese archivo arriba, la app toma sola la tasa a 10 años.</li>
         <li><b>Tesoro de EE. UU. a 10 años</b>: FRED (fred.stlouisfed.org, serie DGS10) o treasury.gov.</li>
         <li><b>Inflación esperada</b>: Colombia, encuesta de expectativas del Banco de la República o la meta (3 %); EE. UU., la meta de la Reserva Federal (2 %) o la inflación implícita en los bonos TIPS (FRED, T10YIE).</li>
-        <li><b>EMBI de Colombia</b> (riesgo país): Banco de la República (indicadores de riesgo país) o proveedores como Investing.com; también sirve el CDS soberano a 5 años.</li>
+        <li><b>EMBIG de Colombia</b> (riesgo país, J.P. Morgan): BCRPData del Banco Central de Reserva del Perú (estadisticas.bcrp.gob.pe), en CSV; también sirve el CDS soberano a 5 años.</li>
         <li><b>Prima de un mercado maduro y tabla de primas por país</b>: Aswath Damodaran, pages.stern.nyu.edu/~adamodar → Data → «Implied ERP» y «Country Default Spreads and Risk Premiums» (ctryprem).</li>
+      </ul>
+    </div>
+    <div class="panel prose" id="rf-docs" data-sub="fija">
+      <h2>Por qué y cómo se usa cada documento</h2>
+      <p>La cadena es: <b>tasa libre de riesgo en pesos → diferencial por riesgo de impago (riesgo país) → tasa libre de riesgo local → prima por riesgo país → rendimiento esperado del mercado</b>. Cada documento aporta un eslabón.</p>
+      <div class="table-scroll"><table class="data wrap"><thead><tr><th>Documento</th><th>Qué es</th><th>Por qué sirve</th><th>Cómo lo usa la app</th></tr></thead><tbody>
+        <tr><td><b>Tasas cero cupón TES</b> (Banco de la República, suameca)</td><td>Tasas de los TES en pesos y en UVR a 1, 5 y 10 años, de la curva que el Banco estima cada día con el modelo de Nelson y Siegel (1987).</td><td>La tasa libre de riesgo debe ser de un título del Gobierno en su propia moneda, sin cupones que reinvertir y al mismo plazo del análisis (Damodaran, 2008). Una tasa cero cupón cumple las tres condiciones.</td><td>TES 1 año = rf de corto plazo (Supuestos). TES 10 años = rf de largo plazo para valorar acciones. Con la de UVR: inflación implícita de Colombia, <code>(1 + TES pesos) / (1 + TES UVR) − 1</code> (Fisher, 1930).</td></tr>
+        <tr><td><b>DGS10</b> (FRED, Reserva Federal)</td><td>Rendimiento del bono del Tesoro de EE. UU. a 10 años (plazo constante).</td><td>Es la tasa libre de riesgo de un mercado maduro, sin riesgo de impago. Sirve de base para medir cuánto más paga Colombia.</td><td>Se lleva a pesos con la paridad de Fisher: <code>(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1</code>. La diferencia con el TES a 10 años es el diferencial implícito en la deuda local.</td></tr>
+        <tr><td><b>T10YIE</b> (FRED)</td><td>Inflación implícita a 10 años en EE. UU.: Tesoro nominal menos Tesoro indexado (TIPS).</td><td>Es la inflación que el mercado espera; la paridad de Fisher necesita la inflación esperada de los dos países.</td><td>π EE. UU. en la paridad de Fisher.</td></tr>
+        <tr><td><b>EMBIG Colombia</b> (J.P. Morgan; serie de BCRPData)</td><td>Diferencial, en puntos básicos, de los bonos del Gobierno de Colombia en dólares sobre los del Tesoro de EE. UU. de plazo similar.</td><td>Es el precio que el mercado pone hoy al riesgo de impago de Colombia, en la misma moneda que el Tesoro: la medida de mercado del riesgo país.</td><td>Diferencial por impago = EMBIG / 10.000. Se resta del TES a 10 años (rf local) y, multiplicado por σ acciones / σ bonos, da la prima por riesgo país.</td></tr>
+        <tr><td><b>Implied ERP</b> (Damodaran)</td><td>Prima de riesgo implícita del S&amp;P 500 de cada año: la tasa que iguala el nivel del índice con los dividendos y recompras esperados, menos la tasa del Tesoro.</td><td>Es la prima de un mercado maduro sin riesgo país, estimada con los precios de hoy y no con promedios históricos, que dependen mucho del periodo elegido.</td><td>PRM madura en <code>E(Rm) = rf + PRM + PRP</code> y en la beta de Damodaran.</td></tr>
+        <tr><td><b>Country Default Spreads and Risk Premiums</b> (Damodaran, ctryprem)</td><td>Para cada país: calificación de Moody's, diferencial por impago según la calificación, prima por riesgo país, prima total, CDS soberano y tasa de impuestos.</td><td>Es una segunda medida del riesgo país, basada en la calificación, para contrastar con el EMBIG. De ella sale la volatilidad relativa acciones / bonos que usa Damodaran (prima país / diferencial).</td><td>Factor σ acciones / σ bonos, comparación de la PRP y de la prima total, y tasa de impuestos (35 %) para el D/E.</td></tr>
+      </tbody></table></div>
+      <h3>Teoría</h3>
+      <ol>
+        <li><b>Tasa libre de riesgo.</b> Para que un activo sea libre de riesgo no puede tener riesgo de impago ni de reinversión: debe ser un bono cero cupón del Gobierno, en la moneda de los flujos y al plazo del análisis (Damodaran, 2008). Los TES en pesos son la mejor aproximación en Colombia, pero el Estado colombiano no es Aaa: su tasa incluye una prima por impago. Por eso <code>rf local = TIR del TES 10 años − diferencial por impago</code>.</li>
+        <li><b>Paridad de Fisher (1930).</b> Una tasa nominal es la real más la inflación esperada: <code>(1 + i) = (1 + r)(1 + πᵉ)</code>. Si la tasa real libre de riesgo es la misma en los dos países, la tasa en pesos es <code>(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1</code>. Lo que el TES paga por encima de eso es el riesgo país de la deuda local.</li>
+        <li><b>Riesgo país.</b> Se mide desde la renta fija: con el diferencial de los bonos soberanos en dólares sobre el Tesoro (EMBIG), con el CDS soberano o con el diferencial típico de la calificación. Las acciones son más volátiles que los bonos, así que Damodaran (2003) escala ese diferencial: <code>PRP = diferencial × σ acciones / σ bonos</code> (≈ 1,5 veces).</li>
+        <li><b>Prima de riesgo del mercado.</b> La de un mercado maduro sale de la prima implícita del S&amp;P 500 (Damodaran, edición anual sobre la prima de riesgo). La de Colombia es <code>PRM + PRP</code>.</li>
+        <li><b>Costo del patrimonio y rendimiento esperado.</b> <code>E(Rm) = rf + PRM + PRP</code> y, para una acción, <code>Kₑ = rf + β · PRM + λ · PRP</code>, con λ la exposición de la empresa al riesgo del país (Damodaran, 2003).</li>
+      </ol>
+      <h3>Referencias</h3>
+      <ul class="refs">
+        <li>Banco de la República de Colombia. <i>Tasas cero cupón TES (pesos y UVR)</i>. Portal de estadísticas suameca, serie 640001.</li>
+        <li>Board of Governors of the Federal Reserve System. <i>Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity</i> [DGS10]. FRED, Federal Reserve Bank of St. Louis.</li>
+        <li>Damodaran, A. (2003). Country risk and company exposure: Theory and practice. <i>Journal of Applied Finance, 13</i>(2), 63-76.</li>
+        <li>Damodaran, A. (2008). <i>What is the riskfree rate? A search for the basic building block</i>. Documento de trabajo, Stern School of Business, New York University.</li>
+        <li>Damodaran, A. (2025). <i>Equity risk premiums (ERP): Determinants, estimation, and implications – The 2025 edition</i>. SSRN. Datos: «Implied ERP» y «Country Default Spreads and Risk Premiums», pages.stern.nyu.edu/~adamodar.</li>
+        <li>Federal Reserve Bank of St. Louis. <i>10-Year Breakeven Inflation Rate</i> [T10YIE]. FRED.</li>
+        <li>Fisher, I. (1930). <i>The theory of interest</i>. Macmillan.</li>
+        <li>J.P. Morgan. <i>EMBI Global and EMBI Global Diversified: Rules and methodology</i>. Serie EMBIG Colombia publicada por el Banco Central de Reserva del Perú (BCRPData).</li>
+        <li>Nelson, C. R. y Siegel, A. F. (1987). Parsimonious modeling of yield curves. <i>Journal of Business, 60</i>(4), 473-489.</li>
+        <li>Svensson, L. E. O. (1994). Estimating and interpreting forward interest rates: Sweden 1992-1994. <i>NBER Working Paper</i> 4871.</li>
       </ul>
     </div>
       <div class="guia-wrap" id="guia-wrap" data-sub="guia">

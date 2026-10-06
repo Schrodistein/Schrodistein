@@ -535,3 +535,16 @@ table.corr-likert td.n { font-variant-numeric: tabular-nums; }
 .subtabs button .sub { font-weight: 400; font-size: 12px; color: var(--ink-2); }
 .subtabs button[aria-current='page'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 @media (max-width: 560px) { .subtabs button { flex: 1 1 100%; } }
+
+/* Tablas con texto largo (renta fija, primas): el texto se ajusta dentro del recuadro */
+table.data.wrap th, table.data.wrap td, table.data.guia td, table.data.guia th { white-space: normal; vertical-align: top; overflow-wrap: anywhere; }
+table.data.wrap td.n, table.data.wrap th.n { white-space: nowrap; overflow-wrap: normal; }
+table.data.wrap code { white-space: normal; }
+table.rf-cands td:nth-child(7) { min-width: 18ch; font-size: 0.82rem; color: var(--ink-2); }
+table.rf-cands td:last-child .btn { white-space: nowrap; }
+#rf-now, #prp-panel p, #rf-load p { overflow-wrap: anywhere; }
+#rf-now code { white-space: normal; }
+/* Las tablas anchas se desplazan dentro de su recuadro en lugar de ensanchar el panel */
+#screen-datos .panel { grid-template-columns: minmax(0, 1fr); }
+.table-scroll { max-width: 100%; }
+#screen-datos .panel h2, #screen-datos .panel h3, #pasos .panel h3 { overflow-wrap: anywhere; }

@@ -136,10 +136,16 @@ code { font-family: var(--font-mono); font-size: 0.86em; background: var(--sunk)
 .brand-curve { fill: none; stroke: var(--accent-ink); stroke-width: 2.4; stroke-linecap: round; }
 .brand-cml { stroke: var(--accent-ink); stroke-width: 1.3; opacity: 0.6; }
 .brand-dot { fill: var(--accent-ink); }
-.tabs { display: flex; gap: 2px; margin-left: auto; overflow-x: auto; scrollbar-width: none; flex: 1 1 0; min-width: 0; }
+.tabs-scroller { display: flex; align-items: center; gap: 4px; flex: 1 1 0; min-width: 0; margin-left: auto; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: thin; flex: 1 1 auto; min-width: 0; scroll-behavior: smooth; padding-bottom: 2px; }
+.tabs::-webkit-scrollbar { height: 5px; }
+.tabs::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
 .tabs > :first-child { margin-left: auto; }
+.tabs-arrow { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font-size: 1.25rem; line-height: 1; cursor: pointer; display: grid; place-items: center; }
+.tabs-arrow:hover { background: var(--sunk); }
+.tabs-arrow[hidden] { display: none; }
 @media (max-width: 760px) {
-  .tabs { flex-basis: 100%; order: 2; }
+  .tabs-scroller { flex-basis: 100%; order: 2; }
   .tabs > :first-child { margin-left: 0; }
   .ap-btn { order: 1; margin-left: auto; }
 }
@@ -150,7 +156,7 @@ code { font-family: var(--font-mono); font-size: 0.86em; background: var(--sunk)
 .tabs button:hover { background: var(--sunk); color: var(--ink); }
 .tabs button[aria-current='page'] { background: var(--accent-soft); color: var(--accent); }
 @media (max-width: 640px) {
-  .tabs { margin-left: 0; width: 100%; }
+  .tabs-scroller { margin-left: 0; width: 100%; }
   h1 { font-size: 1.55rem; }
 }
 
@@ -504,3 +510,10 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 
 /* Autor */
 .app-foot { text-align: center; color: var(--ink-2); font-size: 0.85rem; padding: 18px 16px 28px; }
+
+/* Terminal por segmento */
+.t-segs { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; }
+.t-segs button { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line, rgba(127,127,127,.35)); background: transparent; color: inherit; cursor: pointer; font: inherit; }
+.t-segs button[aria-selected="true"] { background: var(--s1); color: #fff; border-color: var(--s1); }
+.t-segs .sub { opacity: .75; font-size: .8em; margin-left: 4px; }
+.guia-wrap { margin-top: 28px; } .guia-title { font-size: 1.6rem; margin: 8px 0; }

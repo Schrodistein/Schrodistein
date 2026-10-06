@@ -546,7 +546,7 @@
   function renderGuia() {
     $('guia').innerHTML = PF.guia.render(guiaCtx());
   }
-  const SCREEN_RENDERERS = { guia: () => renderGuia(), estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
+  const SCREEN_RENDERERS = { datos: () => renderGuia(), estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
   const renderScreen = (screen) => SCREEN_RENDERERS[screen] && SCREEN_RENDERERS[screen]();
 
   function renderSummary() {
@@ -1185,7 +1185,24 @@
     const all = [...new Set(list.flatMap((x) => x.dates))].sort();
     const gaps = all.slice(1).map((d, i) => (Date.parse(d) - Date.parse(all[i])) / 864e5).sort((a, b) => a - b);
     const daily = gaps.length > 0 && gaps[Math.floor(gaps.length / 2)] <= 4;
-    return { list, market, daily, f: st.model ? st.model.f : 12 };
+    // Segmentos de la terminal: cada activo con su segmento y cada segmento con su índice
+    const names = list.map((x) => x.name);
+    const segIdx = (nm) => (/coltes|colibr|(^|\W)ibr(\W|$)/i.test(nm) ? 'fija' : /(^|\W)(trm|usd|cop|dolar|dólar|eur)(\W|$)/i.test(nm) ? 'divisas' : 'variable');
+    for (const x of list) {
+      x.cls = clsOf(x.name);
+      x.seg = x.cls === 'indice' ? segIdx(x.name) : segOf(x.cls);
+    }
+    const pickBench = (seg) => {
+      if (seg === 'variable') return market;
+      const res = seg === 'fija' ? [/coltes\s*lp/i, /coltes/i, /colibr|(^|\W)ibr(\W|$)/i] : [/(^|\W)trm(\W|$)/i, /usd/i, /dolar|dólar/i];
+      for (const re of res) {
+        const hit = names.find((nm) => re.test(nm) && list.find((x) => x.name === nm).seg === seg);
+        if (hit) return hit;
+      }
+      return null;
+    };
+    const segs = { variable: { label: 'Renta variable', bench: pickBench('variable') }, fija: { label: 'Renta fija', bench: pickBench('fija') }, divisas: { label: 'Divisas', bench: pickBench('divisas') } };
+    return { list, market, daily, f: st.model ? st.model.f : 12, segs };
   }
 
   function renderCharts() {
@@ -1237,10 +1254,13 @@
   /* ---------- Navegación ---------- */
   function go(screen) {
     if (screen === 'comprar') screen = 'frontera'; // la pestaña Comprar se quitó
+    if (screen === 'guia') screen = 'datos'; // la guía está dentro de Datos
     if (!document.getElementById('screen-' + screen)) screen = 'datos';
     st.screen = screen;
     document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== 'screen-' + screen));
     document.querySelectorAll('.tabs button').forEach((b) => (b.getAttribute('data-go') === screen ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
+    const cur = document.querySelector('.tabs button[aria-current="page"]');
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     try {
       history.replaceState(null, '', '#' + screen);
     } catch (e) {
@@ -1726,6 +1746,18 @@
     $('csv').value = dailyCsv ? savedCsv : PF.sample.csv(0, { daily: true });
 
     document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.getAttribute('data-go'))));
+    // Flechas para desplazar la barra de menús cuando no cabe completa
+    const nav = document.querySelector('.tabs');
+    const arrows = () => {
+      const max = nav.scrollWidth - nav.clientWidth;
+      $('tabs-left').hidden = max <= 2 || nav.scrollLeft <= 2;
+      $('tabs-right').hidden = max <= 2 || nav.scrollLeft >= max - 2;
+    };
+    $('tabs-left').addEventListener('click', () => nav.scrollBy({ left: -Math.max(160, nav.clientWidth * 0.6) }));
+    $('tabs-right').addEventListener('click', () => nav.scrollBy({ left: Math.max(160, nav.clientWidth * 0.6) }));
+    nav.addEventListener('scroll', arrows, { passive: true });
+    window.addEventListener('resize', arrows);
+    setTimeout(arrows, 0);
     $('guia').addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-guia-go]');
       if (b) return go(b.getAttribute('data-guia-go'));

@@ -17,9 +17,10 @@
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" class="brand-bg"/><path d="M6 25 C8 14 14 9 26 7" class="brand-curve"/><line x1="6" y1="19" x2="26" y2="6" class="brand-cml"/><circle cx="18.5" cy="10.2" r="2.6" class="brand-dot"/></svg>
       <span>Frontera Eficiente</span>
     </div>
+    <div class="tabs-scroller" id="tabs-scroller">
+      <button type="button" class="tabs-arrow" id="tabs-left" aria-label="Desplazar el menú a la izquierda" hidden>‹</button>
     <nav class="tabs" aria-label="Secciones">
-      <button type="button" data-go="datos" id="tab-datos" aria-current="page">Datos</button>
-      <button type="button" data-go="guia" id="tab-guia">Guía</button>
+      <button type="button" data-go="datos" id="tab-datos" aria-current="page">Datos y guía</button>
       <button type="button" data-go="biblioteca" id="tab-biblioteca">Biblioteca</button>
       <button type="button" data-go="terminal" id="tab-terminal">Terminal</button>
       <button type="button" data-go="activos" id="tab-activos">Activos</button>
@@ -34,6 +35,8 @@
       <button type="button" data-go="descargas" id="tab-descargas">Descargas</button>
       <button type="button" data-go="teoria" id="tab-teoria">Teoría</button>
     </nav>
+      <button type="button" class="tabs-arrow" id="tabs-right" aria-label="Desplazar el menú a la derecha" hidden>›</button>
+    </div>
     <button type="button" class="ap-btn" id="ap-btn" aria-expanded="false" aria-controls="ap-panel" title="Apariencia"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10 2.5a7.5 7.5 0 0 1 0 15z" fill="currentColor"/></svg><span>Apariencia</span></button>
     <div class="ap-panel" id="ap-panel" hidden role="dialog" aria-label="Apariencia">
       <h3>Apariencia</h3>
@@ -59,6 +62,8 @@
   <!-- TERMINAL -->
   <section class="screen" id="screen-terminal" hidden>
     <div class="panel" id="term-empty" hidden><h2>Sin datos</h2><p>Carga los históricos de la BVC en la sección Datos (o en Mercado, en la app de escritorio) para ver el comportamiento de cada acción.</p></div>
+    <div class="seg t-segs" id="t-segs" role="tablist" aria-label="Segmento"></div>
+    <p class="meta" id="t-seg-note"></p>
     <div id="term-body" class="term-body">
       <div class="term">
         <aside class="panel term-watch">
@@ -85,7 +90,7 @@
   <!-- DATOS -->
   <section class="screen" id="screen-datos">
     <div class="head">
-      <h1>Datos y supuestos</h1>
+      <h1>Datos, supuestos y guía</h1>
       <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
     </div>
     <div class="grid-2">
@@ -193,6 +198,11 @@
       </ol>
       <p><b>Otros instrumentos.</b> Los archivos de <b>TES, bonos y CDT</b> pueden traer precio o solo la tasa (TIR, tasa de negociación o de valoración): con la tasa la app arma un índice de rendimiento total que suma la causación de la tasa y resta el efecto precio por duración (<code>Rₜ = (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁)·Δy</code>). Si el archivo trae una columna de duración se usa; si no, 6 años para TES, 4 para bonos y 0,5 para CDT. Las <b>divisas</b> se leen de columnas como «TRM» o «Tasa de cambio», y los <b>futuros y opciones</b> de su precio de cierre o de liquidación.</p>
     </div>
+      <div class="guia-wrap" id="guia-wrap">
+      <h1 class="guia-title">Guía para aprender a operar acciones y ETF en la BVC</h1>
+      <p class="lede">Del mercado a la orden de compra, paso a paso, con la teoría que sostiene cada decisión y la sección de la app donde se practica. Es orientación educativa: normas, tarifas y horarios cambian, confírmalos con tu comisionista y en bvc.com.co.</p>
+      <div id="guia"></div>
+    </div>
   </section>
 
   <!-- ACTIVOS -->
@@ -290,14 +300,6 @@
   </section>
 
   <!-- BIBLIOTECA -->
-  <section class="screen" id="screen-guia" hidden>
-    <div class="head">
-      <h1>Guía para aprender a operar acciones y ETF en la BVC</h1>
-      <p class="lede">Del mercado a la orden de compra, paso a paso, con la teoría que sostiene cada decisión y la sección de la app donde se practica. Es orientación educativa: normas, tarifas y horarios cambian, confírmalos con tu comisionista y en bvc.com.co.</p>
-    </div>
-    <div id="guia"></div>
-  </section>
-
   <section class="screen" id="screen-biblioteca" hidden>
     <div class="head">
       <h1>Biblioteca local</h1>

@@ -1,4 +1,5 @@
-/* Terminal: vista de bróker con el comportamiento de cada acción.
+/* Terminal: vista de bróker con el comportamiento de cada activo, dividida en renta variable,
+ * renta fija y divisas, cada segmento con sus activos y su índice de referencia.
  *   Lista de seguimiento con minigráficas · ficha de la acción (último, variación,
  *   máximo y mínimo de 52 semanas, volatilidad, β y correlación con el índice) ·
  *   precio · rendimientos diarios con bandas de ±2σ · distribución frente a la normal ·
@@ -20,7 +21,13 @@
   const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const dayTxt = (d) => (d.length === 7 ? `${MONTHS.at(+d.slice(5, 7) - 1)} ${d.slice(0, 4)}` : `${+d.slice(8, 10)} ${MONTHS.at(+d.slice(5, 7) - 1)} ${d.slice(0, 4)}`);
 
-  const state = { sel: null, range: '1A' };
+  const state = { sel: null, range: '1A', seg: 'variable' };
+  /* Qué índice falta en cada segmento y dónde descargarlo. */
+  const NEED = {
+    variable: 'el índice MSCI COLCAP (bvc.com.co → Índices → MSCI COLCAP → Históricos)',
+    fija: 'el índice COLTES (CP, LP o UVR) o el COLIBR (bvc.com.co → Índices de renta fija)',
+    divisas: 'el dólar USD/COP o la TRM (la app de escritorio la descarga sola)',
+  };
   const RANGES = [['1M', 31], ['3M', 92], ['6M', 183], ['1A', 366], ['Todo', Infinity]];
 
   /* ---------- Cálculos ---------- */
@@ -283,15 +290,41 @@
     return el && el.clientWidth ? el.clientWidth : 0;
   }
 
-  function render(ctx) {
+  /* Renta variable (acciones, ETF e índices de acciones), renta fija (TES, bonos, CDT, COLTES, COLIBR)
+   * y divisas (dólar, euro, TRM): cada pestaña con sus activos y su índice de referencia. */
+  function segView(ctx) {
+    if (!ctx || !ctx.segs) return ctx;
+    const seg = ctx.segs[state.seg] ? state.seg : 'variable';
+    const list = ctx.list.filter((x) => x.seg === seg);
+    const bench = ctx.segs[seg].bench;
+    list.sort((a, b) => (a.name === bench ? -1 : b.name === bench ? 1 : 0));
+    return Object.assign({}, ctx, { list, market: bench, seg });
+  }
+  function segTabs(ctx) {
+    const el = document.getElementById('t-segs');
+    if (!el || !ctx || !ctx.segs) return;
+    el.innerHTML = Object.entries(ctx.segs)
+      .map(([k, v]) => {
+        const n = ctx.list.filter((x) => x.seg === k).length;
+        return `<button type="button" role="tab" data-seg="${k}" aria-selected="${k === state.seg}">${v.label} <span class="sub">${n}</span></button>`;
+      })
+      .join('');
+  }
+
+  function render(ctx0) {
     const $ = (id) => document.getElementById(id);
+    segTabs(ctx0);
+    const ctx = segView(ctx0);
     if (!ctx || !ctx.list.length) {
       $('term-empty').hidden = false;
+      $('term-empty').innerHTML = ctx0 && ctx0.list.length ? `<h2>${esc(ctx0.segs[state.seg].label)}: sin activos</h2><p>No hay históricos de este segmento. Descarga de la BVC sus activos y ${esc(NEED[state.seg])}.</p>` : '<h2>Sin datos</h2><p>Carga los históricos de la BVC en la sección Datos (o en Mercado, en la app de escritorio) para ver el comportamiento de cada activo.</p>';
       $('term-body').hidden = true;
       return;
     }
     $('term-empty').hidden = true;
     $('term-body').hidden = false;
+    const segNote = $('t-seg-note');
+    if (segNote) segNote.innerHTML = ctx.market ? `Índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: <b>${esc(ctx.market)}</b>.` : `Falta el índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: descarga ${esc(NEED[ctx.seg])}.`;
     const byName = new Map(ctx.list.map((s) => [s.name, s]));
     const mkt = byName.get(ctx.market) || null;
     if (!state.sel || !byName.has(state.sel)) state.sel = (ctx.list.find((s) => s.name !== ctx.market) || ctx.list[0]).name;
@@ -306,7 +339,7 @@
         .map((x) => {
           const n = x.prices.length;
           const ch = n > 1 ? x.prices[n - 1] / x.prices[n - 2] - 1 : NaN;
-          return `<tr class="${x.name === state.sel ? 'sel' : ''}" data-asset="${esc(x.name)}" tabindex="0"><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice</span>' : ''}</td><td class="n">${price(x.prices[n - 1])}</td><td class="n ${ch >= 0 ? 'up' : 'down'}">${pct(ch)}</td><td>${spark(x, 72, 22)}</td></tr>`;
+          return `<tr class="${x.name === state.sel ? 'sel' : ''}" data-asset="${esc(x.name)}" tabindex="0"><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice de referencia</span>' : x.cls === 'indice' ? ' <span class="src">índice</span>' : ''}</td><td class="n">${price(x.prices[n - 1])}</td><td class="n ${ch >= 0 ? 'up' : 'down'}">${pct(ch)}</td><td>${spark(x, 72, 22)}</td></tr>`;
         })
         .join('') +
       '</tbody>';
@@ -351,7 +384,7 @@
             return `<td class="n cell ${fin(v) ? (v >= 0 ? 'up-bg' : 'down-bg') : ''}">${pct(v, 1)}</td>`;
           });
           const rr = returnsOf(x).map((q) => q.r);
-          return `<tr><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice</span>' : ''}</td>${cells.join('')}<td class="n">${rr.length > 2 ? pctPlain(sd(rr) * Math.sqrt(f)) : '—'}</td><td class="n">${esc(x.dates[0])}</td></tr>`;
+          return `<tr><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice de referencia</span>' : x.cls === 'indice' ? ' <span class="src">índice</span>' : ''}</td>${cells.join('')}<td class="n">${rr.length > 2 ? pctPlain(sd(rr) * Math.sqrt(f)) : '—'}</td><td class="n">${esc(x.dates[0])}</td></tr>`;
         })
         .join('') +
       '</tbody>';
@@ -393,6 +426,13 @@
       state.sel = tr.getAttribute('data-asset');
       onChange();
     };
+    $('t-segs').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-seg]');
+      if (!b) return;
+      state.seg = b.getAttribute('data-seg');
+      state.sel = null;
+      onChange();
+    });
     $('tw-table').addEventListener('click', pick);
     $('tw-table').addEventListener('keydown', (ev) => ev.key === 'Enter' && pick(ev));
     $('th').addEventListener('click', (ev) => {

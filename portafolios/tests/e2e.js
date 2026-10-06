@@ -17,9 +17,11 @@ const shots = process.argv[3];
     // Pantalla inicial: Datos; luego la terminal, en modo oscuro y con Times New Roman
     await page.waitForSelector('#screen-datos:not([hidden])');
     const first = await page.$eval('.tabs button', (b) => b.textContent);
-    if (first !== 'Datos') errors.push(label + ': la primera pestaña es ' + first);
+    if (first !== 'Datos y guía') errors.push(label + ': la primera pestaña es ' + first);
     await page.click('#tab-terminal');
     await page.waitForSelector('#tc-price svg');
+    // Terminal dividida en renta variable, renta fija y divisas
+    if ((await page.$$eval('#t-segs [data-seg]', (b) => b.map((x) => x.getAttribute('data-seg')).join())) !== 'variable,fija,divisas') errors.push(label + ': la terminal no tiene los tres segmentos');
     if ((await page.getAttribute('html', 'data-theme')) !== 'dark') errors.push(label + ': el modo oscuro no es el predeterminado');
     if (!/Times New Roman/.test(await page.evaluate(() => getComputedStyle(document.body).fontFamily))) errors.push(label + ': la letra no es Times New Roman');
     if (await page.isHidden('#tape')) errors.push(label + ': sin cinta de cotizaciones');
@@ -70,7 +72,8 @@ const shots = process.argv[3];
     await page.waitForTimeout(700);
     if ((await page.textContent('#buy-sum')) === before) errors.push(`${label}: la comisión de una compra no cambia el total`);
     // Guía para operar en la BVC
-    await page.click('#tab-guia');
+    await page.click('#tab-datos');
+    if (await page.$('#tab-guia')) errors.push(label + ': Guía debe estar dentro de Datos');
     if ((await page.$$('#guia .guia-ch')).length < 10) errors.push(label + ': la guía no tiene sus capítulos');
     if (!/Con tus datos/.test(await page.textContent('#guia'))) errors.push(label + ': la guía no usa los datos cargados');
     if (shots) await page.screenshot({ path: `${shots}/${label}-guia.png`, fullPage: false });

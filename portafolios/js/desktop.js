@@ -50,7 +50,7 @@
     $('mk-meta').textContent = `Última actualización de cierres: ${fmtDateTime(m.lastPrices)} · de noticias: ${fmtDateTime(m.lastNews)}${s.auto ? ` · la próxima, en unas ${s.intervalHours >= 48 ? Math.round(s.intervalHours / 24) + ' días' : s.intervalHours + ' h'}` : ' · actualización automática apagada'}.`;
     const rows = summary.assets
       .map((a, i) => {
-        const ch = a.price && a.prev ? a.price / a.prev - 1 : null;
+        const ch = a.price && a.prev ? Math.log(a.price / a.prev) : null; // rendimiento logarítmico del día
         return `<tr data-i="${i}">
           <td><strong>${esc(a.name)}</strong>${a.index ? ' <span class="src">índice</span>' : ''}${a.error ? `<span class="err-line">${esc(a.error)}</span>` : ''}</td>
           <td class="n">${a.price != null ? fmtPrice(a.price) : '—'}</td>

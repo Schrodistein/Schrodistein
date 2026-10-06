@@ -79,7 +79,7 @@
     const lastT = t(s.dates[n - 1]);
     const year = s.dates.map((d, i) => [t(d), s.prices[i]]).filter(([x]) => lastT - x <= 365 * dayMs).map(([, p]) => p);
     const r = returnsOf(s);
-    const out = { last, prev, change: last / prev - 1, abs: last - prev, hi: Math.max(...year), lo: Math.min(...year), y1: last / priceAgo(s, 365) - 1, vol: r.length > 2 ? sd(r.map((x) => x.r)) * Math.sqrt(f) : NaN, n: r.length, date: s.dates[n - 1] };
+    const out = { last, prev, change: Math.log(last / prev), abs: last - prev, hi: Math.max(...year), lo: Math.min(...year), y1: Math.log(last / priceAgo(s, 365)), vol: r.length > 2 ? sd(r.map((x) => x.r)) * Math.sqrt(f) : NaN, n: r.length, date: s.dates[n - 1] };
     if (mkt && mkt !== s) {
       const a = aligned(r, returnsOf(mkt));
       out.corr = corr(a.x, a.y);
@@ -229,10 +229,10 @@
     const rm = mkt && mkt !== s ? returnsOf(mkt).filter((x) => x.d > start) : [];
     const a = rm.length ? aligned(rs, rm) : { x: rs.map((x) => x.r), y: [], d: rs.map((x) => x.d) };
     if (a.d.length < 2) return '<p class="hint">No hay fechas en común con el índice en este rango.</p>';
-    // Rendimiento acumulado desde el inicio del rango: Pₜ / P₀ − 1 (0 % al inicio, en las dos líneas)
+    // Rendimiento acumulado logarítmico desde el inicio del rango: Σ ln(Pₜ / Pₜ₋₁) = ln(Pₜ / P₀) (0 % al inicio)
     const cum = (arr) => {
       let v = 0;
-      return [0].concat(arr.map((r) => (v += r))).map((x) => Math.exp(x) - 1);
+      return [0].concat(arr.map((r) => (v += r)));
     };
     const ca = cum(a.x);
     const cb = rm.length ? cum(a.y) : [];
@@ -339,7 +339,7 @@
       ctx.list
         .map((x) => {
           const n = x.prices.length;
-          const ch = n > 1 ? x.prices[n - 1] / x.prices[n - 2] - 1 : NaN;
+          const ch = n > 1 ? Math.log(x.prices[n - 1] / x.prices[n - 2]) : NaN;
           return `<tr class="${x.name === state.sel ? 'sel' : ''}" data-asset="${esc(x.name)}" tabindex="0"><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice de referencia</span>' : x.cls === 'indice' ? ' <span class="src">índice</span>' : ''}</td><td class="n">${price(x.prices[n - 1])}</td><td class="n ${ch >= 0 ? 'up' : 'down'}">${pct(ch)}</td><td>${spark(x, 72, 22)}</td></tr>`;
         })
         .join('') +
@@ -362,15 +362,15 @@
     const i0 = inRange(s.dates, state.range);
     $('tc-price-t').textContent = `Precio de ${s.name}`;
     $('tc-ret-t').textContent = `Rendimientos ${ctx.daily ? 'diarios' : 'por periodo'} de ${s.name}`;
-    // Cuánto ha ganado o perdido cada uno desde el inicio del rango elegido (Pₜ / P₀ − 1)
+    // Rendimiento logarítmico acumulado desde el inicio del rango elegido: ln(Pₜ / P₀)
     {
       const i0c = inRange(s.dates, state.range);
       const from = s.dates[i0c];
       const gain = (x) => {
         const k = x.dates.findIndex((d) => d >= from);
-        return k >= 0 ? x.prices.at(-1) / x.prices[k] - 1 : NaN;
+        return k >= 0 ? Math.log(x.prices.at(-1) / x.prices[k]) : NaN;
       };
-      $('tc-cum-t').textContent = mkt && mkt !== s ? `Rendimiento acumulado desde el ${dayTxt(from)}: ${s.name} ${pct(gain(s), 1)} · ${mkt.name} ${pct(gain(mkt), 1)}` : `Rendimiento acumulado desde el ${dayTxt(from)}: ${pct(gain(s), 1)}`;
+      $('tc-cum-t').textContent = mkt && mkt !== s ? `Rendimiento acumulado ln(Pₜ/P₀) desde el ${dayTxt(from)}: ${s.name} ${pct(gain(s), 1)} · ${mkt.name} ${pct(gain(mkt), 1)}` : `Rendimiento acumulado ln(Pₜ/P₀) desde el ${dayTxt(from)}: ${pct(gain(s), 1)}`;
     }
     $('tc-roll-t').textContent = mkt ? `Correlación móvil con ${mkt.name}` : 'Correlación móvil';
     const W = (id) => Math.max(280, width($(id)));
@@ -390,7 +390,7 @@
       ctx.list
         .map((x) => {
           const cells = per.map(([, dys]) => {
-            const v = fin(dys) ? x.prices.at(-1) / priceAgo(x, dys) - 1 : x.prices.at(-1) / x.prices[0] - 1;
+            const v = fin(dys) ? Math.log(x.prices.at(-1) / priceAgo(x, dys)) : Math.log(x.prices.at(-1) / x.prices[0]);
             return `<td class="n cell ${fin(v) ? (v >= 0 ? 'up-bg' : 'down-bg') : ''}">${pct(v, 1)}</td>`;
           });
           const rr = returnsOf(x).map((q) => q.r);
@@ -419,7 +419,7 @@
     const items = ctx.list
       .map((x) => {
         const n = x.prices.length;
-        const ch = n > 1 ? x.prices[n - 1] / x.prices[n - 2] - 1 : NaN;
+        const ch = n > 1 ? Math.log(x.prices[n - 1] / x.prices[n - 2]) : NaN;
         return `<span class="tk-item"><b>${esc(x.name)}</b> ${price(x.prices[n - 1])} <span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${pct(ch)}</span></span>`;
       })
       .join('');

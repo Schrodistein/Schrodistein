@@ -1736,6 +1736,7 @@
     // Frecuencia fija: diaria (una ajustada guardada por una versión anterior no se usa)
     $('freq').value = 'diaria';
     $('agg').value = 'last';
+    $('rettype').value = 'log'; // rendimientos siempre logarítmicos
     const savedCsv = store.get('csv');
     let dailyCsv = false;
     try {

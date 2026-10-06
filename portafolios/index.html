@@ -120,7 +120,7 @@
           <label class="field" for="fill"><span>Días sin negociación</span>
             <select id="fill"><option value="si" selected>Repetir el último precio hasta el siguiente día hábil</option><option value="no">Dejar vacíos</option></select></label>
           <label class="field" for="rettype"><span>Rendimientos</span>
-            <select id="rettype"><option value="log" selected>Logarítmicos: ln(Pt / Pt−1)</option><option value="simple">Simples: Pt / Pt−1 − 1</option></select></label>
+            <select id="rettype" disabled title="Fijo: los rendimientos se calculan con logaritmo natural"><option value="log" selected>Logarítmicos: ln(Pt / Pt−1)</option></select></label>
           <label class="field" for="history"><span>Activos con fechas distintas</span>
             <select id="history"><option value="all" selected>Toda la historia de cada activo</option><option value="common">Solo periodos comunes a todos</option></select></label>
           <label class="field" for="market"><span>Índice de mercado principal (renta variable)</span>

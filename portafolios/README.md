@@ -8,6 +8,9 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.1.2**
+- Rendimientos siempre logarítmicos, rₜ = ln(Pₜ / Pₜ₋₁), también en la Terminal y en Mercado: variación del día, rendimiento a 1 año, desempeño por periodo y rendimiento acumulado ln(Pₜ / P₀) = Σ rₜ, que reemplaza la «base 100».
+
 **Versión 2.1**
 - **Cómo se elige cada portafolio, en detalle** (Paso a paso, 11.1 a 11.10): la frontera eficiente y la separación de Tobin; para cada portafolio (mínima varianza, máximo rendimiento, tangente, recomendado, máxima diversificación, paridad de riesgo, 1/N y Treynor-Black) su teoría y autores, el problema que resuelve, el cálculo paso a paso, el resultado con tus datos (qué activos entran y cuáles quedan fuera, con sus pesos) y cuándo usarlo; una guía para elegir y las referencias.
 

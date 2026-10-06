@@ -625,3 +625,16 @@ svg .port-hit { cursor: pointer; }
 /* Pie de tabla: explica símbolos y cómo se calcula cada celda */
 .table-note { margin: 8px 2px 0; font-size: 0.82rem; line-height: 1.45; color: var(--ink-2); border-left: 3px solid var(--accent); padding: 4px 0 4px 10px; }
 .table-note code { white-space: normal; }
+
+/* Elegir activos por diversificación */
+.div-form { flex-wrap: wrap; gap: .75rem 1.25rem; align-items: flex-end; margin: .75rem 0 1rem; }
+.div-form label { display: flex; flex-direction: column; gap: .3rem; font-size: .9rem; min-width: 0; max-width: 100%; }
+.div-form input { width: 6rem; }
+.div-form select { max-width: 100%; }
+#div-sel ol > li { margin-bottom: .6rem; }
+#div-sel ol .table-scroll { margin-top: .4rem; }
+#div-panel, #div-sel { min-width: 0; max-width: 100%; }
+#div-panel { grid-template-columns: minmax(0, 1fr); }
+#div-panel .table-scroll { max-width: 100%; }
+.div-form select { width: 100%; min-width: 0; }
+.div-form label:last-child { flex: 1 1 16rem; }

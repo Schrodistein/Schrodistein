@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'sistema', 'indices', 'biblioteca', 'riesgo']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'sistema', 'indices', 'biblioteca', 'riesgo', 'diversif']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -690,6 +690,43 @@ test('frontera paso a paso: correlación promedio implícita reproduce σp y cad
   const ord = T.w.map((x, i) => [i, x]).sort((x, y) => y[1] - x[1]);
   assert(p2.includes('<b>' + ((0.5 * m.mu[ord[0][0]] + 0.5 * m.mu[ord[1][0]]) * 100).toFixed(2) + '%</b>'), 'E(Rₚ) de A y B al 50 %');
   assert(PF.pasos.NOMEN.includes('Nomenclatura') && PF.pasos.NOMEN.includes('<b>Mercado</b>'));
+});
+
+test('elegir activos por diversificación: fórmulas, búsqueda completa y regla de Elton-Gruber', () => {
+  const m = sampleModel();
+  const D = PF.diversif;
+  const N = m.names.length;
+  // σₚ² = V̄/k + (1 − 1/k)·C̄ es la misma w'Σw con pesos iguales
+  const S = [0, 3, 5, 8];
+  const e = D.evalSet(m, S);
+  let v = 0;
+  for (const i of S) for (const j of S) v += m.Sigma[i][j] / 16;
+  assert(near(e.varP, v, 1e-12) && near(e.red, 1 - Math.sqrt(v) / (S.reduce((q, i) => q + m.vol[i], 0) / 4), 1e-12));
+  // La búsqueda completa encuentra el máximo de todas las combinaciones
+  const r = D.best(m, 3, 'red', 5);
+  assert(r.exact && r.total === D.binom(N, 3));
+  let bestRed = -Infinity;
+  for (let a = 0; a < N; a++) for (let b = a + 1; b < N; b++) for (let c = b + 1; c < N; c++) bestRed = Math.max(bestRed, D.evalSet(m, [a, b, c]).red);
+  assert(near(r.list[0].red, bestRed, 1e-12), 'el primero es el de mayor reducción');
+  for (let q = 1; q < r.list.length; q++) assert(r.list[q].red <= r.list[q - 1].red + 1e-12);
+  assert(r.list[0].mv.vol <= r.list[0].volP + 1e-9, 'la mínima varianza no supera a los pesos iguales');
+  // Regla de Elton-Gruber: ρᵢ,ₚ < σₚ/σᵢ ⇔ una pizca del activo i baja la varianza
+  const g = D.greedy(m, 4);
+  assert(g.set.length === 4 && g.steps.length === 3);
+  for (const st of g.steps.slice(1))
+    for (const c of st.cands) {
+      const p = st.before;
+      const covIP = c.rhoIP * m.vol[c.i] * p.volP;
+      assert((covIP < p.varP) === c.helps, 'la derivada de la varianza al agregar i tiene el signo de Cov(i,p) − σₚ²');
+    }
+  // Pares: si ρ < σmenor/σmayor la mínima varianza queda por debajo del activo menos riesgoso
+  for (const p of D.pairs(m)) {
+    if (p.rho < p.lim - 1e-6) assert(p.mvVol < m.vol[p.lo] - 1e-9 && p.wLo < 1);
+    else assert(near(p.wLo, 1, 1e-9) && near(p.mvVol, m.vol[p.lo], 1e-9));
+  }
+  const html = D.render({ m, k: 3, esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', picked: m.names.slice(0, 3) });
+  for (const t of ['Los mejores grupos de 3', 'De dónde salen', 'paso a paso', '¿Correlaciones negativas o positivas?', 'Si todas son positivas', 'Si todas son negativas', '−1/(k − 1)', 'Usar estos 3']) assert(html.includes(t), 'falta ' + t);
+  assert(!/NaN|undefined/.test(html));
 });
 
 test('guía de la BVC y catálogo de activos', () => {

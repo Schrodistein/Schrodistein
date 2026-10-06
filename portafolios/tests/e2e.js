@@ -75,6 +75,23 @@ const shots = process.argv[3];
     await page.waitForSelector('#chart-front svg');
     if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) errors.push(label + ': desbordamiento horizontal en Portafolio');
     if (shots) await page.screenshot({ path: `${shots}/${label}-portafolio.png`, fullPage: true });
+    // Elegir activos por diversificación: k = 4, usar el mejor grupo y volver a marcar todos
+    await page.click('#div-panel > summary');
+    await page.fill('#div-k', '4');
+    await page.dispatchEvent('#div-k', 'change');
+    await page.waitForTimeout(200);
+    const dtxt = await page.textContent('#div-sel');
+    if (!/Los mejores grupos de 4/.test(dtxt) || !/Correlaciones negativas o positivas/.test(dtxt) || /NaN|undefined/.test(dtxt)) errors.push(label + ': falta la selección por diversificación');
+    if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) errors.push(label + ': desbordamiento horizontal en la selección por diversificación');
+    if (shots) await page.screenshot({ path: `${shots}/${label}-diversif.png`, fullPage: true });
+    await page.click('#div-sel [data-div-use]');
+    await page.waitForTimeout(400);
+    const meta = await page.textContent('#pick-assets .meta');
+    if (!/^4 de \d+ activos/.test(meta)) errors.push(label + ': «Usar estos 4» no dejó 4 activos: ' + meta);
+    if (!/En uso/.test(await page.textContent('#div-sel'))) errors.push(label + ': el grupo usado no aparece «En uso»');
+    await page.click('#pick-assets [data-pick-all="1"]');
+    await page.waitForTimeout(300);
+    await page.click('#div-panel > summary');
     for (const tab of ['activos', 'confirmar', 'datos', 'teoria']) {
       await page.click('#tab-' + tab);
       await page.waitForTimeout(150);

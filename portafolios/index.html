@@ -323,6 +323,9 @@
       <p>Elige cualquier grupo de activos (dos o más): la frontera, los portafolios, el paso a paso y el plan de compra se recalculan solo con ellos.</p>
       <div id="pick-assets"></div>
     </details>
+    <details class="panel pick-panel" id="div-panel"><summary><h2>Elegir activos por diversificación</h2></summary>
+      <div id="div-sel"><p class="meta">Carga datos en la sección Datos.</p></div>
+    </details>
     <figure class="panel chart">
       <figcaption><h2>Frontera eficiente y línea del mercado de capitales</h2></figcaption>
       <div class="chart-box" id="chart-front"></div>
@@ -683,6 +686,15 @@
       <h2>Diversificación</h2>
       <p>Para diversificar lo más posible la app usa tres herramientas. Un <strong>peso máximo por activo</strong>: con un tope de 20 % el portafolio necesita al menos cinco activos. El <strong>número efectivo de activos</strong> <code>1 / Σ wᵢ²</code>: vale N con pesos iguales y 1 si todo está en un activo. La <strong>razón de diversificación</strong> <code>Σ wᵢ σᵢ / σₚ</code> (Choueifaty y Coignard, 2008): cuánto riesgo se elimina al combinar. El portafolio de <strong>máxima diversificación</strong> maximiza esa razón, y el de <strong>paridad de riesgo</strong> reparte el riesgo en partes iguales.</p>
     </div>
+    <div class="panel" id="teo-divsel">
+      <h2>Cómo elegir pocos activos que más diversifiquen</h2>
+      <p>Con pesos iguales, <code>σ<sub>p</sub><sup>2</sup> = V̄/k + (1 − 1/k)·C̄</code>: al sumar activos la parte de las varianzas (V̄/k) desaparece y queda la <b>covarianza promedio C̄</b>, que no se puede diversificar (Elton y Gruber, 1977). Por eso, para elegir k activos de un grupo mayor, se buscan los de menor correlación entre sí.</p>
+      <ul><li><b>Negativas</b> (−1 &lt; ρ &lt; 0): siempre restan riesgo; la más negativa diversifica más, pero muchas coberturas rinden poco y con k activos la correlación promedio no puede bajar de <code>−1/(k − 1)</code>.</li>
+      <li><b>Cercanas a cero</b>: el riesgo baja con √k.</li>
+      <li><b>Positivas</b>: diversifican solo si <code>ρ &lt; σ<sub>menor</sub>/σ<sub>mayor</sub></code>; entre ellas, gana la de menor ρ y volatilidad parecida.</li>
+      <li><b>Regla para agregar un activo</b> i al portafolio p: baja el riesgo si <code>ρ<sub>i,p</sub> &lt; σ<sub>p</sub>/σ<sub>i</sub></code>.</li></ul>
+      <p>En <b>Portafolio → Elegir activos por diversificación</b> la app prueba todas las combinaciones de k activos con tus datos, muestra el cálculo y deja usar el grupo elegido.</p>
+    </div>
     <div class="panel" id="teo-rf">
       <h2>La tasa libre de riesgo de un país: se fija en la renta fija</h2>
       <p><b>Qué es.</b> El rendimiento de una inversión cuyo resultado se conoce de antemano: sin riesgo de impago y sin riesgo de reinversión al plazo del análisis. En la práctica es la tasa de los títulos del Gobierno en su propia moneda, porque un Estado puede pagar en la moneda que emite. En Colombia son los <b>TES</b> (Títulos de Tesorería) clase B que emite el Ministerio de Hacienda.</p>
@@ -743,6 +755,7 @@
 <script src="js/biblioteca.js"></script>
 <script src="js/macro.js"></script>
 <script src="js/pasos.js"></script>
+<script src="js/diversif.js"></script>
 <script src="js/frontera.js"></script>
 <script src="js/riesgo.js"></script>
 <script src="js/guia.js"></script>

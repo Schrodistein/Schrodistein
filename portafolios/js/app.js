@@ -284,6 +284,17 @@
         if (short.length) warnings.push(`Historias de distinta longitud: ${short.map((x) => `${x[0]} (${x[1]} periodos)`).join(', ')} frente a ${Math.max(...inf.counts)} del activo más largo. Cada activo usa toda su historia y cada correlación, las fechas que comparten los dos.${inf.psdFixed ? ' La matriz de correlación se ajustó para que fuera válida.' : ''}`);
         if (m.Teff < 36) warnings.push(`La mayoría de los activos tiene ${m.Teff} periodos; con menos de 36 las estimaciones son inestables.`);
       } else if (m.T < 36) warnings.push(`Solo hay ${m.T} periodos en que todos los activos tienen dato. Con menos de 36 las estimaciones son muy inestables.`);
+      // Universo para elegir por diversificación: todos los candidatos, también los desmarcados
+      st.univ = m;
+      const invU = p.names.map((nm, i) => i !== mi && clsAll[i] !== 'indice' && s.segs.includes(segOf(clsAll[i])));
+      if (invU.filter(Boolean).length > n) {
+        try {
+          const namesU = p.names.filter((_, i) => invU[i]);
+          st.univ = PF.model.build({ names: namesU, returns: R.filter((_, i) => invU[i]), market: R[mi], marketName: p.names[mi], dates: p.dates, bench: namesU.map(() => null) }, { freq: s.freq, rf: s.rf, muModel: s.muModel, covModel: s.covModel, marketReturn: s.marketReturn, history: s.history });
+        } catch (e) {
+          st.univ = m;
+        }
+      }
       const P = PF.model.portfolios(m, s.wmin, s.wmax, { div: s.div });
       warnings.push(...P.warnings);
       st.model = m;
@@ -308,6 +319,7 @@
       render();
     } catch (e) {
       st.model = null;
+      st.univ = null;
       showBanner(e.message);
       renderEmpty();
     }
@@ -589,11 +601,24 @@
     renderPort();
     renderCompare();
     renderTB();
+    renderDiv();
     if (st.mode === 'acciones') computeBuys();
     renderConfirm();
     renderPlan();
     renderScreen(st.screen);
     renderCharts();
+  }
+
+  /* Elegir activos por diversificación (universo: todos los activos candidatos) */
+  function renderDiv() {
+    const box = $('div-sel');
+    if (!box || !st.univ) return;
+    const o = store.get('divSel') || {};
+    try {
+      box.innerHTML = PF.diversif.render({ m: st.univ, k: o.k, by: o.by, picked: st.model ? st.model.names : [], esc, pct });
+    } catch (e) {
+      box.innerHTML = `<p class="meta">${esc(e.message)}</p>`;
+    }
   }
 
   // Secciones que se dibujan solo cuando están a la vista
@@ -2388,6 +2413,24 @@
         const t = ev.target.closest('[data-pick]');
         if (t) setPicked([t.getAttribute('data-pick')], t.checked);
       });
+    $('div-sel').addEventListener('change', (ev) => {
+      if (!ev.target.matches('#div-k, #div-by')) return;
+      const o = store.get('divSel') || {};
+      if (ev.target.id === 'div-k') o.k = Math.round(+ev.target.value) || undefined;
+      else o.by = ev.target.value;
+      store.set('divSel', o);
+      renderDiv();
+    });
+    $('div-sel').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-div-use]');
+      if (!b) return;
+      const want = new Set(b.getAttribute('data-div-use').split('|'));
+      const all = candidates(settings());
+      store.set('skip', all.filter((nm) => !want.has(nm)));
+      st.userNames = null;
+      compute();
+      $('pick-assets').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     $('pick-assets').addEventListener('click', (ev) => {
       const b = ev.target.closest('[data-pick-all]');
       if (b) setPicked(candidates(settings()), b.getAttribute('data-pick-all') === '1');

@@ -548,3 +548,55 @@ table.rf-cands td:last-child .btn { white-space: nowrap; }
 #screen-datos .panel { grid-template-columns: minmax(0, 1fr); }
 .table-scroll { max-width: 100%; }
 #screen-datos .panel h2, #screen-datos .panel h3, #pasos .panel h3 { overflow-wrap: anywhere; }
+
+/* Caja con desplazamiento horizontal: barra visible con el color de la app y sombras en el borde
+ * cuando queda contenido sin ver (técnica de sombras con background-attachment). */
+.hscroll {
+  overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: 12px;
+  scrollbar-width: thin; scrollbar-color: var(--accent) var(--sunk);
+  background:
+    linear-gradient(to right, var(--surface) 30%, transparent) left / 32px 100% no-repeat local,
+    linear-gradient(to left, var(--surface) 30%, transparent) right / 32px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.28), transparent) left / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.28), transparent) right / 12px 100% no-repeat scroll,
+    var(--surface);
+}
+.hscroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hscroll::-webkit-scrollbar { height: 10px; }
+.hscroll::-webkit-scrollbar-track { background: var(--sunk); border-radius: 0 0 12px 12px; }
+.hscroll::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; border: 2px solid var(--sunk); }
+.hscroll::-webkit-scrollbar-thumb:hover { background: var(--s1); }
+.hscroll table.data { margin: 0; background: transparent; }
+.hscroll table.data th { background: var(--sunk); position: sticky; top: 0; }
+.hscroll table.data tbody tr:nth-child(even) td { background: color-mix(in oklab, var(--sunk) 55%, transparent); }
+.hscroll table.data tbody tr:hover td { background: var(--accent-soft); }
+/* Candidatas: columnas con ancho propio (no se aplastan) y el instrumento fijo a la izquierda */
+table.rf-cands { min-width: 1040px; }
+table.rf-cands th, table.rf-cands td { white-space: nowrap; vertical-align: middle; }
+table.rf-cands td.note { white-space: normal; min-width: 300px; max-width: 360px; font-size: 0.82rem; color: var(--ink-2); line-height: 1.35; }
+table.rf-cands td.big-n { font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+table.rf-cands .stick { position: sticky; left: 0; z-index: 1; background: var(--surface); box-shadow: 1px 0 0 var(--line); }
+table.rf-cands thead .stick { background: var(--sunk); z-index: 2; }
+table.rf-cands tbody tr:nth-child(even) td.stick { background: color-mix(in oklab, var(--sunk) 55%, var(--surface)); }
+.chip { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.74rem; font-weight: 600; background: var(--sunk); border: 1px solid var(--line); color: var(--ink-2); }
+.chip-cop { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.chip-real { background: color-mix(in oklab, var(--s2) 18%, transparent); color: var(--s2); border-color: transparent; }
+.btn.btn-use { padding: 5px 12px; font-size: 0.82rem; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); background: transparent; white-space: nowrap; }
+.btn.btn-use:hover { background: var(--accent); color: var(--accent-ink); }
+.scroll-hint { margin: 6px 0 0; font-size: 0.78rem; color: var(--ink-3); text-align: center; letter-spacing: 0.02em; }
+@media (min-width: 1200px) { .scroll-hint { display: none; } }
+table.data.docs { min-width: 880px; }
+table.data.docs td:first-child { min-width: 170px; }
+
+.scroll-btn { border: 1px solid var(--line); background: var(--surface); color: var(--accent); border-radius: 999px; width: 30px; height: 30px; margin: 0 6px; cursor: pointer; font-size: 0.8rem; }
+.scroll-btn:hover { background: var(--accent); color: var(--accent-ink); }
+@media (max-width: 640px) {
+  table.rf-cands .stick { white-space: normal; min-width: 120px; max-width: 140px; }
+  table.rf-cands td.note { min-width: 240px; }
+}
+/* Lista de seguimiento: el nombre se ajusta para que tasa, variación y minigráfica quepan */
+table.watch td:first-child { white-space: normal; min-width: 92px; line-height: 1.25; }
+table.watch td:first-child .src { display: inline-block; margin-top: 2px; }
+.term-watch .table-scroll { scrollbar-width: thin; scrollbar-color: var(--accent) var(--sunk); }
+.term-watch .table-scroll::-webkit-scrollbar { height: 8px; }
+.term-watch .table-scroll::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 8px; }

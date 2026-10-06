@@ -662,11 +662,12 @@
     $('rf-now').innerHTML = `Tasa libre de riesgo en uso (Datos → Renta variable → Supuestos): <b>${pct(rfNow, 2)}</b> efectiva anual. Con rendimientos logarítmicos diarios equivale a <code>ln(1 + rf) / 242</code> = ${Number.isFinite(rfNow) ? (PF.riesgo.dailyLog(rfNow) * 100).toFixed(4).replace('.', ',') + ' %' : '—'} por rueda. La ventana de análisis es ${windowText()}.`;
     const list = libSeries().concat(libRefSeries());
     const c = PF.riesgo.rfCandidates(list);
-    const use = (x) => (Number.isFinite(x) ? `<button type="button" class="btn btn-ghost" data-use-rf="${(Math.round(x * 10000) / 100).toFixed(2)}">Usar ${pct(x, 2)}</button>` : '');
+    const use = (x) => (Number.isFinite(x) ? `<button type="button" class="btn btn-use" data-use-rf="${(Math.round(x * 10000) / 100).toFixed(2)}">Usar ${pct(x, 2)}</button>` : '');
+    const chip = (x) => (/uvr/i.test(x.name) ? '<span class="chip chip-real">Real · UVR</span>' : x.role && /^tes-/.test(x.role) ? '<span class="chip chip-cop">Pesos · cero cupón</span>' : x.tipo.startsWith('Índice') ? '<span class="chip">Índice BVC</span>' : '<span class="chip">Tasa negociada</span>');
     $('rf-cands').innerHTML = c.length
-      ? `<div class="table-scroll"><table class="data wrap rf-cands"><thead><tr><th>Instrumento</th><th>Tipo</th><th>Plazo</th><th class="n">Último dato</th><th class="n">Promedio</th><th>Fecha</th><th>Cómo se usa</th><th></th></tr></thead><tbody>${c
-          .map((x) => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.tipo)}</td><td>${esc(x.plazo)}</td><td class="n">${pct(x.value, 2)}</td><td class="n">${pct(x.avg, 2)}</td><td>${esc(x.date || '')}</td><td class="sub">${esc(x.note)}</td><td>${use(x.value)}</td></tr>`)
-          .join('')}</tbody></table></div><p class="hint">Los índices COLTES y COLIBR son de rendimiento total: su cifra es lo que <i>rindió</i> mantenerlos (efectivo anual, base 365 días), no la tasa a la que se negocian hoy. La TIR de un TES sí es la tasa de hoy. Para un análisis a un año, la referencia es el COLIBR o la TIR del TES de 1 año; para valorar acciones a largo plazo, la TIR del TES de 10 años menos el diferencial por riesgo de impago (abajo).</p>`
+      ? `<div class="hscroll" tabindex="0" aria-label="Candidatas a tasa libre de riesgo: desliza a los lados para ver todas las columnas"><table class="data rf-cands"><thead><tr><th class="stick">Instrumento</th><th>Tipo</th><th>Plazo</th><th class="n">Último dato</th><th class="n">Promedio</th><th>Fecha</th><th>Cómo se usa</th><th></th></tr></thead><tbody>${c
+          .map((x) => `<tr><td class="stick"><b>${esc(x.name)}</b></td><td>${chip(x)}</td><td>${esc(x.plazo)}</td><td class="n big-n">${pct(x.value, 2)}</td><td class="n">${pct(x.avg, 2)}</td><td>${esc(x.date || '')}</td><td class="note">${esc(x.note)}</td><td>${use(x.value)}</td></tr>`)
+          .join('')}</tbody></table></div><p class="scroll-hint"><button type="button" class="scroll-btn" data-hscroll="-1" aria-label="Desplazar la tabla a la izquierda">◀</button> Desliza la tabla para ver todas las columnas <button type="button" class="scroll-btn" data-hscroll="1" aria-label="Desplazar la tabla a la derecha">▶</button></p><p class="hint">Los índices COLTES y COLIBR son de rendimiento total: su cifra es lo que <i>rindió</i> mantenerlos (efectivo anual, base 365 días), no la tasa a la que se negocian hoy. La tasa de un TES sí es la de hoy. Para un análisis a un año, la referencia es el TES de 1 año o el COLIBR; para valorar acciones a largo plazo, el TES de 10 años menos el diferencial por riesgo de impago (abajo).</p>`
       : '<p class="hint">Todavía no hay renta fija en la biblioteca. Sube el COLIBR, los COLTES (CP, LP, UVR) o las tasas de los TES con el botón de arriba.</p>';
     // Primas: datos tomados de los archivos cargados (o escritos por el usuario)
     const pa = prpAuto();
@@ -715,6 +716,13 @@
       else delete all[k];
       store.set('prp', all);
       renderRf();
+    });
+    // Flechas para desplazar una tabla ancha (en celular la barra del sistema se oculta)
+    document.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-hscroll]');
+      if (!b) return;
+      const box = b.closest('.scroll-hint') && b.closest('.scroll-hint').previousElementSibling;
+      if (box && box.classList.contains('hscroll')) box.scrollBy({ left: +b.dataset.hscroll * Math.max(160, box.clientWidth * 0.8), behavior: 'smooth' });
     });
     // Botones «Usar…» de Renta fija y de Paso a paso
     document.addEventListener('click', (ev) => {
@@ -1376,6 +1384,14 @@
     if (st.series && $('csv').value === st.mergedText) list = st.series.map((x) => ({ name: x.name, dates: x.dates, prices: x.prices }));
     else list = p.names.map((n) => Object.assign({ name: n }, priceSeries(n)));
     list = list.filter((x) => x.dates.length >= 2);
+    // Bonos de deuda pública (TES cero cupón del Banco de la República): segmento de renta fija,
+    // con su tasa y el índice de rendimiento total de mantener el bono a plazo constante
+    const have = new Set(list.map((x) => x.name));
+    const tesOrder = (r) => (/uvr/.test(r.role) ? 100 : 0) + (r.dur || 0);
+    libRefSeries()
+      .filter((r) => /^tes-/.test(r.role || '') && r.rates && !have.has(r.name))
+      .sort((a, b) => tesOrder(a) - tesOrder(b))
+      .forEach((r) => list.push({ name: r.name, dates: r.dates, prices: r.prices, rates: r.rates, dur: r.dur, cls: 'tes' }));
     const market = st.model ? st.model.marketName : p.names[PF.data.guessMarket(p.names)];
     // El índice de referencia va primero
     list.sort((a, b) => (a.name === market ? -1 : b.name === market ? 1 : 0));
@@ -1386,7 +1402,7 @@
     const names = list.map((x) => x.name);
     const segIdx = (nm) => (/coltes|colibr|(^|\W)ibr(\W|$)/i.test(nm) ? 'fija' : /(^|\W)(trm|usd|cop|dolar|dólar|eur)(\W|$)/i.test(nm) ? 'divisas' : 'variable');
     for (const x of list) {
-      x.cls = clsOf(x.name);
+      x.cls = x.rates ? 'tes' : clsOf(x.name);
       x.seg = x.cls === 'indice' ? segIdx(x.name) : segOf(x.cls);
     }
     const pickBench = (seg) => {
@@ -1396,6 +1412,8 @@
         const hit = names.find((nm) => re.test(nm) && list.find((x) => x.name === nm).seg === seg);
         if (hit) return hit;
       }
+      // Sin COLTES ni COLIBR: el TES cero cupón en pesos a 10 años hace de referencia de la renta fija
+      if (seg === 'fija') return names.find((nm) => /cero cup[oó]n pesos 10/i.test(nm)) || null;
       return null;
     };
     const segs = { variable: { label: 'Renta variable', bench: pickBench('variable') }, fija: { label: 'Renta fija', bench: pickBench('fija') }, divisas: { label: 'Divisas', bench: pickBench('divisas') } };

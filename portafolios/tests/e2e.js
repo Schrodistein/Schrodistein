@@ -26,6 +26,13 @@ const shots = process.argv[3];
     if (!/Times New Roman/.test(await page.evaluate(() => getComputedStyle(document.body).fontFamily))) errors.push(label + ': la letra no es Times New Roman');
     if (await page.isHidden('#tape')) errors.push(label + ': sin cinta de cotizaciones');
     for (const id of ['tc-ret', 'tc-hist', 'tc-cum', 'tc-roll', 'tc-corr']) if (!(await page.$(`#${id} svg`))) errors.push(`${label}: falta el gráfico ${id}`);
+    // Renta fija: los bonos de deuda pública (TES cero cupón) con su tasa y cambio en pb
+    await page.click('#t-segs [data-seg="fija"]');
+    await page.waitForTimeout(300);
+    const tes = await page.$$eval('#tw-table tr[data-asset]', (r) => r.map((x) => x.textContent));
+    if (tes.filter((x) => /TES (pesos|UVR) \d+ años?/.test(x) && /%/.test(x) && /pb/.test(x)).length < 6) errors.push(label + ': faltan los TES en la terminal de renta fija: ' + tes.join(' | '));
+    await page.click('#t-segs [data-seg="variable"]');
+    await page.waitForTimeout(300);
     await page.click('#tw-table tr[data-asset="Banca"]');
     if (!/Banca/.test(await page.textContent('#th'))) errors.push(label + ': la lista de seguimiento no cambia de activo');
     // Apariencia: modo claro y fondo personalizado

@@ -15,6 +15,11 @@
   const price = (x) => (!fin(x) ? '—' : Math.abs(x) >= 1000 ? nf(0).format(x) : nf(2).format(x));
   const pct = (x, d = 2) => (fin(x) ? `${x > 0 ? '+' : x < 0 ? '−' : ''}${nf(d).format(Math.abs(x) * 100)} %` : '—');
   const pctPlain = (x, d = 1) => (fin(x) ? `${nf(d).format(x * 100)} %` : '—');
+  // Bonos de deuda pública (TES): se cotizan por tasa. y = tasa en decimal; cambio en puntos básicos
+  const rateTxt = (y) => (fin(y) ? `${nf(2).format(y * 100)} %` : '—');
+  const bpTxt = (d) => (fin(d) ? `${d > 0 ? '+' : d < 0 ? '−' : ''}${nf(0).format(Math.abs(d) * 1e4)} pb` : '—');
+  const isBond = (x) => !!(x && x.rates);
+  const rateSeries = (x) => ({ name: x.name, dates: x.dates, prices: x.rates.map((y) => y * 100), invert: true });
   const tip = (html) => ` data-tip="${esc(html)}"`;
   const dayMs = 864e5;
   const t = (d) => Date.parse((d.length === 7 ? d + '-01' : d) + 'T00:00:00Z');
@@ -25,7 +30,7 @@
   /* Qué índice falta en cada segmento y dónde descargarlo. */
   const NEED = {
     variable: 'el índice MSCI COLCAP (bvc.com.co → Índices → MSCI COLCAP → Históricos)',
-    fija: 'el índice COLTES (CP, LP o UVR) o el COLIBR (bvc.com.co → Índices de renta fija)',
+    fija: 'el índice COLTES (CP, LP o UVR) o el COLIBR (bvc.com.co → Índices de renta fija), y las tasas cero cupón de los TES del Banco de la República (Datos → Renta fija)',
     divisas: 'el dólar USD/COP o la TRM (la app de escritorio la descarga sola)',
   };
   const RANGES = [['1M', 31], ['3M', 92], ['6M', 183], ['1A', 366], ['Todo', Infinity]];
@@ -85,9 +90,12 @@
       out.corr = corr(a.x, a.y);
       const vy = a.y.length > 2 ? sd(a.y) ** 2 : NaN;
       out.beta = fin(vy) ? (out.corr * sd(a.x) * sd(a.y)) / vy : NaN;
-    } else {
+    } else if (mkt === s) {
       out.corr = 1;
       out.beta = 1;
+    } else {
+      out.corr = NaN;
+      out.beta = NaN;
     }
     return out;
   }
@@ -283,7 +291,7 @@
     const hi = Math.max(...p);
     const X = (i) => (i / (p.length - 1)) * (W - 2) + 1;
     const Y = (v) => 1 + (1 - (v - lo) / (hi - lo || 1)) * (H - 2);
-    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${p.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('')}" class="${p.at(-1) >= p[0] ? 'ln-up' : 'ln-down'}" style="stroke-width:1.5"/></svg>`;
+    return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${p.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join('')}" class="${(p.at(-1) >= p[0]) !== !!s.invert ? 'ln-up' : 'ln-down'}" style="stroke-width:1.5"/></svg>`;
   }
 
   /* ---------- Render ---------- */
@@ -325,7 +333,8 @@
     $('term-empty').hidden = true;
     $('term-body').hidden = false;
     const segNote = $('t-seg-note');
-    if (segNote) segNote.innerHTML = ctx.market ? `Índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: <b>${esc(ctx.market)}</b>.` : `Falta el índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: descarga ${esc(NEED[ctx.seg])}.`;
+    if (segNote && ctx.market && /cero cup/i.test(ctx.market)) segNote.innerHTML = `Referencia de renta fija: <b>${esc(ctx.market)}</b>, mientras cargas el índice COLTES de la BVC (bvc.com.co → Índices de renta fija).`;
+    else if (segNote) segNote.innerHTML = ctx.market ? `Índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: <b>${esc(ctx.market)}</b>.` : `Falta el índice de referencia de ${esc(ctx0.segs[ctx.seg].label.toLowerCase())}: descarga ${esc(NEED[ctx.seg])}.`;
     const byName = new Map(ctx.list.map((s) => [s.name, s]));
     const mkt = byName.get(ctx.market) || null;
     if (!state.sel || !byName.has(state.sel)) state.sel = (ctx.list.find((s) => s.name !== ctx.market) || ctx.list[0]).name;
@@ -339,6 +348,11 @@
       ctx.list
         .map((x) => {
           const n = x.prices.length;
+          if (isBond(x)) {
+            // TES: tasa y cambio en pb (si la tasa sube, el precio del bono baja: se pinta en rojo)
+            const dy = n > 1 ? x.rates[n - 1] - x.rates[n - 2] : NaN;
+            return `<tr class="${x.name === state.sel ? 'sel' : ''}" data-asset="${esc(x.name)}" tabindex="0" title="${esc(x.name)}: deuda pública, tasa cero cupón"><td><b>${esc(x.name.replace(/^TES cero cup[oó]n /i, 'TES '))}</b>${x.name === ctx.market ? ' <span class="src">referencia</span>' : ''}</td><td class="n">${rateTxt(x.rates[n - 1])}</td><td class="n ${dy <= 0 ? 'up' : 'down'}">${bpTxt(dy)}</td><td>${spark(rateSeries(x), 72, 22)}</td></tr>`;
+          }
           const ch = n > 1 ? Math.log(x.prices[n - 1] / x.prices[n - 2]) : NaN;
           return `<tr class="${x.name === state.sel ? 'sel' : ''}" data-asset="${esc(x.name)}" tabindex="0"><td><b>${esc(x.name)}</b>${x.name === ctx.market ? ' <span class="src">índice de referencia</span>' : x.cls === 'indice' ? ' <span class="src">índice</span>' : ''}</td><td class="n">${price(x.prices[n - 1])}</td><td class="n ${ch >= 0 ? 'up' : 'down'}">${pct(ch)}</td><td>${spark(x, 72, 22)}</td></tr>`;
         })
@@ -347,6 +361,31 @@
 
     // Ficha
     const up = st.change >= 0;
+    const bond = isBond(s);
+    if (bond) {
+      const y = s.rates;
+      const n = y.length;
+      const dy = n > 1 ? y[n - 1] - y[n - 2] : NaN;
+      const lastT = t(s.dates[n - 1]);
+      const yr = y.filter((_, i) => lastT - t(s.dates[i]) <= 365 * dayMs);
+      let y365 = NaN;
+      for (let i = n - 1; i >= 0; i--) if (lastT - t(s.dates[i]) >= 365 * dayMs - dayMs / 2) {
+        y365 = y[i];
+        break;
+      }
+      const dur = s.dur || 0;
+      $('th').innerHTML = `<div class="th-name"><h2>${esc(s.name)} <span class="src">deuda pública</span></h2><span class="meta">Tasa del ${esc(dayTxt(st.date))} · curva cero cupón del Banco de la República · plazo ${dur} año${dur === 1 ? '' : 's'}</span></div>
+        <div class="th-price"><span class="big">${rateTxt(y[n - 1])}</span><span class="${dy <= 0 ? 'up' : 'down'}">${dy <= 0 ? '▼' : '▲'} ${esc(bpTxt(dy))}</span></div>
+        <div class="rng" role="group" aria-label="Rango">${RANGES.map(([k]) => `<button type="button" data-range="${k}" aria-pressed="${k === state.range}">${k}</button>`).join('')}</div>`;
+      const tb = (k, v, sub, cls) => `<div class="tile"><span class="k">${k}</span><span class="v ${cls || ''}">${v}</span>${sub ? `<span class="s">${sub}</span>` : ''}</div>`;
+      $('t-tiles').innerHTML =
+        tb('Precio de un cero cupón', nf(2).format(100 / Math.pow(1 + y[n - 1], dur || 1)), `por 100 de valor nominal: 100 / (1 + y)^${dur}`) +
+        tb('Tasa máxima y mínima 52 semanas', `${rateTxt(Math.max(...yr))} · ${rateTxt(Math.min(...yr))}`, '') +
+        tb('Cambio de la tasa en 1 año', bpTxt(y[n - 1] - y365), 'si la tasa sube, el precio del bono baja', y[n - 1] - y365 <= 0 ? 'up' : 'down') +
+        tb('Rendimiento total 1 año', pct(st.y1, 1), 'causación de la tasa + efecto precio (duración)', st.y1 >= 0 ? 'up' : 'down') +
+        tb('Volatilidad anual del bono', pctPlain(st.vol), 'del índice de rendimiento total') +
+        tb('Beta β · correlación', `${fin(st.beta) ? nf(2).format(st.beta) : '—'} · ${fin(st.corr) ? nf(2).format(st.corr) : '—'}`, mkt ? `frente a ${esc(mkt.name)}` : '');
+    } else {
     $('th').innerHTML = `<div class="th-name"><h2>${esc(s.name)}${s.name === ctx.market ? ' <span class="src">índice de referencia</span>' : ''}</h2><span class="meta">Cierre del ${esc(dayTxt(st.date))} · ${ctx.daily ? 'datos diarios' : 'datos por periodo'}</span></div>
       <div class="th-price"><span class="big">${price(st.last)}</span><span class="${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${esc(price(Math.abs(st.abs)))} (${esc(pct(st.change))})</span></div>
       <div class="rng" role="group" aria-label="Rango">${RANGES.map(([k]) => `<button type="button" data-range="${k}" aria-pressed="${k === state.range}">${k}</button>`).join('')}</div>`;
@@ -358,9 +397,10 @@
       tl('Volatilidad anual', pctPlain(st.vol), ctx.daily ? 'desviación diaria × √242' : 'desviación × √f') +
       tl('Beta β', fin(st.beta) ? nf(2).format(st.beta) : '—', mkt ? `frente a ${esc(mkt.name)}` : '') +
       tl('Correlación con el índice', fin(st.corr) ? nf(2).format(st.corr) : '—', `${st.n} rendimientos`);
+    }
 
     const i0 = inRange(s.dates, state.range);
-    $('tc-price-t').textContent = `Precio de ${s.name}`;
+    $('tc-price-t').textContent = bond ? `Tasa (%) de ${s.name}` : `Precio de ${s.name}`;
     $('tc-ret-t').textContent = `Rendimientos ${ctx.daily ? 'diarios' : 'por periodo'} de ${s.name}`;
     // Rendimiento logarítmico acumulado desde el inicio del rango elegido: ln(Pₜ / P₀)
     {
@@ -375,7 +415,7 @@
     $('tc-roll-t').textContent = mkt ? `Correlación móvil con ${mkt.name}` : 'Correlación móvil';
     const W = (id) => Math.max(280, width($(id)));
     if (width($('tc-price'))) {
-      $('tc-price').innerHTML = priceChart(s, i0, W('tc-price'));
+      $('tc-price').innerHTML = priceChart(bond ? rateSeries(s) : s, i0, W('tc-price'));
       $('tc-ret').innerHTML = returnsChart(s, i0, W('tc-ret'));
       $('tc-hist').innerHTML = histChart(s, W('tc-hist'));
       $('tc-cum').innerHTML = cumChart(s, mkt, i0, W('tc-cum'));
@@ -419,6 +459,10 @@
     const items = ctx.list
       .map((x) => {
         const n = x.prices.length;
+        if (isBond(x)) {
+          const dy = n > 1 ? x.rates[n - 1] - x.rates[n - 2] : NaN;
+          return `<span class="tk-item"><b>${esc(x.name)}</b> ${rateTxt(x.rates[n - 1])} <span class="${dy <= 0 ? 'up' : 'down'}">${dy <= 0 ? '▼' : '▲'} ${bpTxt(dy)}</span></span>`;
+        }
         const ch = n > 1 ? Math.log(x.prices[n - 1] / x.prices[n - 2]) : NaN;
         return `<span class="tk-item"><b>${esc(x.name)}</b> ${price(x.prices[n - 1])} <span class="${ch >= 0 ? 'up' : 'down'}">${ch >= 0 ? '▲' : '▼'} ${pct(ch)}</span></span>`;
       })

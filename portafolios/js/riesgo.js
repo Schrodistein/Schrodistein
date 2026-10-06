@@ -56,6 +56,7 @@
               : 'Es la tasa a la que se negocia hoy el título: la referencia correcta de tasa libre de riesgo a ese plazo.',
           pri: /uvr/i.test(s.name) ? 1.5 : /tes|tfit|tfu|tco/i.test(s.name) ? 0 : 2,
           dur: s.dur,
+          role: s.role,
         });
         continue;
       }
@@ -360,7 +361,7 @@
       const [lab, unit] = LABELS[k];
       return `<tr><td>${lab}</td><td class="n"><b>${u ? nf(u.v, unit === 'pb' ? 0 : 2) + ' ' + unit : '—'}</b></td><td>${u ? esc(u.from) : '<span class="neg">Falta: carga el archivo o escríbelo arriba</span>'}</td><td>${u && u.date ? esc(u.date) : ''}</td></tr>`;
     });
-    return `<h3>Datos usados</h3><div class="table-scroll"><table class="data wrap"><thead><tr><th>Dato</th><th class="n">Valor</th><th>Fuente</th><th>Fecha</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
+    return `<h3>Datos usados</h3><div class="hscroll"><table class="data wrap"><thead><tr><th>Dato</th><th class="n">Valor</th><th>Fuente</th><th>Fecha</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`;
   }
   /* Comparación con la tabla de Damodaran (prima por calificación y por CDS). */
   function damodaranHTML(ctx, D, q) {
@@ -368,7 +369,7 @@
     if (!c) return '';
     const { pct, esc } = ctx;
     return `<h3>Comparación con Damodaran (${esc(c.file || 'ctryprem')})</h3>
-      <div class="table-scroll"><table class="data wrap"><thead><tr><th>Medida</th><th class="n">Damodaran</th><th class="n">Con tus datos</th><th>Cómo se obtiene</th></tr></thead><tbody>
+      <div class="hscroll"><table class="data wrap"><thead><tr><th>Medida</th><th class="n">Damodaran</th><th class="n">Con tus datos</th><th>Cómo se obtiene</th></tr></thead><tbody>
         <tr><td>Calificación de Moody's</td><td class="n">${esc(c.rating)}</td><td class="n">—</td><td>Riesgo de impago del Estado colombiano según la calificadora.</td></tr>
         <tr><td>Diferencial por impago</td><td class="n">${pct(c.spread, 2)}</td><td class="n">${pct(q.spread, 2)}</td><td>Damodaran: diferencial típico de los países con la misma calificación. Tus datos: ${q.spreadSrc === 'EMBI' ? 'EMBIG Colombia (J.P. Morgan)' : 'TES 10 años menos el Tesoro llevado a pesos'}.</td></tr>
         <tr><td>Prima por riesgo país (PRP)</td><td class="n"><b>${pct(c.crp, 2)}</b></td><td class="n"><b>${pct(q.prp, 2)}</b></td><td>Diferencial × σ acciones / σ bonos.</td></tr>
@@ -383,7 +384,7 @@
     const { pct } = ctx;
     const nf = (x, d = 2) => (fin(x) ? x.toFixed(d).replace('.', ',') : '—');
     const row = (a, b, c) => `<tr><td>${a}</td><td><code>${b}</code></td><td class="n"><b>${c}</b></td></tr>`;
-    return `<h3>Cálculo</h3><div class="table-scroll"><table class="data wrap"><thead><tr><th>Paso</th><th>Fórmula</th><th class="n">Resultado</th></tr></thead><tbody>
+    return `<h3>Cálculo</h3><div class="hscroll"><table class="data wrap"><thead><tr><th>Paso</th><th>Fórmula</th><th class="n">Resultado</th></tr></thead><tbody>
       ${row('1. Tasa libre de riesgo en dólares llevada a pesos (paridad de Fisher)', '(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1', pct(q.rfUsdInCop, 2))}
       ${row('2. Diferencial implícito del TES de 10 años', 'TIR TES 10 años − paso 1', pct(q.implicit, 2))}
       ${row('3. Diferencial por riesgo de impago (default spread)', fin(q.embi) ? 'EMBI de Colombia (pb) / 10.000' : 'si no hay EMBI, el del paso 2', pct(q.spread, 2))}

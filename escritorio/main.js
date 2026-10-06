@@ -245,6 +245,22 @@ function registerIpc() {
   ipcMain.handle('datos:series', () => store.series());
   ipcMain.handle('datos:noticias', () => store.data.news);
   ipcMain.handle('datos:actualizar', () => runUpdate('manual'));
+  // Historiales leídos en Datos (interfaz): quedan también en Mercado, sin volver a cargarlos
+  ipcMain.handle('datos:agregar', (e, list) => {
+    if (!Array.isArray(list)) return null;
+    const res = { assets: {}, errors: [] };
+    const nums = (a) => (Array.isArray(a) ? a.map((x) => (x == null ? NaN : Number(x))) : undefined);
+    for (const s of list.slice(0, 1000)) {
+      if (!s || typeof s.name !== 'string' || !Array.isArray(s.dates) || !Array.isArray(s.prices) || s.dates.length !== s.prices.length) continue;
+      const name = s.name.slice(0, 80);
+      const info = { cls: typeof s.cls === 'string' ? s.cls : undefined, kind: s.kind === 'tasa' ? 'tasa' : undefined, dur: Number(s.dur) || undefined };
+      store.ensureAsset(name, info.cls === 'indice', info);
+      res.assets[name] = store.mergePrices(name, s.dates.map(String), nums(s.prices), 'bvc', nums(s.qty), nums(s.vol));
+    }
+    store.save();
+    writeLibrary();
+    return res;
+  });
   ipcMain.handle('datos:importar', async () => {
     const r = await dialog.showOpenDialog(win, {
       title: 'Importar históricos de la BVC',

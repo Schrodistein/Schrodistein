@@ -459,6 +459,7 @@
       return;
     }
     const combined = PF.data.combineSeries(series);
+    shareWithMarket(combined);
     // Todo lo leído queda en la biblioteca local; el análisis usa la biblioteca completa
     const saved = await PF.lib.saveSeries(combined, 'archivo');
     await refreshLib();
@@ -480,6 +481,23 @@
     st.series = usable;
     const plan = suggestSettings(usable);
     if (mergeLoaded(false)) status(`Listo: ${combined.length} instrumentos leídos de ${files.length - errors.length} archivos y guardados en la biblioteca (${saved.agregadas.toLocaleString('es-CO')} fechas nuevas${saved.nuevas ? `, ${saved.nuevas} instrumentos nuevos` : ''}; los valores ya guardados no cambian). El análisis usa los ${usable.length} instrumentos de la biblioteca. ${plan}${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
+  }
+
+  /* App de escritorio: lo que se sube en Datos queda también en Mercado (sin volver a cargarlo).
+   * Las series de referencia (tasas cero cupón, Tesoro de EE. UU., EMBIG) no son activos de Mercado. */
+  function shareWithMarket(list) {
+    const api = globalThis.bvc;
+    if (!api || !api.agregar) return;
+    const out = list
+      .filter((x) => !x.ref)
+      .map((x) => ({ name: x.name, dates: x.dates, prices: x.kind === 'tasa' && x.rates ? x.rates : x.prices, qty: x.qty, vol: x.vol, cls: x.cls, kind: x.kind, dur: x.dur }));
+    if (!out.length) return;
+    api.agregar(out).then(
+      (r) => {
+        if (r && Object.keys(r.assets).length) globalThis.dispatchEvent(new CustomEvent('pf:mercado', { detail: r }));
+      },
+      () => {}
+    );
   }
 
   /* La frecuencia es fija: cotizaciones diarias, una por rueda de la BVC (242 al año). */
@@ -573,14 +591,18 @@
     $('guia').innerHTML = PF.guia.render(guiaCtx());
   }
   /* ---------- Datos → submenú: renta variable, renta fija (tasa libre de riesgo) y guía ---------- */
-  function datosSub(name) {
+  function datosSub(name, fromGo) {
     const sub = ['variable', 'fija', 'guia'].includes(name) ? name : 'variable';
+    // Al cambiar de parte dentro de Datos también se recuerda dónde quedó cada una
+    const switching = !fromGo && st.screen === 'datos' && store.get('datosSub') !== sub;
+    if (switching) saveScroll();
     store.set('datosSub', sub);
     document.querySelectorAll('#screen-datos [data-sub]').forEach((el) => {
       if (el.closest('#datos-sub')) return el.getAttribute('data-sub') === sub ? el.setAttribute('aria-current', 'page') : el.removeAttribute('aria-current');
       el.hidden = !el.getAttribute('data-sub').split(' ').includes(sub);
     });
     if (sub === 'fija') renderRf();
+    if (switching) restoreScroll();
   }
   // Serie de rendimientos logarítmicos diarios → σ anual (242 ruedas)
   function annualVol(s) {
@@ -1467,8 +1489,34 @@
   }
 
   /* ---------- Navegación ---------- */
+  // Cada pestaña (y cada parte de Datos) recuerda dónde quedó la página: al volver se regresa ahí
+  const scrollPos = Object.assign({}, store.get('scrollPos') || {});
+  const scrollKey = (screen) => (screen === 'datos' ? 'datos:' + (store.get('datosSub') || 'variable') : screen);
+  const saveScroll = () => {
+    if (!st.screen) return;
+    scrollPos[scrollKey(st.screen)] = Math.round(window.scrollY || 0);
+    store.set('scrollPos', scrollPos);
+  };
+  let restoreTimer = null;
+  function restoreScroll() {
+    const y = scrollPos[scrollKey(st.screen)] || 0;
+    clearTimeout(restoreTimer);
+    window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+    // Si la página todavía no era tan alta (gráficos o tablas dibujándose), se reintenta un momento,
+    // siempre que el usuario no se haya movido desde el último intento
+    let tries = 0;
+    let at = window.scrollY;
+    const retry = () => {
+      if (Math.abs(window.scrollY - y) <= 2 || Math.abs(window.scrollY - at) > 2 || ++tries > 10) return;
+      window.scrollTo({ top: y, left: 0, behavior: 'instant' });
+      at = window.scrollY;
+      restoreTimer = setTimeout(retry, 120);
+    };
+    restoreTimer = setTimeout(retry, 60);
+  }
   function go(screen) {
     if (screen === 'comprar') screen = 'frontera'; // la pestaña Comprar se quitó
+    saveScroll();
     if (screen === 'guia') {
       screen = 'datos'; // la guía está dentro de Datos
       store.set('datosSub', 'guia');
@@ -1485,9 +1533,10 @@
       /* marco sin historial */
     }
     if (screen === 'invertir') renderWhere();
-    if (screen === 'datos') datosSub(store.get('datosSub') || 'variable');
+    if (screen === 'datos') datosSub(store.get('datosSub') || 'variable', true);
     renderScreen(screen);
     renderCharts();
+    restoreScroll();
   }
 
   function renderWhere() {
@@ -1610,30 +1659,36 @@
     el.textContent = msg || '';
   }
   /* Matriz de precios (hoja «M. PRECIOS») con los activos marcados «Usar» de la biblioteca. */
-  function priceMatrix(calendar) {
+  function priceMatrix(calendar, fill) {
     let list = st.lib.series.filter((r) => r.use !== false && r.kind !== 'tasa');
     // Sin biblioteca (por ejemplo, con los datos de ejemplo o pegados): los datos cargados en Datos
     if (!list.length && st.parsed && st.parsed.dates.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) list = st.parsed.names.map((name, i) => ({ name, dates: st.parsed.dates, prices: st.parsed.values[i] }));
     const mi = PF.data.guessMarket(list.map((r) => r.name));
     const market = list[mi] && PF.data.isMarketName(list[mi].name) ? list[mi].name : null;
-    return PF.matriz.workbook(list, { calendar, market, cut: libCut(), from: libFrom() });
+    return PF.matriz.workbook(list, { calendar, market, cut: libCut(), from: libFrom(), fill, title: fill === false ? 'PRECIO DE CIERRE (ORIGINAL)' : 'PRECIO DE CIERRE' });
   }
   function wireLib() {
     const box = $('screen-biblioteca');
-    $('mx-download').addEventListener('click', () => {
+    // Dos matrices: la original (solo los cierres cotizados) y la completada (último precio en las ruedas sin negociación)
+    const mxDownload = (fill) => {
       const el = $('mx-status');
       el.hidden = false;
-      const { mx, bytes } = priceMatrix($('mx-cal').value);
+      const { mx, bytes } = priceMatrix($('mx-cal').value, fill);
       if (!bytes) {
         el.className = 'status bad';
         el.textContent = 'La biblioteca no tiene precios todavía: carga archivos en Datos.';
         return;
       }
-      download(bytes, `Matriz de precios ${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      download(bytes, `Matriz de precios ${fill === false ? 'original' : 'completada'} ${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      const cells = mx.values.reduce((q, c) => q + c.filter(Number.isFinite).length, 0);
       const nFill = mx.filled.reduce((q, c) => q + c.filter(Boolean).length, 0);
       el.className = 'status ok';
-      el.textContent = `Matriz de ${mx.names.length} activos y ${mx.dates.length.toLocaleString('es-CO')} fechas (${mx.dates[0]} a ${mx.dates[mx.dates.length - 1]}); ${nFill.toLocaleString('es-CO')} celdas completadas con el último precio cotizado.`;
-    });
+      el.textContent = fill === false
+        ? `Matriz original: ${mx.names.length} activos y ${mx.dates.length.toLocaleString('es-CO')} ruedas (${mx.dates[0]} a ${mx.dates[mx.dates.length - 1]}), ${cells.toLocaleString('es-CO')} cierres tal como los publicó la BVC; las celdas vacías son ruedas en que ese activo no se negoció.`
+        : `Matriz completada: ${mx.names.length} activos y ${mx.dates.length.toLocaleString('es-CO')} ruedas (${mx.dates[0]} a ${mx.dates[mx.dates.length - 1]}); ${nFill.toLocaleString('es-CO')} celdas completadas con el último precio cotizado.`;
+    };
+    $('mx-download').addEventListener('click', () => mxDownload(true));
+    $('mx-download-orig').addEventListener('click', () => mxDownload(false));
     box.addEventListener('change', async (ev) => {
       const t = ev.target;
       if (t.dataset.libUse) {
@@ -2344,6 +2399,9 @@
       $('box-pesos').hidden = true;
       $('box-acciones').hidden = false;
     }
+    // La posición de cada pestaña se guarda mientras se desplaza (y al cerrar la app)
+    window.addEventListener('scroll', debounce(saveScroll, 300), { passive: true });
+    window.addEventListener('pagehide', saveScroll);
     const hash = (location.hash || '').slice(1);
     st.screen = document.getElementById('screen-' + hash) ? hash : 'datos';
     parse(false);

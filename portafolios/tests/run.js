@@ -955,6 +955,8 @@ test('Matriz de precios: sin sábados ni domingos (la TRM del sábado pasa al lu
   lst.slice(0, 5).forEach((x) => { const o = x.dates.map((d, i) => [d, x.prices[i]]).sort(); x.dates = o.map((q) => q[0]); x.prices = o.map((q) => q[1]); });
   const mh = PF.matriz.build(lst);
   assert(mh.dates.join() === base.join(), 'sin domingo ni festivo: ' + mh.dates.join());
+  const mo = PF.matriz.build([{ name: 'A', dates: ['2026-08-13', '2026-08-14'], prices: [1, 2] }, { name: 'B', dates: ['2026-08-13'], prices: [5] }], { fill: false });
+  assert(mo.dates.join() === '2026-08-13,2026-08-14' && isNaN(mo.values[1][1]) && mo.values[1][0] === 5, 'matriz original sin completar');
   const mf = PF.matriz.build([{ name: 'A', dates: ['2023-08-18', '2023-08-22', '2023-08-23'], prices: [1, 2, 3] }], { from: '2023-08-22' });
   assert(mf.dates[0] === '2023-08-22', 'fecha de inicio');
 });

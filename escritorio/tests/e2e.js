@@ -80,6 +80,26 @@ const shots = process.argv[2];
   if (Object.entries(saved.prices).some(([n, b]) => !/\//.test(n) && Object.values(b).some((x) => x[1] !== 'bvc'))) errors.push('hay cierres de acciones que no son de la BVC');
   if (!saved.news.length || !Object.keys(saved.prices).length) errors.push('datos no guardados');
 
+  // Un archivo subido en Datos queda también en Mercado (sin volver a cargarlo)
+  {
+    const csv = path.join(require('os').tmpdir(), 'PRUEBAMKT.csv');
+    const lines = ['Nemotécnico;Fecha;Cantidad;Volumen;Precio de cierre'];
+    for (let t = Date.UTC(2025, 0, 2), k = 0; k < 30; t += 864e5) {
+      const d = new Date(t);
+      if (d.getUTCDay() % 6 === 0) continue;
+      lines.push(`PRUEBAMKT;${d.toISOString().slice(0, 10)};100;1000;${(1000 + k * 3).toFixed(2).replace('.', ',')}`);
+      k++;
+    }
+    fs.writeFileSync(csv, lines.join('\n'));
+    await win.click('#tab-datos');
+    await win.setInputFiles('#file', csv);
+    await win.waitForFunction(() => /quedó también en Mercado|quedaron también en Mercado/.test(document.getElementById('mk-status').textContent), null, { timeout: 15000 }).catch(() => errors.push('Datos → Mercado: sin aviso'));
+    await win.click('#tab-mercado');
+    if (!/PRUEBAMKT/.test(await win.textContent('#mk-table'))) errors.push('el archivo subido en Datos no aparece en Mercado');
+    const saved2 = JSON.parse(fs.readFileSync(path.join(userData, 'datos.json'), 'utf8'));
+    if (!saved2.prices.PRUEBAMKT || Object.keys(saved2.prices.PRUEBAMKT).length !== 30) errors.push('PRUEBAMKT no quedó guardado en los datos de Mercado');
+  }
+
   // Variables macro y biblioteca local
   await win.click('#tab-macro');
   await win.waitForFunction(() => document.querySelectorAll('#macro-cards .macro-card svg').length >= 4, null, { timeout: 15000 }).catch(() => errors.push('macro: faltan gráficos de las 4 variables'));

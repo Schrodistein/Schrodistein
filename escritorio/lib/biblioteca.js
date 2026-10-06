@@ -57,6 +57,9 @@ function write(store, dir, docs) {
     if (bytes) {
       fs.writeFileSync(path.join(dir, 'Matriz de precios.xlsx'), Buffer.from(bytes));
       matrix = { assets: mx.names.length, dates: mx.dates.length };
+      // La original: solo los cierres publicados por la BVC (celdas vacías en las ruedas sin negociación)
+      const orig = PF.matriz.workbook(list, { calendar: 'ruedas', market, fill: false, title: 'PRECIO DE CIERRE (ORIGINAL)' });
+      if (orig.bytes) fs.writeFileSync(path.join(dir, 'Matriz de precios original.xlsx'), Buffer.from(orig.bytes));
     }
   } catch (e) {
     /* sin motor de cálculo: la matriz se descarga desde la sección Biblioteca */
@@ -88,7 +91,8 @@ function write(store, dir, docs) {
       'Biblioteca local de Frontera Eficiente',
       `Actualizada: ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       '',
-      'Matriz de precios.xlsx   hoja «M. PRECIOS»: ITEM, FECHA, índice y una columna por activo, una fila por rueda de la BVC (242 al año); si un activo no se negoció en una rueda, lleva su último precio cotizado.',
+      'Matriz de precios.xlsx   hoja «M. PRECIOS» completada: ITEM, FECHA, índice y una columna por activo, una fila por rueda de la BVC (242 al año); si un activo no se negoció en una rueda, lleva su último precio cotizado.',
+      'Matriz de precios original.xlsx   la misma hoja con solo los cierres publicados por la BVC: vacía en las ruedas en que el activo no se negoció.',
       'acciones/       un solo CSV por acción, ETF o índice con todo su historial: los tramos de 6 meses que descarga la BVC quedan unidos (fecha, cierre o tasa, fuente, cantidad y volumen).',
       'macro/          PIB, inflación, desempleo y TRM de Colombia, con la fuente y la fecha de descarga.',
       'damodaran/      betas por industria de Aswath Damodaran (NYU Stern), mercados emergentes.',

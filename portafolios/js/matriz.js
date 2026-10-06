@@ -14,7 +14,8 @@
   const iso = (t) => new Date(t).toISOString().slice(0, 10);
 
   /* series: [{ name, dates (yyyy-mm-dd), prices }]; opts.calendar: 'ruedas' (predeterminado) o 'habiles' (lunes a viernes);
-   * opts.market: nombre del índice que va en la primera columna; opts.cut: fecha de corte; opts.from: fecha de inicio. */
+   * opts.market: nombre del índice que va en la primera columna; opts.cut: fecha de corte; opts.from: fecha de inicio;
+   * opts.fill: false para la matriz original (celdas vacías los días en que el activo no se negoció). */
   function build(series, opts) {
     const o = Object.assign({ calendar: 'ruedas' }, opts);
     const list = series.filter((s) => s && s.dates && s.dates.length && s.kind !== 'tasa');
@@ -78,8 +79,14 @@
           exact = keys[k] === d;
           k++;
         }
-        col.push(last);
-        fl.push(fin(last) && !exact);
+        // Matriz original (fill: false): solo lo que se cotizó ese día; la completada lleva el último precio
+        if (o.fill === false) {
+          col.push(exact ? last : NaN);
+          fl.push(false);
+        } else {
+          col.push(last);
+          fl.push(fin(last) && !exact);
+        }
       }
       values.push(col);
       filled.push(fl);

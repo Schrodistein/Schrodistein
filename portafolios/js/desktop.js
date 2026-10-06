@@ -217,6 +217,12 @@
     if (api.version) api.version().then((v) => { const el = document.getElementById('app-version'); if (el && v) el.textContent = ` ${v}`; }).catch(() => {});
     document.querySelectorAll('.desktop-only').forEach((el) => (el.hidden = false));
     api.alActualizar(refreshAll);
+    // Archivos subidos en Datos: Mercado se actualiza con ellos
+    globalThis.addEventListener('pf:mercado', async (ev) => {
+      await refreshAll();
+      const n = Object.keys((ev.detail && ev.detail.assets) || {}).length;
+      if (n) status(`${n} ${n === 1 ? 'historial subido' : 'historiales subidos'} en Datos ${n === 1 ? 'quedó' : 'quedaron'} también en Mercado.`, 'ok');
+    });
     loadMacro();
     setTimeout(() => saveLibrary(true), 6000);
     $('mk-lib-open').addEventListener('click', async () => {

@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -775,6 +775,25 @@ test('macro: boletín del DANE en PDF (texto), Excel con trimestres y meses, y e
   const serial = PF.macro.parseRows([[45658, 4400.5], [45659, 4410], [45660, 4395.25]], 'trm.xlsx');
   assert(serial.dates[0] === '2025-01-01' && serial.values[1] === 4410, JSON.stringify(serial));
   for (const k of ['pib', 'inflacion', 'desempleo', 'trm']) assert(PF.macro.OFFICIAL[k].length >= 1 && PF.macro.OFFICIAL[k].every(([, u]) => /^https:\/\/www\.(dane|banrep|datos)\.gov\.co\//.test(u)), k);
+});
+
+test('series del Banco de la República: elige la serie por su nombre, PIB en niveles → crecimiento anual, ITCR no es TRM', () => {
+  const nb = (x) => x.replace(/ /g, '\u00a0');
+  // Formato largo (desempleo): fechas de Excel en la primera columna, una columna por serie
+  const largo = [[nb('Datos del Grupo Serie: Mercado laboral')], [null, 'Serie'], [null, nb('Tasa Global de participación - 13 áreas'), nb('Tasa de desempleo - 13 áreas'), nb('Tasa de desempleo - Total Nacional')], [45688, 65.1, 9.9, 11.6], [45716, 65.3, 9.1, 10.3], [45747, '.', 8.9, 9.6], [nb('Los valores ausentes se indican con un punto (.)')]];
+  const d = PF.macro.parseBanrep(largo, 'desempleo', 'x.xlsx');
+  assert(d && d.label === 'Tasa de desempleo - Total Nacional' && d.values.join() === '11.6,10.3,9.6' && d.dates[0] === '2025-01-31', JSON.stringify(d));
+  // Formato ancho (PIB): fechas en una fila, series en filas; niveles → crecimiento anual
+  const fechas = ['31/03/2024', '30/06/2024', '30/09/2024', '31/12/2024', '31/03/2025', '30/06/2025'];
+  const ancho = [['Datos del Grupo Serie: PIB'], [null].concat(fechas), ['Serie'], ['1. PIB reportado', 200000, 201000, 202000, 203000, 204000, 205020], ['1.01. Demanda Interna', 1, 2, 3, 4, 5, 6]];
+  const p = PF.macro.parseBanrep(ancho, 'pib', 'pib.xlsx');
+  assert(p && p.dates.join() === '2025-03-31,2025-06-30' && Math.abs(p.values[0] - 2) < 1e-9 && Math.abs(p.values[1] - 2) < 1e-9, JSON.stringify(p));
+  // Un archivo de índices de tasa de cambio real no se toma como TRM
+  const itcr = [[null, 'Serie'], [null, nb('Índice de tasa de cambio real FMI'), nb('Índice de tasa de cambio real IPC NT')], [45688, 104.5, 95.1], [45716, 104.6, 95.2], [45747, 104.7, 95.3]];
+  assert(PF.macro.parseBanrep(itcr, 'trm', 'TRM.xlsx') === null);
+  // Las series incluidas en la app
+  const B = PF.macroBanrep;
+  assert(B && ['inflacion', 'pib', 'desempleo'].every((k) => B.series[k].dates.length === B.series[k].values.length && B.series[k].dates.length > 50 && /^Banco de la República/.test(B.series[k].source)));
 });
 
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {

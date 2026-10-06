@@ -213,6 +213,77 @@
     return sortPts(pts);
   }
 
+  /* Series estadísticas del Banco de la República (Excel de suameca): hoja «Datos del Grupo Serie»
+   * con una columna de fechas y una columna por serie, o con las fechas en una fila y una serie por
+   * fila (PIB). Se elige la serie que corresponde a la variable por su nombre, los valores ausentes
+   * (punto) se omiten y el PIB en niveles se convierte en crecimiento anual (Yₜ / Yₜ₋₄ − 1, trimestral). */
+  const BANREP = {
+    inflacion: [/inflaci[oó]n total,? anual/i, /inflaci[oó]n/i],
+    desempleo: [/tasa de desempleo\s*-\s*total nacional/i, /desempleo.*total nacional/i, /desempleo/i],
+    pib: [/^1\.?\s*pib reportado/i, /producto interno bruto|^pib/i],
+    trm: [/tasa (de cambio )?representativa del mercado|(^|\W)trm(\W|$)/i],
+  };
+  const clean = (x) => String(x == null ? '' : x).replace(/[\u00a0\s]+/g, ' ').trim();
+  const dateOf = (c) => {
+    if (c instanceof Date && !isNaN(c)) return c.toISOString().slice(0, 10);
+    if (typeof c === 'number' && c > 15000 && c < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(c) * 864e5).toISOString().slice(0, 10);
+    const t = clean(c);
+    let m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? m[0] : null;
+  };
+  const valOf = (c) => (typeof c === 'number' ? c : /^-?\d+(\.\d+)?(e-?\d+)?$/i.test(clean(c)) ? parseFloat(clean(c)) : NaN);
+  function parseBanrep(rows, key, name) {
+    const pats = BANREP[key] || [];
+    const pick = (labels) => {
+      for (const re of pats) {
+        const i = labels.findIndex((l) => re.test(clean(l)));
+        if (i >= 0) return i;
+      }
+      return -1;
+    };
+    let pts = [];
+    let label = '';
+    // Formato largo: una fila de encabezados con los nombres de las series y fechas en la primera columna
+    for (let h = 0; h < Math.min(rows.length, 15) && !pts.length; h++) {
+      const head = rows[h] || [];
+      const ci = pick(head.map(clean));
+      if (ci < 1) continue;
+      for (const r of rows.slice(h + 1)) {
+        const d = r && dateOf(r[0]);
+        const v = r ? valOf(r[ci]) : NaN;
+        if (d && fin(v)) pts.push([d, v]);
+      }
+      label = clean(head[ci]);
+    }
+    // Formato ancho (PIB): fechas en una fila, una serie por fila con su nombre en la primera columna
+    if (!pts.length) {
+      const hi = rows.findIndex((r) => r && r.filter((c) => dateOf(c)).length >= 4);
+      if (hi >= 0) {
+        const ri = pick(rows.map((r) => clean(r && r[0])));
+        if (ri >= 0) {
+          rows[hi].forEach((c, j) => {
+            const d = dateOf(c);
+            const v = valOf(rows[ri][j]);
+            if (d && fin(v)) pts.push([d, v]);
+          });
+          label = clean(rows[ri][0]);
+        }
+      }
+    }
+    if (pts.length < 3) return null;
+    pts = sortPts(pts);
+    if (key === 'pib' && Math.min(...pts.values) > 1000) {
+      // Niveles (miles de millones de pesos constantes) → crecimiento anual en %, trimestre contra el mismo del año anterior
+      const lag = freqOf(pts.dates) === 'Q' ? 4 : freqOf(pts.dates) === 'M' ? 12 : 1;
+      const dates = pts.dates.slice(lag);
+      const values = dates.map((_, i) => (pts.values[i + lag] / pts.values[i] - 1) * 100);
+      return { dates, values, label: label + ' → crecimiento anual (%)' };
+    }
+    return Object.assign(pts, { label });
+  }
+
   function parseFile(text, name) {
     const rows = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
     if (rows.length < 3) throw new Error(`«${name}» no tiene datos suficientes`);
@@ -467,5 +538,5 @@
     return rows.join('\r\n');
   }
 
-  PF.macro = { OFFICIAL, parsePdfText, parseRows, VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
+  PF.macro = { OFFICIAL, parsePdfText, parseRows, parseBanrep, VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

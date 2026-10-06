@@ -1468,6 +1468,16 @@
     }
     // Tramos de un mismo activo guardados con nombres distintos (p. ej. con número de descarga): uno solo
     await PF.lib.mergeDuplicates().catch(() => 0);
+    // Series del Banco de la República incluidas en la app (inflación, PIB y desempleo): reemplazan a las
+    // de otras fuentes una vez por versión de los datos; después solo se agregan fechas nuevas
+    const B = PF.macroBanrep;
+    if (B && store.get('banrepSeed') !== B.version) {
+      for (const [k, d] of Object.entries(B.series)) {
+        await PF.lib.remove('macro', k).catch(() => {});
+        await PF.lib.saveMacro(k, { dates: d.dates, values: d.values }, d.source);
+      }
+      store.set('banrepSeed', B.version);
+    }
     await refreshLib();
     if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos${libCut() ? `, hasta el ${libCut()}` : ''}. Para agregar fechas nuevas, sube los archivos en Datos.`);
   }
@@ -1669,7 +1679,16 @@
             const X = await loadSheetJS();
             const wb = X.read(buf, { type: 'array', cellDates: true });
             let err = null;
+            // Primero el formato del Banco de la República (elige la serie por su nombre); si no, fecha y valor
             for (const sh of wb.SheetNames) {
+              const b = PF.macro.parseBanrep(X.utils.sheet_to_json(wb.Sheets[sh], { header: 1, raw: true }), key, file.name);
+              if (b) {
+                d = b;
+                break;
+              }
+            }
+            if (!d && key === 'trm' && wb.SheetNames.some((sh) => /tasa de cambio real/i.test(JSON.stringify(X.utils.sheet_to_json(wb.Sheets[sh], { header: 1 }).slice(0, 6))))) throw new Error(`«${file.name}» trae índices de tasa de cambio real (ITCR), no la TRM. Descarga del Banco de la República la serie «Tasa de cambio representativa del mercado (TRM)».`);
+            for (const sh of d ? [] : wb.SheetNames) {
               try {
                 d = PF.macro.parseRows(X.utils.sheet_to_json(wb.Sheets[sh], { header: 1, raw: true }), file.name);
                 break;
@@ -1687,9 +1706,9 @@
             }
             d = PF.macro.parseFile(text, file.name);
           }
-          await PF.lib.saveMacro(key, d, 'Archivo importado: ' + file.name);
+          await PF.lib.saveMacro(key, d, d.label ? `Banco de la República · ${d.label} (${file.name})` : 'Archivo importado: ' + file.name);
           await refreshLib();
-          macroStatus(`${V.long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]} (${file.name}).`, 'ok');
+          macroStatus(`${V.long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]} (${file.name}${d.label ? `, serie «${d.label}»` : ''}).`, 'ok');
           renderMacro();
         }
       } catch (e) {
@@ -2075,7 +2094,9 @@
     },
     // Variables macro descargadas por la app de escritorio
     async setMacro(data) {
-      for (const [k, d] of Object.entries(data || {})) if (d && d.dates) await PF.lib.saveMacro(k, d, d.source);
+      // Las variables que vienen del Banco de la República no se mezclan con otras fuentes
+      const fromBanrep = (k) => st.lib && st.lib.macro && st.lib.macro[k] && /^Banco de la República/.test(st.lib.macro[k].source || '');
+      for (const [k, d] of Object.entries(data || {})) if (d && d.dates && !fromBanrep(k)) await PF.lib.saveMacro(k, d, d.source);
       await refreshLib();
       if (st.screen === 'macro') renderMacro();
     },

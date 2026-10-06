@@ -8,6 +8,10 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.4**
+- La biblioteca trae incluidas las series estadísticas del **Banco de la República** (fuente primaria DANE), descargadas el 06/10/2026: inflación total anual (mensual, desde 1955), crecimiento anual del PIB (trimestral, calculado del PIB a precios constantes de 2015 desestacionalizado, desde 2006) y tasa de desempleo total nacional (mensual, desde 2001). Reemplazan a las de otras fuentes y no se mezclan con ellas.
+- Macro lee los Excel del Banco de la República tal como se descargan de su sistema: elige la serie por su nombre (por ejemplo «Tasa de desempleo – Total Nacional» entre seis), omite los valores ausentes y convierte el PIB en niveles a crecimiento anual. Avisa si un archivo trae índices de tasa de cambio real (ITCR) en lugar de la TRM.
+
 **Versión 2.3**
 - Macro: importa los boletines del DANE en **PDF** (la app encuentra la cifra, por ejemplo «En el segundo trimestre de 2025 … crece 2,1 %», y la muestra con su frase para revisarla antes de guardar), anexos en **Excel** (trimestres 2025-I, meses ene-25, fechas de Excel) y CSV; cada variable muestra el enlace a su información oficial (DANE, Banco de la República, Superintendencia Financiera).
 - Los históricos de la BVC se cargan solo a mano (se quitó la descarga directa). Sin avisos de noticias.

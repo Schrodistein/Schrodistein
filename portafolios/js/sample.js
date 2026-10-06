@@ -1,6 +1,7 @@
-/* Datos de ejemplo SIMULADOS (no son cotizaciones reales): 60 meses de precios
- * generados con un modelo de índice único r = rf + α + β(rm − rf) + ε, con
- * semilla fija para que el ejemplo sea siempre el mismo. */
+/* Datos de ejemplo SIMULADOS (no son cotizaciones reales): precios generados con un modelo de
+ * índice único r = rf + α + β(rm − rf) + ε, con semilla fija para que el ejemplo sea siempre el
+ * mismo. csv() da 60 meses (pruebas); csv(seed, { daily: true }) da cotizaciones diarias, una por
+ * rueda de lunes a viernes durante unos tres años, como las que usa la app. */
 (function (root) {
   'use strict';
   const PF = (root.PF = root.PF || {});
@@ -34,26 +35,31 @@
     ['Oro', -0.05, 0.002, 0.042],
   ];
 
-  function csv(seed) {
+  function csv(seed, opts) {
+    const daily = !!(opts && opts.daily);
     const R = rng(seed || 20260925);
-    const months = 60;
-    const rfp = 0.04 / 12;
+    const n = daily ? 742 : 60;
+    const k = daily ? 21 : 1; // ruedas por mes, para escalar los parámetros mensuales
+    const rfp = 0.04 / (daily ? 242 : 12);
     const price = ASSETS.map(() => 100);
     let mkt = 1000;
     const head = ['Fecha'].concat(ASSETS.map((a) => a[0]), ['Índice de mercado']);
     const rows = [head.join(',')];
-    const fmt = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
-    const d = new Date(2021, 8, 1);
+    const fmt = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + (daily ? '-' + String(d.getDate()).padStart(2, '0') : '');
+    const d = daily ? new Date(2023, 7, 22) : new Date(2021, 8, 1);
     const line = () => [fmt(d)].concat(price.map((p) => p.toFixed(2)), [mkt.toFixed(2)]).join(',');
     rows.push(line());
-    for (let t = 0; t < months; t++) {
-      const rm = 0.009 + 0.045 * gauss(R);
+    for (let t = 0; t < n; t++) {
+      const rm = 0.009 / k + (0.045 / Math.sqrt(k)) * gauss(R);
       mkt *= 1 + rm;
       ASSETS.forEach((a, i) => {
-        const r = rfp + a[2] + a[1] * (rm - rfp) + a[3] * gauss(R);
+        const r = rfp + a[2] / k + a[1] * (rm - rfp) + (a[3] / Math.sqrt(k)) * gauss(R);
         price[i] *= 1 + r;
       });
-      d.setMonth(d.getMonth() + 1);
+      if (daily) {
+        do d.setDate(d.getDate() + 1);
+        while (d.getDay() === 0 || d.getDay() === 6);
+      } else d.setMonth(d.getMonth() + 1);
       rows.push(line());
     }
     return rows.join('\n');

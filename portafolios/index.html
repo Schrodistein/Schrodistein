@@ -27,7 +27,6 @@
       <button type="button" data-go="estadistica" id="tab-estadistica">Paso a paso</button>
       <button type="button" data-go="macro" id="tab-macro">Macro</button>
       <button type="button" data-go="sistema" id="tab-sistema">Sistema financiero</button>
-      <button type="button" data-go="comprar" id="tab-comprar">Comprar</button>
       <button type="button" data-go="confirmar" id="tab-confirmar">Confirmar</button>
       <button type="button" data-go="invertir" id="tab-invertir">Dónde invertir</button>
       <button type="button" data-go="mercado" id="tab-mercado" class="desktop-only" hidden>Mercado</button>
@@ -111,9 +110,8 @@
           <label class="field" for="kind"><span>Los datos son</span>
             <select id="kind"><option value="prices">Precios</option><option value="returns">Rendimientos por periodo</option></select></label>
           <label class="field" for="freq"><span>Frecuencia</span>
-            <select id="freq"><option value="diaria">Diaria (242 días hábiles al año)</option><option value="semanal">Semanal (52)</option><option value="mensual" selected>Mensual (12)</option><option value="trimestral">Trimestral (4)</option><option value="anual">Anual (1)</option></select></label>
-          <label class="field" for="agg"><span>Precio de cada periodo</span>
-            <select id="agg"><option value="last" selected>Último cierre del periodo</option><option value="avg">Promedio del periodo (fechas desfasadas)</option></select></label>
+            <select id="freq" disabled title="Fija: la app trabaja siempre con cotizaciones diarias"><option value="diaria" selected>Diaria: cada rueda de la BVC (242 al año)</option></select></label>
+          <select id="agg" hidden aria-hidden="true"><option value="last" selected>Cierre de cada rueda</option></select>
           <label class="field" for="fill"><span>Días sin negociación</span>
             <select id="fill"><option value="si" selected>Repetir el último precio hasta el siguiente día hábil</option><option value="no">Dejar vacíos</option></select></label>
           <label class="field" for="rettype"><span>Rendimientos</span>
@@ -157,7 +155,7 @@
     </div>
     <div class="panel" id="guia-datos">
       <h2>Cómo obtener cada dato que pide la app</h2>
-      <p class="hint">Los datos de mercado vienen de los archivos que cargas. Los supuestos los escribes tú en Supuestos, en Comprar o en Paso a paso. Esta tabla dice de dónde sale cada uno y cómo lo usa la app.</p>
+      <p class="hint">Los datos de mercado vienen de los archivos que cargas. Los supuestos los escribes tú en Supuestos, en Confirmar o en Paso a paso. Esta tabla dice de dónde sale cada uno y cómo lo usa la app.</p>
       <div class="table-scroll"><table class="data guia"><thead><tr><th>Dato</th><th>Qué es</th><th>Dónde se obtiene en Colombia</th><th>Cómo se calcula o se usa</th></tr></thead><tbody>
         <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). Es la única fuente de precios de la app; en la app de escritorio, «Abrir la BVC y descargar» importa cada archivo solo.</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
         <tr><td><b>Tasa libre de riesgo (rf)</b></td><td>Lo que rinde una inversión sin riesgo de impago, al plazo del análisis.</td><td>Rendimiento de los TES de corto plazo (1 año) que publica el Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES), la tasa de los CDT a 90 días (DTF) o el rendimiento anual del COLIBR (botón en «Índices de referencia», si lo cargas).</td><td>Se escribe en % efectivo anual. Entra en Sharpe <code>(E(R) − rf)/σ</code>, Treynor, Jensen, CAPM y la línea del mercado de capitales.</td></tr>
@@ -171,8 +169,7 @@
         <tr><td><b>Acciones en circulación</b></td><td>Número de acciones emitidas en manos de los inversionistas.</td><td>Ficha del emisor en bvc.com.co o la nota de patrimonio de sus estados financieros.</td><td>Capitalización (precio × acciones) y rotación del COLEQTY (Sistema financiero).</td></tr>
         <tr><td><b>Índices de referencia</b></td><td>MSCI COLCAP, COLTES, COLIBR y TRM.</td><td>bvc.com.co → Índices (históricos). TRM: Superintendencia Financiera o datos.gov.co.</td><td>β, CAPM, Treynor y Jensen de cada segmento (tabla de abajo).</td></tr>
         <tr><td><b>PIB, inflación y desempleo</b></td><td>Variables macroeconómicas de Colombia.</td><td>DANE (dane.gov.co: cuentas nacionales, IPC, Gran Encuesta Integrada de Hogares) y Banco de la República; la app de escritorio las descarga de FRED/OCDE y del Banco Mundial.</td><td>Sección Macro: correlación y sensibilidad del índice y de cada activo.</td></tr>
-        <tr><td><b>Comisiones</b></td><td>Costo por cada compra y cada venta.</td><td>Tarifa vigente de tu intermediario: trii (≈ $15.000 por operación) o la de tu comisionista de bolsa, que debe entregarla por escrito.</td><td>Comprar: rendimiento neto, monto mínimo por inversión y número de activos.</td></tr>
-        <tr><td><b>Tasa de la renta fija segura</b></td><td>Lo que rinde la parte sin riesgo del plan.</td><td>Tasa efectiva anual de un CDT al plazo de tu horizonte en un banco vigilado (página del banco o reporte de tasas de captación de la Superintendencia Financiera), o el rendimiento de un TES corto.</td><td>Comprar: reparto entre el portafolio y la renta fija según la probabilidad de pérdida.</td></tr>
+        <tr><td><b>Comisiones</b></td><td>Costo por cada compra y cada venta.</td><td>Tarifa vigente de tu intermediario: trii (≈ $15.000 por operación) o la de tu comisionista de bolsa, que debe entregarla por escrito.</td><td>Confirmar: costo de cada compra registrada.</td></tr>
       </tbody></table></div>
     </div>
     <div class="panel" id="bench-panel">
@@ -248,7 +245,7 @@
   </section>
 
   <!-- COMPRAR -->
-  <section class="screen" id="screen-comprar" hidden>
+  <section class="screen" id="screen-comprar" hidden data-removed="1">
     <div class="head">
       <h1>Plan de inversión</h1>
       <p class="lede">Cómo repartir tu presupuesto según el portafolio eficiente calculado con los datos cargados: cuántas acciones o cuánto dinero en cada activo, cuánto en renta fija segura según tu horizonte, y qué esperar a corto, mediano y largo plazo después de comisiones.</p>
@@ -381,7 +378,7 @@
   <section class="screen" id="screen-invertir" hidden>
     <div class="head">
       <h1>Dónde y cómo invertir</h1>
-      <p class="lede">Los canales para comprar cada parte de tu plan en Colombia, qué cuestan y el paso a paso. Las tarifas, tasas y requisitos cambian: confírmalos siempre en el sitio oficial de cada entidad antes de invertir.</p>
+      <p class="lede">Los canales para comprar cada activo de tu portafolio en Colombia, qué cuestan y el paso a paso. Las tarifas, tasas y requisitos cambian: confírmalos siempre en el sitio oficial de cada entidad antes de invertir.</p>
     </div>
     <div class="panel where-plan" id="where-plan"></div>
     <div class="panel">
@@ -527,7 +524,7 @@
         <li><b>Desviaciones</b>: (r − media), (r − media)² y los productos cruzados de cada par, con sus sumas, la varianza y la covarianza.</li>
         <li><b>Covarianza</b> y <b>Correlacion</b>: las matrices anual y por periodo.</li>
         <li><b>Portafolios</b>: para cada portafolio, los pesos, (Σw)ᵢ, σp² = wᵀΣw, σp, βp, Sharpe, Treynor, Jensen, M², N efectivo y la contribución al riesgo.</li>
-        <li><b>Frontera</b>, <b>Plan_compra</b> (acciones, comisiones y rendimiento neto) y <b>Formulas</b> (guía de cada fórmula con un ejemplo).</li>
+        <li><b>Frontera</b> y <b>Formulas</b> (guía de cada fórmula con un ejemplo).</li>
         <li>Las matrices del paso a paso: <b>Desv_media</b> (r − r̄ de cada periodo), <b>Cov_ponderada</b> (wᵢwⱼσᵢⱼ del portafolio elegido), <b>Frontera_puntos</b> (t, E(Rp), σp, Sharpe y pesos), <b>CML</b>, <b>SML</b>, <b>Eleccion_activos</b> (condición del tangente), <b>Corr_promedio</b> (simple y ponderada) y <b>Contrib_riesgo</b>.</li>
       </ul>
       <button type="button" class="btn btn-primary" id="dl-xlsx">Descargar libro de Excel (.xlsx)</button>
@@ -540,7 +537,6 @@
         <button type="button" class="btn" id="dl-ret">Rendimientos</button>
         <button type="button" class="btn" id="dl-stats">Estadísticas por activo</button>
         <button type="button" class="btn" id="dl-ports">Pesos de los portafolios</button>
-        <button type="button" class="btn" id="dl-plan">Plan de compra</button>
         <button type="button" class="btn" id="dl-desv">Desviaciones respecto a la media</button>
         <button type="button" class="btn" id="dl-pond">Covarianzas ponderadas wᵢwⱼσᵢⱼ</button>
         <button type="button" class="btn" id="dl-front">Puntos de la frontera eficiente</button>

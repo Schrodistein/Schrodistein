@@ -53,27 +53,13 @@ const shots = process.argv[3];
     if (!/No eficiente/.test(v1)) errors.push(`${label}: 1/N debería ser no eficiente (${v1})`);
     if (!/^Eficiente/.test(v2.trim())) errors.push(`${label}: el recomendado debería ser eficiente (${v2})`);
     if (shots) await page.screenshot({ path: `${shots}/${label}-confirmar-rec.png`, fullPage: true });
-    // Plan de compra con comisiones
-    await page.click('#tab-comprar');
-    await page.waitForSelector('#plan-out .plan-lead');
-    const lead = await page.textContent('#plan-out .plan-lead');
-    if (!/^Invierte así: .*\d+ acciones de /.test(lead.trim())) errors.push(`${label}: plan sin acciones (${lead})`);
-    if ((await page.$$eval('#plan-proj tbody tr', (r) => r.length)) < 3) errors.push(`${label}: faltan las proyecciones a corto, mediano y largo plazo`);
-    // Promoción sin comisión: la compra queda en $0 y la venta sigue en $15.000
-    await page.click('.fee-presets [data-fee="0"]');
-    await page.waitForTimeout(600);
-    const promo = await page.textContent('#plan-out .tiles');
-    if (!/Comisiones de compra\s*\$\s*0/.test(promo) || !/Comisiones de venta[^$]*\$\s*[1-9]/.test(promo)) errors.push(`${label}: la promoción sin comisión no se aplicó (${promo.slice(0, 200)})`);
-    await page.click('.fee-presets [data-fee="1"]');
-    await page.waitForTimeout(600);
-    const tiles = await page.textContent('#plan-out .tiles');
-    if (!/Comisiones de compra/.test(tiles) || !/15\.000/.test(tiles)) errors.push(`${label}: plan sin comisiones de $15.000`);
-    await page.fill('#plan-budget', '300000');
-    await page.waitForTimeout(900);
-    const k = await page.$$eval('#plan-out table tbody tr', (r) => r.length - 1);
-    if (k < 1 || k > 4) errors.push(`${label}: con $300.000 el plan debería tener pocos activos (${k})`);
-    if (shots) await page.screenshot({ path: `${shots}/${label}-comprar.png`, fullPage: true });
-    await page.click('#plan-register');
+    // Sin pestaña Comprar; la frecuencia es fija en diaria
+    if (await page.$('#tab-comprar')) errors.push(label + ': la pestaña Comprar debería haberse quitado');
+    if ((await page.$eval('#freq', (x) => x.value)) !== 'diaria' || !(await page.$eval('#freq', (x) => x.disabled))) errors.push(label + ': la frecuencia debe ser diaria y fija');
+    // Compras registradas en Confirmar, con su comisión
+    await page.click('#tab-confirmar');
+    await page.click('#mode-acciones');
+    await page.fill('#bq-0', '10');
     await page.waitForTimeout(500);
     if (!/Comisión de compra/.test(await page.textContent('#buy-table'))) errors.push(`${label}: Confirmar sin comisiones`);
     // Comisión propia de una compra (promoción a mitad de precio)
@@ -187,14 +173,10 @@ const shots = process.argv[3];
     if (market !== 'MSCI COLCAP') errors.push('archivos: índice detectado ' + market);
     const rows = await page.$$eval('#assets-table tbody tr', (r) => r.length);
     if (rows !== 5) errors.push('archivos: filas de activos ' + rows);
-    // Datos diarios bien fechados: la app sugiere frecuencia semanal
+    // Siempre cotizaciones diarias: una fila por rueda
     const freq = await page.$eval('#freq', (x) => x.value);
-    const weeks = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (freq !== 'semanal' || weeks < 250) errors.push(`archivos: frecuencia ${freq}, semanas unidas ${weeks}`);
-    await page.selectOption('#freq', 'mensual');
-    await page.waitForTimeout(300);
-    const periods = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (periods !== 60) errors.push('archivos: meses unidos ' + periods);
+    const days = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
+    if (freq !== 'diaria' || days < 1000) errors.push(`archivos: frecuencia ${freq}, ruedas unidas ${days}`);
     if (shots) await page.screenshot({ path: `${shots}/archivos-datos.png`, fullPage: true });
     // Compras por número de acciones y fecha: el precio sale del cierre de ese día
     await page.click('#tab-confirmar');
@@ -254,10 +236,8 @@ const shots = process.argv[3];
     if (!/ECOPETROL: «Precio de cierre», 6 archivos/.test(meta)) errors.push('bvc: tramos no unidos: ' + meta);
     const market = await page.$eval('#market', (s) => s.value);
     if (market !== 'COLCAP') errors.push('bvc: índice detectado ' + market);
-    await page.selectOption('#freq', 'mensual');
-    await page.waitForTimeout(300);
-    const months = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (months !== 36) errors.push('bvc: meses unidos ' + months);
+    const ruedas = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
+    if (ruedas < 700) errors.push('bvc: ruedas unidas ' + ruedas);
     if (shots) await page.screenshot({ path: `${shots}/bvc-datos.png`, fullPage: true });
     await page.close();
   }
@@ -271,9 +251,11 @@ const shots = process.argv[3];
       let seed = 11 * (k + 2);
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
       const lines = ['Bolsa de Valores de Colombia;;;;', 'Histórico de operaciones;;;;', 'Nemotécnico;Fecha Operación;Cantidad;Volumen ($);Precio de Cierre ($)'];
-      for (let m = 0; m < 40; m++) {
-        p *= 1 + (rnd() - 0.48) * 0.08;
-        const d = new Date(Date.UTC(2022, m + 1, 0));
+      for (let t = Date.UTC(2022, 0, 3), m = 0; m < 400; t += 864e5) {
+        const d = new Date(t);
+        if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+        m++;
+        p *= 1 + (rnd() - 0.48) * 0.02;
         const dd = String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear();
         lines.push(`${n};${dd};100;${Math.round(p * 100)};${p.toFixed(2).replace('.', ',')}`);
       }

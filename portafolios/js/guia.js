@@ -45,13 +45,13 @@
       body: (L) => `
         <ol>
           <li><b>Fondo de emergencia primero.</b> Lo que puedas necesitar en menos de un año no va a la bolsa; va a renta fija segura (CDT, cuenta de ahorros remunerada o un fondo de liquidez).</li>
-          <li><b>Horizonte.</b> Las acciones pueden caer 20 % o 30 % en un año. Con 1 año de plazo el riesgo de perder es alto; con 5 o 10 años, mucho menor. La sección Comprar proyecta el resultado a 1, 3, 5 y 10 años.</li>
+          <li><b>Horizonte.</b> Las acciones pueden caer 20 % o 30 % en un año. Con 1 año de plazo el riesgo de perder es alto; con 5 o 10 años, mucho menor.</li>
           <li><b>Tolerancia a la pérdida.</b> Define cuánto podrías perder sin vender por pánico. La app la usa para decidir qué parte va a acciones y qué parte a renta fija segura.</li>
           <li><b>Presupuesto y costos.</b> Cada compra paga una comisión fija o mínima: con montos pequeños conviene tener pocos activos o un ETF. La app calcula un monto mínimo por inversión para que la comisión no se coma el rendimiento.</li>
         </ol>
-        ${theory(`<p><b>Teorema de separación de Tobin (1958)</b>: todos los inversionistas deberían tener el mismo portafolio de acciones (el tangente) y ajustar su riesgo solo con la proporción que ponen en renta fija segura. <b>Regla de seguridad primero de Roy (1952)</b>: elegir esa proporción para que la probabilidad de perder no pase de un límite. Las dos se aplican en Comprar.</p>
+        ${theory(`<p><b>Teorema de separación de Tobin (1958)</b>: todos los inversionistas deberían tener el mismo portafolio de acciones (el tangente) y ajustar su riesgo solo con la proporción que ponen en renta fija segura. <b>Regla de seguridad primero de Roy (1952)</b>: elegir esa proporción para que la probabilidad de perder no pase de un límite. En la práctica: el portafolio tangente para la parte de acciones y una proporción en renta fija segura según tu tolerancia a la pérdida.</p>
           <p class="formula"><code>E(Rₚ) = (1 − α)·rf + α·E(R_T)</code> &nbsp; con α tal que P(pérdida en el plazo) ≤ p</p>`)}
-        ${inApp(go('comprar', 'Comprar: plan por presupuesto'))}`,
+        ${inApp(go('frontera', 'Portafolio'))}`,
     },
     {
       id: 'cuenta',
@@ -63,9 +63,9 @@
           <li>Recibe tu cuenta en el <b>depósito de valores</b> (deceval): las acciones quedan a tu nombre, no a nombre de la comisionista.</li>
           <li>Pasa dinero a la cuenta y revisa la <b>tabla de tarifas</b>: comisión por operación (y su mínimo), IVA sobre la comisión, custodia y costos de retiro.</li>
         </ol>
-        <p>La sección «Dónde invertir» compara canales, costos y el paso a paso de cada uno. Escribe en Comprar la comisión real de tu canal (incluidas promociones a cero o a mitad de precio).</p>
+        <p>La sección «Dónde invertir» compara canales, costos y el paso a paso de cada uno. Escribe la comisión real de tu canal en Datos → Supuestos y la de cada compra en Confirmar (incluidas promociones a cero o a mitad de precio).</p>
         ${theory(`<p>Los <b>costos de transacción</b> reducen el rendimiento neto y cambian el portafolio óptimo: con una comisión fija por activo, el número óptimo de activos crece con el presupuesto. La app recalcula el plan con menos activos cuando eso da más rendimiento neto.</p>`)}
-        ${inApp(go('invertir', 'Dónde invertir'), go('comprar', 'Comisiones en Comprar'))}`,
+        ${inApp(go('invertir', 'Dónde invertir'), go('confirmar', 'Comisiones en Confirmar'))}`,
     },
     {
       id: 'orden',
@@ -126,17 +126,17 @@
         ${inApp(go('frontera', 'Portafolio'), go('estadistica', 'Paso a paso (secciones 8 a 14)'))}`,
     },
     {
-      id: 'comprar',
+      id: 'ordenes',
       title: '8. Pasar del portafolio a las órdenes',
       body: () => `
         <ol>
-          <li>En Comprar escribe el presupuesto, el plazo, tus comisiones y el límite de pérdida.</li>
-          <li>La app reparte el dinero: una parte a renta fija segura y el resto a acciones y ETF, en <b>acciones enteras</b> al último precio.</li>
-          <li>Coloca en tu comisionista una <b>orden límite</b> por cada línea del plan, cerca del último precio.</li>
-          <li>Registra en Confirmar lo que realmente compraste (cantidad, precio, fecha y comisión): la app verifica si tu portafolio quedó sobre la frontera eficiente y qué tanto se alejó del plan.</li>
+          <li>En Portafolio toma los pesos del portafolio elegido y el monto de cada activo (capital × peso).</li>
+          <li>Calcula las <b>acciones enteras</b> de cada activo: monto / último precio, redondeado hacia abajo.</li>
+          <li>Coloca en tu comisionista una <b>orden límite</b> por cada activo, cerca del último precio.</li>
+          <li>Registra en Confirmar lo que realmente compraste (cantidad, precio, fecha y comisión): la app verifica si tu portafolio quedó sobre la frontera eficiente y qué tanto se alejó de los pesos elegidos.</li>
         </ol>
         ${theory(`<p>El paso de pesos teóricos a acciones enteras y comisiones fijas es un problema de <b>optimización entera</b>: redondear cambia los pesos y el riesgo. Por eso Confirmar vuelve a evaluar el portafolio real con la misma Σ y lo compara con el eficiente de igual riesgo.</p>`)}
-        ${inApp(go('comprar', 'Comprar'), go('confirmar', 'Confirmar'))}`,
+        ${inApp(go('frontera', 'Portafolio'), go('confirmar', 'Confirmar'))}`,
     },
     {
       id: 'seguimiento',
@@ -200,7 +200,6 @@
       ['activos', 'Activos', 'β, CAPM, Sharpe, Treynor, Jensen'],
       ['frontera', 'Portafolio', 'elige activos y portafolio'],
       ['estadistica', 'Paso a paso', 'cada cálculo con sus fórmulas'],
-      ['comprar', 'Comprar', 'plan por presupuesto'],
       ['invertir', 'Dónde invertir', 'canal y órdenes'],
       ['confirmar', 'Confirmar', 'registra y verifica'],
     ];

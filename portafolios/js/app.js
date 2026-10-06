@@ -134,6 +134,7 @@
   function parse(keepMarket) {
     try {
       st.parsed = PF.data.parseCSV($('csv').value);
+      if (!isDaily(st.parsed.dates)) throw new Error('La app trabaja siempre con cotizaciones diarias (una fila por rueda de la BVC, 242 al año). Los datos pegados o cargados tienen fechas semanales, mensuales o sin fecha: sube los históricos diarios de la BVC.');
     } catch (e) {
       st.parsed = null;
       st.model = null;
@@ -455,26 +456,17 @@
     if (mergeLoaded(false)) status(`Listo: ${combined.length} instrumentos leídos de ${files.length - errors.length} archivos y guardados en la biblioteca (${saved.agregadas.toLocaleString('es-CO')} fechas nuevas${saved.nuevas ? `, ${saved.nuevas} instrumentos nuevos` : ''}; los valores ya guardados no cambian). El análisis usa los ${usable.length} instrumentos de la biblioteca. ${plan}${allErr ? ' No se pudieron leer: ' + allErr : ''}`, allErr ? 'warn' : 'ok');
   }
 
-  /* Frecuencia y agregación sugeridas para historiales recién cargados.
-   * Diarios bien fechados: semanal con último cierre (más observaciones que mensual y menos
-   * sesgo por acciones que no negocian todos los días). Si hay series desfasadas: mensual
-   * con promedio del periodo, que amortigua el desfase. */
+  /* La frecuencia es fija: cotizaciones diarias, una por rueda de la BVC (242 al año). */
   function suggestSettings(list) {
-    return suggestFreq(list);
+    const dates = [...new Set(list.flatMap((x) => x.dates))];
+    const lag = PF.data.detectLags(list).length ? ' Hay series que parecen desfasadas: revisa la nota en Datos.' : '';
+    return `Cotizaciones diarias: ${dates.length.toLocaleString('es-CO')} ruedas de la BVC (242 al año).${lag}`;
   }
-  function suggestFreq(list) {
-    const dates = [...new Set(list.flatMap((x) => x.dates))].sort();
-    const gaps = dates.slice(1).map((d, i) => (Date.parse(d) - Date.parse(dates[i])) / 864e5).sort((a, b) => a - b);
-    const daily = gaps.length && gaps[Math.floor(gaps.length / 2)] <= 4;
-    if (!daily) return '';
-    if (PF.data.detectLags(list).length) {
-      $('freq').value = 'mensual';
-      $('agg').value = 'avg';
-      return 'Se detectaron series desfasadas: se usa frecuencia mensual con el promedio de cada mes.';
-    }
-    $('freq').value = 'semanal';
-    $('agg').value = 'last';
-    return 'Datos diarios: se usa frecuencia semanal con el último cierre de cada semana. Puedes cambiarla en Supuestos (la diaria usa 242 días hábiles al año).';
+  /* ¿Las fechas son diarias? (mediana de la separación entre fechas de hasta 4 días) */
+  function isDaily(dates) {
+    const ds = [...new Set(dates)].sort();
+    const gaps = ds.slice(1).map((d, i) => (Date.parse(d) - Date.parse(ds[i])) / 864e5).sort((a, b) => a - b);
+    return gaps.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(ds[0]) && gaps[Math.floor(gaps.length / 2)] <= 4;
   }
 
   function mergeLoaded(keepMarket) {
@@ -987,8 +979,7 @@
       const sum = st.userW.reduce((a, b) => a + b, 0);
       extra.push({ label: st.mode === 'acciones' ? 'Tu portafolio (acciones compradas)' : 'Tu portafolio (pesos escritos)', w: st.userW.map((x) => x / sum) });
     }
-    if (st.plan && st.plan.plan.rows.length) extra.push({ label: `Plan de compra (${st.plan.plan.k} activos, pesos reales)`, w: st.plan.ev.w });
-    return { m, P: st.P, table: st.table || st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
+    return { m, P: st.P, table: st.table || st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: null, generated: stamp() };
   }
 
   /* Matrices de cálculo adicionales (las del paso a paso): CSV sueltos y hojas del libro de Excel. */
@@ -1245,6 +1236,7 @@
 
   /* ---------- Navegación ---------- */
   function go(screen) {
+    if (screen === 'comprar') screen = 'frontera'; // la pestaña Comprar se quitó
     if (!document.getElementById('screen-' + screen)) screen = 'datos';
     st.screen = screen;
     document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== 'screen-' + screen));
@@ -1260,8 +1252,8 @@
   }
 
   function renderWhere() {
-    const r = PF.where.render({ plan: st.plan && st.plan.plan, money, pct, segOf, clsOf, SEGS });
-    $('where-plan').innerHTML = `<h2>Tu plan, canal por canal</h2>${r.summary}`;
+    const r = PF.where.render({ plan: null, money, pct, segOf, clsOf, SEGS });
+    $('where-plan').innerHTML = `<h2>Canales para invertir</h2>${r.summary}`;
     $('where-cards').innerHTML = r.cards;
     $('where-steps').innerHTML = r.steps;
   }
@@ -1285,8 +1277,9 @@
     const usable = libSeries();
     if (usable.length < 2) return false;
     st.series = usable;
+    const plan = suggestSettings(usable);
     const ok = mergeLoaded(true);
-    if (ok) status(msg || `Análisis con la biblioteca local: ${usable.length} instrumentos${libCut() ? `, datos hasta el ${libCut()}` : ''}.`, 'ok');
+    if (ok) status(msg ? `${msg} ${plan}`.trim() : `Análisis con la biblioteca local: ${usable.length} instrumentos${libCut() ? `, datos hasta el ${libCut()}` : ''}.`, 'ok');
     return ok;
   }
   function libStatus(msg, kind) {
@@ -1720,7 +1713,17 @@
       if (saved.div == null) delete saved.wmax;
       for (const id of SETTING_IDS) if (saved[id] != null && $(id)) $(id).value = saved[id];
     }
-    $('csv').value = store.get('csv') || PF.sample.csv();
+    // Frecuencia fija: diaria (una ajustada guardada por una versión anterior no se usa)
+    $('freq').value = 'diaria';
+    $('agg').value = 'last';
+    const savedCsv = store.get('csv');
+    let dailyCsv = false;
+    try {
+      dailyCsv = !!savedCsv && isDaily(PF.data.parseCSV(savedCsv).dates);
+    } catch (e) {
+      dailyCsv = false;
+    }
+    $('csv').value = dailyCsv ? savedCsv : PF.sample.csv(0, { daily: true });
 
     document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.getAttribute('data-go'))));
     $('guia').addEventListener('click', (ev) => {
@@ -1734,9 +1737,8 @@
       }
     });
     $('btn-sample').addEventListener('click', () => {
-      $('csv').value = PF.sample.csv();
+      $('csv').value = PF.sample.csv(0, { daily: true });
       $('kind').value = 'prices';
-      $('freq').value = 'mensual';
       st.userNames = null;
       parse(false);
     });
@@ -1819,11 +1821,6 @@
       st.userNames = null;
       compute();
     });
-    $('freq').addEventListener('change', () => {
-      // Con historiales diarios subidos, se reagrupan a la nueva frecuencia.
-      if (st.series && $('csv').value === st.mergedText) mergeLoaded(true);
-      else compute();
-    });
     $('currency').addEventListener('change', () => {
       store.set('settings', Object.fromEntries(SETTING_IDS.map((id) => [id, $(id).value])));
       if (st.model) render();
@@ -1894,7 +1891,7 @@
     $('plan-optk').addEventListener('change', renderPlan);
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('[data-go-where]') && go('invertir'));
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('#plan-register') && registerPlan());
-    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan', 'desv', 'pond', 'front', 'cml', 'sml', 'elec', 'corrp', 'contrib', 'macro', 'pasos', 'macrodoc']) $('dl-' + k).addEventListener('click', () => doDownload(k));
+    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'desv', 'pond', 'front', 'cml', 'sml', 'elec', 'corrp', 'contrib', 'macro', 'pasos', 'macrodoc']) $('dl-' + k).addEventListener('click', () => doDownload(k));
     $('mode-pesos').addEventListener('click', () => setMode('pesos'));
     $('mode-acciones').addEventListener('click', () => setMode('acciones'));
     const buysChanged = debounce(() => {

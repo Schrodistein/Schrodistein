@@ -71,7 +71,7 @@
   ];
 
   const STEPS = [
-    ['Define el plan', 'Presupuesto, horizonte y cuánto riesgo aceptas: la sección <b>Comprar</b> ya lo calcula, con el monto mínimo por inversión y el reparto con renta fija segura.'],
+    ['Define el plan', 'Presupuesto, horizonte y cuánto riesgo aceptas; los pesos de cada activo salen del portafolio elegido en la sección <b>Portafolio</b>.'],
     ['Verifica la entidad', `Antes de entregar dinero, busca la entidad en la ${link('https://www.superfinanciera.gov.co', 'Superintendencia Financiera')} (entidades vigiladas) y al asesor en el registro de profesionales certificados del ${link('https://www.amvcolombia.org.co', 'AMV')}. Desconfía de rentabilidades «garantizadas» altas y de quien pida consignar a cuentas personales.`],
     ['Abre la cuenta', 'Con tu cédula, datos de contacto e información financiera (ingresos, patrimonio). Llenas el formulario de vinculación y el perfil de riesgo; algunas entidades piden certificación bancaria o RUT.'],
     ['Pasa el dinero', 'Por PSE o transferencia desde una cuenta a tu nombre. Ten en cuenta el 4 × 1.000 (GMF) al retirar de tu cuenta bancaria.'],
@@ -105,7 +105,7 @@
     const inPlan = new Set(Object.keys(by));
     // Resumen del plan con el canal sugerido para cada segmento
     let summary;
-    if (!plan) summary = '<p>Todavía no hay plan de inversión: carga los datos y revisa la sección <b>Comprar</b>. Abajo están todos los canales.</p>';
+    if (!plan) summary = '<p>Elige tu portafolio en la sección <b>Portafolio</b>; aquí están los canales para comprar cada activo y el paso a paso.</p>';
     else {
       const items = [];
       if (by.variable) {

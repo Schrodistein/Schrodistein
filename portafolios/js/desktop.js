@@ -259,6 +259,14 @@
         $('mk-update').disabled = false;
       }
     });
+    $('mk-cache').addEventListener('click', async () => {
+      try {
+        const r = await api.limpiarCache();
+        status(`Caché limpiada: ${(r.freed / 1048576).toFixed(1).replace('.', ',')} MB liberados. Tus datos y la biblioteca no se tocaron.`, 'ok');
+      } catch (e) {
+        status('No se pudo limpiar la caché: ' + e.message, 'bad');
+      }
+    });
     $('mk-bvc').addEventListener('click', () => {
       api.abrirBVC();
       status('Se abrió la BVC en otra ventana. Busca cada acción, descarga su histórico y la app lo importa sola al terminar la descarga.');

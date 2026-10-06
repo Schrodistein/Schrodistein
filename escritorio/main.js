@@ -195,6 +195,39 @@ function openBvc() {
   });
 }
 
+/* Limpieza de espacio: caché del navegador interno (páginas de la BVC y de noticias), datos de
+ * sitios externos y archivos temporales de descargas ya importadas. No toca los datos de la app
+ * (datos.json), la biblioteca local ni la biblioteca de análisis (IndexedDB). */
+async function cleanCache() {
+  const before = await session.defaultSession.getCacheSize().catch(() => 0);
+  await session.defaultSession.clearCache().catch(() => {});
+  await session.defaultSession.clearStorageData({ origins: ['https://www.bvc.com.co', 'https://bvc.com.co'], storages: ['cachestorage', 'serviceworkers', 'shadercache'] }).catch(() => {});
+  let tmp = 0;
+  const dir = path.join(app.getPath('userData'), 'descargas');
+  const size = (p) => {
+    try {
+      const st = fs.statSync(p);
+      return st.isDirectory() ? fs.readdirSync(p).reduce((a, f) => a + size(path.join(p, f)), 0) : st.size;
+    } catch (e) {
+      return 0;
+    }
+  };
+  tmp = size(dir);
+  fs.rmSync(dir, { recursive: true, force: true });
+  for (const f of ['Cache', 'Code Cache', 'GPUCache', 'DawnCache', 'DawnGraphiteCache', 'DawnWebGPUCache']) {
+    const p = path.join(app.getPath('userData'), f);
+    tmp += size(p);
+    try {
+      fs.rmSync(p, { recursive: true, force: true });
+    } catch (e) {
+      /* en uso: se limpia en el próximo arranque */
+    }
+  }
+  const freed = before + tmp;
+  log(`caché limpiada: ${(freed / 1048576).toFixed(1)} MB`);
+  return { freed };
+}
+
 /* ---------- Descarga directa de la BVC (aprendida de una descarga manual) ---------- */
 const bvcRecent = []; // peticiones recientes del sitio de la BVC (para aprender la plantilla)
 function watchBvcRequests() {
@@ -359,6 +392,7 @@ function registerIpc() {
     broadcast({ restored: res });
     return res;
   });
+  ipcMain.handle('cache:limpiar', () => cleanCache());
   ipcMain.handle('bvc:estado', () => ({ template: store.data.meta.bvcTemplate || null, last: store.data.meta.bvcLast || null, running: !!bvcRunning }));
   ipcMain.handle('bvc:descargar', async () => {
     if (!store.data.meta.bvcTemplate) return { needsLearning: true };
@@ -433,6 +467,8 @@ app.whenReady().then(() => {
   registerIpc();
   handleDownloads();
   watchBvcRequests();
+  // Al abrir: se borran los archivos temporales de descargas que quedaron de sesiones anteriores
+  fs.rm(path.join(app.getPath('userData'), 'descargas'), { recursive: true, force: true }, () => {});
   // Al abrir: la descarga directa de la BVC trae las fechas que falten de cada activo
   setTimeout(() => bvcSync('al abrir').catch((e) => log('BVC: ' + e.message)), 5000);
   createTray();

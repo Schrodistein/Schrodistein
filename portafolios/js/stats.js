@@ -981,17 +981,17 @@
     return { price: prices[lo], date: d[lo], exact: d[lo] === iso };
   }
 
-  /* Escala de Likert para leer una matriz de correlaciones grande: +1 «totalmente de acuerdo» (verde
-   * oscuro: se mueven juntos en proporción directa), 0 «ni de acuerdo ni en desacuerdo» (amarillo: sin
-   * relación lineal), −1 «totalmente en desacuerdo» (rojo ladrillo: proporción inversa). Las negativas van
-   * en tonos rojizos (naranja → rojo → ladrillo) y las positivas en verdes (claro → oscuro), con un salto
-   * de tono apenas se deja el cero para que el signo se distinga a simple vista. */
+  /* Escala de colores para leer una matriz de correlaciones grande (por niveles, como una escala de Likert,
+   * que es solo la referencia interna del diseño): +1 correlación perfecta directa (verde), 0 sin correlación
+   * lineal (amarillo), −1 correlación perfecta inversa (rojo ladrillo). Las negativas van en tonos rojizos
+   * (naranja → rojo → ladrillo) y las positivas en verdes (claro → oscuro), con un salto de tono apenas se
+   * deja el cero para que el signo se distinga a simple vista. */
   const LIKERT = [
-    { min: 0.6, label: 'Totalmente de acuerdo', desc: 'correlación directa fuerte (0,6 a 1)' },
-    { min: 0.2, label: 'De acuerdo', desc: 'correlación directa moderada (0,2 a 0,6)' },
-    { min: -0.2, label: 'Ni de acuerdo ni en desacuerdo', desc: 'sin relación lineal (−0,2 a 0,2)' },
-    { min: -0.6, label: 'En desacuerdo', desc: 'correlación inversa moderada (−0,6 a −0,2)' },
-    { min: -Infinity, label: 'Totalmente en desacuerdo', desc: 'correlación inversa fuerte (−1 a −0,6)' },
+    { min: 0.6, label: 'Correlación directa fuerte', desc: '0,6 a 1; en +1, correlación perfecta directa' },
+    { min: 0.2, label: 'Correlación directa moderada', desc: '0,2 a 0,6' },
+    { min: -0.2, label: 'Sin correlación lineal', desc: '−0,2 a 0,2; en 0, correlación nula' },
+    { min: -0.6, label: 'Correlación inversa moderada', desc: '−0,6 a −0,2' },
+    { min: -Infinity, label: 'Correlación inversa fuerte', desc: '−1 a −0,6; en −1, correlación perfecta inversa' },
   ];
   // Paradas de color: [ρ, rgb]
   const LK_STOPS = [
@@ -1022,7 +1022,8 @@
     // Texto legible: blanco sobre los tonos oscuros, casi negro sobre los claros
     const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
     const lv = LIKERT.findIndex((q) => x >= q.min);
-    return { color: hexOf(rgb), text: lum < 0.5 ? '#ffffff' : '#1d1d1f', label: LIKERT[lv].label, desc: LIKERT[lv].desc, point: 5 - lv };
+    const label = x >= 0.9995 ? 'Correlación perfecta directa' : x <= -0.9995 ? 'Correlación perfecta inversa' : LIKERT[lv].label;
+    return { color: hexOf(rgb), text: lum < 0.5 ? '#ffffff' : '#1d1d1f', label, desc: LIKERT[lv].desc, point: 5 - lv };
   }
   /* Bandas para Excel (formato condicional por rangos, con el color del centro de cada banda). */
   const LK_BANDS = [[-1, -0.6], [-0.6, -0.35], [-0.35, -0.15], [-0.15, -0.02], [-0.02, 0.02], [0.02, 0.15], [0.15, 0.3], [0.3, 0.45], [0.45, 0.6], [0.6, 0.8], [0.8, 1]].map(([a, b]) => {

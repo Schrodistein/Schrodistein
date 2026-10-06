@@ -41,7 +41,7 @@
     return `<c r="${at}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(cell.v)}</t></is></c>`;
   }
 
-  // Escala de Likert de las correlaciones (rojizos negativos, amarillo cero, verdes positivos) por bandas
+  // Colores de las correlaciones (rojizos negativos, amarillo cero, verdes positivos) por bandas
   const BANDS_DEFAULT = [[-1, -0.6, '7A2012', 'FFFFFF'], [-0.6, -0.35, 'B23C20', 'FFFFFF'], [-0.35, -0.15, 'DF5C2C', 'FFFFFF'], [-0.15, -0.02, 'F28E37', '1D1D1F'], [-0.02, 0.02, 'FFDE46', '1D1D1F'], [0.02, 0.15, 'C2DE6E', '1D1D1F'], [0.15, 0.35, '81CC68', '1D1D1F'], [0.35, 0.6, '45A35F', 'FFFFFF'], [0.6, 1, '1C6B3A', 'FFFFFF']].map(([from, to, color, text]) => ({ from, to, color: '#' + color, text: '#' + text }));
   const BANDS = (root.PF && root.PF.stats && root.PF.stats.LK_BANDS) || BANDS_DEFAULT;
   const argb = (hex) => 'FF' + hex.replace('#', '').toUpperCase();

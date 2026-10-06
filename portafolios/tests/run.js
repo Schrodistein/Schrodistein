@@ -976,7 +976,8 @@ test('Escala de Likert de las correlaciones: rojizos negativos, amarillo 0, verd
   assert(hue(L(0).color) >= 45 && hue(L(0).color) <= 60, 'cero amarillo: ' + L(0).color);
   for (const v of [0.05, 0.2, 0.4, 0.7, 1]) assert(hue(L(v).color) >= 75 && hue(L(v).color) <= 160, `ρ = ${v}: ${L(v).color} (${hue(L(v).color)}°)`);
   assert(L(-1).text === '#ffffff' && L(0).text === '#1d1d1f' && L(1).text === '#ffffff', 'texto legible');
-  assert(L(0.9).label === 'Totalmente de acuerdo' && L(0).label === 'Ni de acuerdo ni en desacuerdo' && L(-0.9).label === 'Totalmente en desacuerdo' && L(0.4).point === 4);
+  assert(L(0.9).label === 'Correlación directa fuerte' && L(0).label === 'Sin correlación lineal' && L(-0.9).label === 'Correlación inversa fuerte' && L(1).label === 'Correlación perfecta directa' && L(-1).label === 'Correlación perfecta inversa' && L(0.4).point === 4);
+  assert(!PF.stats.LIKERT.some((q) => /acuerdo/i.test(q.label + q.desc)), 'sin términos de acuerdo');
   const x = new TextDecoder().decode(PF.xlsx.build([{ name: 'C', rows: [[1, 0.5], [0.5, 1]], colorScale: ['A1:B2'] }]));
   assert(x.includes('<cfRule type="cellIs" dxfId="0"') && x.includes('<dxfs count="11">') && PF.stats.LK_BANDS.length === 11, 'bandas de color en el xlsx');
 });

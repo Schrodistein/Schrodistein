@@ -271,11 +271,11 @@
       }
       Co.push(row);
     }
-    // Escala de Likert (formato condicional de 3 colores sobre la matriz)
+    // Colores por nivel de correlación (formato condicional por bandas sobre la matriz)
     Co.push([]);
-    Co.push([{ v: 'Colores: escala de Likert de la correlación', s: 'b' }]);
-    PF.stats.LIKERT.slice().reverse().forEach((q, k) => Co.push([`${k + 1}. ${q.label}`, { v: q.desc, s: 'n' }]));
-    Co.push([{ v: 'Verde = +1 (se mueven juntos, no diversifican), amarillo = 0 (sin relación lineal), rojo = −1 (se mueven en sentido contrario, cubren el riesgo).', s: 'n' }]);
+    Co.push([{ v: 'Colores de la correlación', s: 'b' }]);
+    PF.stats.LIKERT.slice().reverse().forEach((q) => Co.push([q.label, { v: q.desc, s: 'n' }]));
+    Co.push([{ v: 'Verde = +1, correlación perfecta directa (se mueven juntos, no diversifican); amarillo = 0, sin correlación lineal; rojo = −1, correlación perfecta inversa (se mueven en sentido contrario, cubren el riesgo).', s: 'n' }]);
 
     /* ---------- Portafolios ---------- */
     const Pt = [];

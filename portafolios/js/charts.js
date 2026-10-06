@@ -10,7 +10,8 @@
   const pct = (x, d = 1) => (Number.isFinite(x) ? nf(d).format(x * 100) + ' %' : '—');
   // Cero exacto «0»; muy cerca de cero (|x| < 0,0001), notación científica (PF.data.fmtNum)
   const tiny = (x) => x === 0 || (Math.abs(x) < 1e-4 && PF.data && PF.data.fmtNum);
-  const num = (x, d = 2) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, d) : nf(d).format(x)) : '—');
+  // Sin «−0,0»: un negativo que se redondea a cero se muestra sin signo
+  const num = (x, d = 2) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, d) : nf(d).format(x).replace(/^-(?=0(,0+)?$)/, '')) : '—');
   const f1 = (x) => (Number.isFinite(x) ? (tiny(x) ? PF.data.fmtNum(x, 2) : (x < 0 ? '−' : '') + nf(2).format(Math.abs(x))) : '—');
 
   function ticks(min, max, count) {
@@ -265,7 +266,7 @@
       s += `<text x="${labelW - 6}" y="${y + cell / 2 + 4}" text-anchor="end"><tspan class="num">${i + 1}</tspan> ${esc(name)}</text>`;
       o.names.forEach((nm2, j) => {
         const v = o.corr[i][j];
-        // Escala de Likert: verde +1, amarillo 0, rojo −1
+        // Escala de colores: verde +1, amarillo 0, rojo −1
         const lk = PF.stats.likert(v);
         const x = labelW + j * cell;
         s += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cell - 2}" rx="2" style="fill:${lk.color}"${tipAttr(`<b>${esc(nm)}</b> × <b>${esc(nm2)}</b><br>correlación <span class="num">${num(v, 2)}</span><br>${esc(lk.label)}`)}/>`;
@@ -276,14 +277,14 @@
     return s + likertLegend();
   }
 
-  /* Leyenda de la escala de Likert de las correlaciones (barra de −1 a +1 y los cinco niveles). */
+  /* Leyenda de los colores de la correlación (barra de −1 a +1 y los cinco niveles). */
   function likertLegend() {
     const L = PF.stats.LIKERT;
     const C = PF.stats.LK;
     const grad = C.stops.map(([x, c]) => `rgb(${c.join(',')}) ${((x + 1) * 50).toFixed(1)}%`).join(', ');
     return `<div class="likert" role="note" aria-label="Escala de colores de la correlación">
       <div class="likert-bar" style="background:linear-gradient(90deg, ${grad})"><span style="color:#fff">−1</span><span>0</span><span style="color:#fff">+1</span></div>
-      <ul>${L.slice().reverse().map((q, k) => `<li><i style="background:${PF.stats.likert([-0.8, -0.4, 0, 0.4, 0.8][k]).color}"></i><b>${k + 1}. ${esc(q.label)}</b> <span>${esc(q.desc)}</span></li>`).join('')}</ul>
+      <ul>${L.slice().reverse().map((q, k) => `<li><i style="background:${PF.stats.likert([-0.8, -0.4, 0, 0.4, 0.8][k]).color}"></i><b>${esc(q.label)}</b> <span>${esc(q.desc)}</span></li>`).join('')}</ul>
     </div>`;
   }
 

@@ -1295,14 +1295,14 @@
         return dlStatus(`Libro generado con ${rep.sheets.length} hojas: ${rep.sheets.map((x) => x.name).join(', ')}.`, 'ok');
       }
       if (kind === 'corr') {
-        // Excel con la matriz coloreada en la escala de Likert (verde +1, amarillo 0, rojo −1)
+        // Excel con la matriz coloreada por nivel de correlación (verde +1, amarillo 0, rojo −1)
         const N = m.names.length;
-        const rowsC = [[{ v: 'Matriz de correlación (rendimientos logarítmicos diarios)', s: 't' }], [{ v: 'Colores: escala de Likert. Verde = totalmente de acuerdo (+1), amarillo = ni de acuerdo ni en desacuerdo (0), rojo = totalmente en desacuerdo (−1).', s: 'n' }], [{ v: '', s: 'h' }].concat(m.names.map((n) => ({ v: n, s: 'h' })))]
+        const rowsC = [[{ v: 'Matriz de correlación (rendimientos logarítmicos diarios)', s: 't' }], [{ v: 'Colores: verde = correlación directa (+1, perfecta directa), amarillo = sin correlación lineal (0), rojo = correlación inversa (−1, perfecta inversa).', s: 'n' }], [{ v: '', s: 'h' }].concat(m.names.map((n) => ({ v: n, s: 'h' })))]
           .concat(m.names.map((n, i) => [{ v: n, s: 'b' }].concat(m.corr[i].map((v) => ({ v, s: 'num4' })))))
-          .concat([[], [{ v: 'Escala', s: 'b' }]], PF.stats.LIKERT.slice().reverse().map((q, k) => [`${k + 1}. ${q.label}`, { v: q.desc, s: 'n' }]));
+          .concat([[], [{ v: 'Colores', s: 'b' }]], PF.stats.LIKERT.slice().reverse().map((q) => [q.label, { v: q.desc, s: 'n' }]));
         const bytes = PF.xlsx.build([{ name: 'Correlacion', rows: rowsC, cols: [24].concat(m.names.map(() => 12)), freeze: { row: 3, col: 1 }, colorScale: [`B4:${PF.xlsx.colName(N)}${3 + N}`] }]);
         download(bytes, `matriz-correlacion-${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        return dlStatus('Matriz de correlación en Excel, coloreada con la escala de Likert.', 'ok');
+        return dlStatus('Matriz de correlación en Excel, coloreada por nivel de correlación.', 'ok');
       }
       let rows;
       let name;

@@ -247,7 +247,7 @@
 
   /* Portafolio recomendado: el de mayor rendimiento esperado sobre la frontera eficiente
    * de Markowitz que conserva la diversificación exigida:
-   *   max E(Rp)  sujeto a  ser eficiente (mínima varianza para ese rendimiento),
+   *   max E(Rₚ)  sujeto a  ser eficiente (mínima varianza para ese rendimiento),
    *                        N efectivo = 1 / Σwᵢ² ≥ N*,  lo ≤ wᵢ ≤ tope,  Σwᵢ = 1.
    * El tope por activo no es fijo: se usa el más holgado (sin tope, si se puede) cuya frontera
    * tiene portafolios con ese N efectivo. Así un activo puede pesar mucho más que 1/N si eso

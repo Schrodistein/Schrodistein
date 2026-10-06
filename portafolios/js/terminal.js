@@ -381,7 +381,7 @@
         <div class="rng" role="group" aria-label="Rango">${RANGES.map(([k]) => `<button type="button" data-range="${k}" aria-pressed="${k === state.range}">${k}</button>`).join('')}</div>`;
       const tb = (k, v, sub, cls) => `<div class="tile"><span class="k">${k}</span><span class="v ${cls || ''}">${v}</span>${sub ? `<span class="s">${sub}</span>` : ''}</div>`;
       $('t-tiles').innerHTML =
-        tb('Precio de un cero cupón', nf(2).format(100 / Math.pow(1 + y[n - 1], dur || 1)), `por 100 de valor nominal: 100 / (1 + y)^${dur}`) +
+        tb('Precio de un cero cupón', nf(2).format(100 / Math.pow(1 + y[n - 1], dur || 1)), `por 100 de valor nominal: 100 / (1 + y)<sup>${dur}</sup>`) +
         tb('Tasa máxima y mínima 52 semanas', `${rateTxt(Math.max(...yr))} · ${rateTxt(Math.min(...yr))}`, '') +
         tb('Cambio de la tasa en 1 año', bpTxt(y[n - 1] - y365), 'si la tasa sube, el precio del bono baja', y[n - 1] - y365 <= 0 ? 'up' : 'down') +
         tb('Rendimiento total 1 año', pct(st.y1, 1), 'causación de la tasa + efecto precio (duración)', st.y1 >= 0 ? 'up' : 'down') +

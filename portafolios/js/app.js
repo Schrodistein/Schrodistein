@@ -10,7 +10,7 @@
     { key: 'recommended', label: 'Recomendado', short: 'Recomendado', title: 'Portafolio recomendado: máximo rendimiento diversificado', desc: 'El portafolio eficiente (frontera de Markowitz) con el mayor rendimiento esperado que conserva la diversificación exigida: un número efectivo de activos N = 1 / Σwᵢ² mínimo. No reparte por igual ni aplica un tope fijo por acción: un activo puede pesar más que los demás si eso sube el rendimiento, mientras el conjunto siga diversificado. El nivel de diversificación se elige en Datos.' },
     { key: 'tangency', label: 'Máxima Sharpe', short: 'Tangente', title: 'Portafolio tangente: máxima razón de Sharpe', desc: 'La mayor prima por unidad de riesgo total dentro de tus límites de peso. Es el portafolio riesgoso eficiente de la teoría de Markowitz y Sharpe; para menos riesgo, combínalo con el activo libre de riesgo sobre la línea del mercado de capitales.' },
     { key: 'minVar', label: 'Mínima varianza', short: 'Mín. varianza', title: 'Portafolio de mínima varianza', desc: 'El punto de menor riesgo de la frontera eficiente. No usa los rendimientos esperados, así que es el más robusto al error de estimación de las medias.' },
-    { key: 'maxDiv', label: 'Máxima diversificación', short: 'Máx. diversif.', shape: 'diamond', title: 'Portafolio de máxima diversificación', desc: 'Maximiza la razón de diversificación Σwσ / σp: el mayor beneficio de combinar activos poco correlacionados.' },
+    { key: 'maxDiv', label: 'Máxima diversificación', short: 'Máx. diversif.', shape: 'diamond', title: 'Portafolio de máxima diversificación', desc: 'Maximiza la razón de diversificación Σwσ / σₚ: el mayor beneficio de combinar activos poco correlacionados.' },
     { key: 'riskParity', label: 'Paridad de riesgo', short: 'Paridad', shape: 'diamond', title: 'Portafolio de paridad de riesgo', desc: 'Cada activo aporta la misma parte del riesgo total. No aplica tus límites de peso.' },
     { key: 'equal', label: 'Pesos iguales', short: '1/N', shape: 'diamond', title: 'Portafolio de pesos iguales (1/N)', desc: 'La diversificación ingenua: el mismo peso en cada activo. Sirve de referencia; rara vez es eficiente.' },
   ];
@@ -731,7 +731,7 @@
       dr && Number.isFinite(dr.crp) ? `<button type="button" class="btn" data-use-prp="${(dr.crp * 100).toFixed(2)}">Usar PRP de Damodaran ${pct(dr.crp, 2)}</button>` : '',
       Number.isFinite(q.prp) ? `<button type="button" class="btn" data-use-prp="${(q.prp * 100).toFixed(2)}">Usar PRP ${pct(q.prp, 2)} en la beta de Damodaran</button>` : '',
       Number.isFinite(q.rfLocal) ? `<button type="button" class="btn" data-use-rf="${(q.rfLocal * 100).toFixed(2)}">Usar rf local ${pct(q.rfLocal, 2)} como tasa libre de riesgo</button>` : '',
-      Number.isFinite(q.em) ? `<button type="button" class="btn btn-primary" data-use-em="${(q.em * 100).toFixed(2)}">Usar E(Rm) = ${pct(q.em, 2)} en Supuestos</button>` : '',
+      Number.isFinite(q.em) ? `<button type="button" class="btn btn-primary" data-use-em="${(q.em * 100).toFixed(2)}">Usar E(Rₘ) = ${pct(q.em, 2)} en Supuestos</button>` : '',
     ].join(' ');
   }
   function wireRf() {
@@ -862,7 +862,7 @@
         ${tile('Beta β', num(e.beta), 'R² con el mercado: ' + num(e.r2))}
         ${tile('M² de Modigliani', pct(e.m2), 'al riesgo del mercado')}
         ${tile('N efectivo', num(e.effN, 1), e.nHeld + ' de ' + m.names.length + ' activos')}
-        ${tile('Razón de diversificación', num(e.divRatio), 'Σwσ / σp')}
+        ${tile('Razón de diversificación', num(e.divRatio), 'Σwσ / σₚ')}
         ${tile('VaR 95 % anual', pct(e.var95), 'pérdida que se supera 1 año de cada 20')}
       </div>
       <div class="port-body">
@@ -1241,12 +1241,12 @@
     });
     out.push({ key: 'desv', label: 'Desviaciones respecto a la media', sheet: 'Desv_media', rows: [['Fecha'].concat(m.names.map((n) => `${n}: r − r̄`))].concat(dates.map((d, t) => [d].concat(idx.map((i, k) => (Number.isFinite(R[i][t]) ? R[i][t] - means[k] : ''))))) });
     // Covarianzas ponderadas del portafolio elegido
-    out.push({ key: 'pond', label: `Covarianzas ponderadas wᵢwⱼσᵢⱼ (${sel.label})`, sheet: 'Cov_ponderada', rows: [[`wᵢwⱼσᵢⱼ · ${sel.label}`].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.Sigma[i].map((c, j) => E.w[i] * E.w[j] * c))), [[], ['Varianza del portafolio σp² (suma)', E.vol * E.vol], ['Desviación σp', E.vol]]) });
+    out.push({ key: 'pond', label: `Covarianzas ponderadas wᵢwⱼσᵢⱼ (${sel.label})`, sheet: 'Cov_ponderada', rows: [[`wᵢwⱼσᵢⱼ · ${sel.label}`].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.Sigma[i].map((c, j) => E.w[i] * E.w[j] * c))), [[], ['Varianza del portafolio σₚ² (suma)', E.vol * E.vol], ['Desviación σₚ', E.vol]]) });
     // Frontera eficiente
-    out.push({ key: 'front', label: 'Puntos de la frontera eficiente', sheet: 'Frontera_puntos', rows: [['Punto', 't', 'E(Rp)', 'σp', 'Sharpe'].concat(m.names)].concat(P.frontier.map((q, k) => [k + 1, P.front[k] && Number.isFinite(P.front[k].t) ? P.front[k].t : 'max', q.ret, q.vol, (q.ret - m.rf) / q.vol].concat(q.w))) });
+    out.push({ key: 'front', label: 'Puntos de la frontera eficiente', sheet: 'Frontera_puntos', rows: [['Punto', 't', 'E(Rₚ)', 'σₚ', 'Sharpe'].concat(m.names)].concat(P.frontier.map((q, k) => [k + 1, P.front[k] && Number.isFinite(P.front[k].t) ? P.front[k].t : 'max', q.ret, q.vol, (q.ret - m.rf) / q.vol].concat(q.w))) });
     // CML y SML
     const tan = P.tangency;
-    const cml = [['σp', 'E(Rp) en la CML', '% en el tangente', '% en renta fija segura']];
+    const cml = [['σₚ', 'E(Rₚ) en la CML', '% en el tangente', '% en renta fija segura']];
     if (tan) for (let k = 0; k <= 20; k++) {
       const v = (tan.vol * 1.5 * k) / 20;
       cml.push([v, m.rf + ((tan.ret - m.rf) / tan.vol) * v, v / tan.vol, 1 - v / tan.vol]);
@@ -1257,11 +1257,11 @@
     // Elección de activos en el tangente
     if (tan) {
       const bT = PF.frontera.betasTo(m, tan.w);
-      out.push({ key: 'elec', label: 'Elección de activos (portafolio tangente)', sheet: 'Eleccion_activos', rows: [['Activo', 'E(Rᵢ) − rf', 'βᵢ,T', 'Prima exigida βᵢ,T(E(R_T) − rf)', 'Diferencia', 'Peso en T']].concat(m.names.map((n, i) => [n, m.mu[i] - m.rf, bT[i], bT[i] * (tan.ret - m.rf), m.mu[i] - m.rf - bT[i] * (tan.ret - m.rf), tan.w[i]])) });
+      out.push({ key: 'elec', label: 'Elección de activos (portafolio tangente)', sheet: 'Eleccion_activos', rows: [['Activo', 'E(Rᵢ) − rf', 'βᵢ,T', 'Prima exigida βᵢ,T(E(R del tangente) − rf)', 'Diferencia', 'Peso en T']].concat(m.names.map((n, i) => [n, m.mu[i] - m.rf, bT[i], bT[i] * (tan.ret - m.rf), m.mu[i] - m.rf - bT[i] * (tan.ret - m.rf), tan.w[i]])) });
     }
     // Correlación promedio
     const ac = PF.frontera.avgCorr(m, E.w);
-    out.push({ key: 'corrp', label: `Correlación promedio (${sel.label})`, sheet: 'Corr_promedio', rows: [['Par', 'ρᵢⱼ', '2wᵢwⱼσᵢσⱼ', 'Aporte 2wᵢwⱼσᵢσⱼρᵢⱼ']].concat(ac.list.map((q) => [`${m.names[q.i]} – ${m.names[q.j]}`, q.r, q.k, q.k * q.r]), [[], ['Promedio simple ρ̄', ac.simple], ['Promedio ponderado ρ̄p', ac.weighted], ['Σ wᵢ²σᵢ²', ac.own], ['(Σ wᵢσᵢ)²', ac.naive * ac.naive], ['σp²', ac.varP]]) });
+    out.push({ key: 'corrp', label: `Correlación promedio (${sel.label})`, sheet: 'Corr_promedio', rows: [['Par', 'ρᵢⱼ', '2wᵢwⱼσᵢσⱼ', 'Aporte 2wᵢwⱼσᵢσⱼρᵢⱼ']].concat(ac.list.map((q) => [`${m.names[q.i]} – ${m.names[q.j]}`, q.r, q.k, q.k * q.r]), [[], ['Promedio simple ρ̄', ac.simple], ['Promedio ponderado ρ̄p', ac.weighted], ['Σ wᵢ²σᵢ²', ac.own], ['(Σ wᵢσᵢ)²', ac.naive * ac.naive], ['σₚ²', ac.varP]]) });
     // Contribución al riesgo de cada portafolio
     const list = PORTS.filter((q) => P[q.key]);
     out.push({ key: 'contrib', label: 'Contribución al riesgo por portafolio', sheet: 'Contrib_riesgo', rows: [['Activo'].concat(list.map((q) => q.label))].concat(m.names.map((n, i) => [n].concat(list.map((q) => P[q.key].riskContrib[i])))) });
@@ -2269,6 +2269,8 @@
   }
 
   function init() {
+    const tn = document.getElementById('teo-nomen');
+    if (tn && PF.pasos) tn.innerHTML = PF.pasos.NOMEN;
     const saved = store.get('settings');
     if (saved) {
       // Ajustes de versiones anteriores: el tope de 20-30 % por acción ya no es el predeterminado

@@ -11,7 +11,7 @@
   /* Promedios de correlación de un portafolio w:
    *   simple    ρ̄  = Σ_{i<j} ρᵢⱼ / [N(N − 1)/2]                         (todos los pares por igual)
    *   ponderado ρ̄w = Σ<sub>i≠j</sub> wᵢwⱼσᵢσⱼρᵢⱼ / Σ<sub>i≠j</sub> wᵢwⱼσᵢσⱼ               (pesa cada par por su aporte al riesgo)
-   * El ponderado es la correlación promedio implícita: con ella, σp² = Σwᵢ²σᵢ² + ρ̄w[(Σwᵢσᵢ)² − Σwᵢ²σᵢ²]. */
+   * El ponderado es la correlación promedio implícita: con ella, σₚ² = Σwᵢ²σᵢ² + ρ̄w[(Σwᵢσᵢ)² − Σwᵢ²σᵢ²]. */
   function avgCorr(m, w) {
     const n = w.length;
     let sum = 0;
@@ -73,7 +73,7 @@
       <p>Lo que cambia entre ellos es <b>qué punto de la curva</b> se elige, y eso depende de qué se le pide al portafolio:</p>
       <ul><li><b>Sin renta fija segura</b>: cada inversionista elige su punto según su aversión al riesgo. El extremo de menor riesgo es el de mínima varianza y el de mayor rendimiento es el de máximo rendimiento.</li>
       <li><b>Con renta fija segura</b> (Tobin, 1958): todos deberían tener el <b>mismo</b> portafolio de acciones, el tangente, y ajustar el riesgo solo con la proporción en renta fija. Es el <b>teorema de separación</b>: la decisión de <i>qué</i> acciones comprar no depende del gusto por el riesgo; solo la de <i>cuánto</i> poner en ellas.</li>
-      <li><b>Con utilidad media-varianza</b> <code>U = E(Rₚ) − ½·A·σₚ²</code> (A = aversión al riesgo), la proporción óptima en el tangente es <code>y* = (E(R_T) − rf) / (A·σ_T²)</code>${tan ? `: con tus datos, A = 2 → ${pct((tan.ret - m.rf) / (2 * tan.vol * tan.vol), 0)}, A = 4 → ${pct((tan.ret - m.rf) / (4 * tan.vol * tan.vol), 0)}, A = 8 → ${pct((tan.ret - m.rf) / (8 * tan.vol * tan.vol), 0)} en el tangente y el resto en renta fija (más de 100 % significa pedir prestado)` : ''}.</li></ul>
+      <li><b>Con utilidad media-varianza</b> <code>U = E(Rₚ) − ½·A·σₚ²</code> (A = aversión al riesgo), la proporción óptima en el tangente es <code>y* = (E(R<sub>T</sub>) − rf) / (A·σ<sub>T</sub>²)</code>${tan ? `: con tus datos, A = 2 → ${pct((tan.ret - m.rf) / (2 * tan.vol * tan.vol), 0)}, A = 4 → ${pct((tan.ret - m.rf) / (4 * tan.vol * tan.vol), 0)}, A = 8 → ${pct((tan.ret - m.rf) / (8 * tan.vol * tan.vol), 0)} en el tangente y el resto en renta fija (más de 100 % significa pedir prestado)` : ''}.</li></ul>
       <p>Todos los portafolios usan los mismos datos (μ y Σ de la sección 4), los mismos límites (mínimo ${pct(Math.min(...P.lo), 0)}, tope ${pct(P.cap, 0)} por activo) y <code>Σwᵢ = 1</code>.</p></div>`);
 
     // Mínima varianza
@@ -82,7 +82,7 @@
       const g = Sw(e.w);
       const v = e.vol * e.vol;
       out.push(box('minVar', '11.2 Mínima varianza', `<p>Es el punto más a la izquierda de la frontera de <b>Markowitz (1952)</b>: el de menor riesgo posible. No usa los rendimientos esperados, que son el dato más incierto de todo el modelo (Merton, 1980; Jagannathan y Ma, 2003): por eso suele ser el portafolio más estable cuando se recalcula con datos nuevos.</p>`,
-        `<p class="formula"><code>min wᵀΣw &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        `<p class="formula"><code>min wᵀΣw &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; w<sub>mín</sub> ≤ wᵢ ≤ w<sub>máx</sub></code></p>`,
         ['Se arma la matriz Σ de varianzas y covarianzas anual.', 'Se resuelve el problema cuadrático: se busca la combinación de pesos que deja la suma <code>Σᵢ Σⱼ wᵢwⱼσᵢⱼ</code> en su mínimo (método de conjunto activo).', 'En el óptimo, todo activo que se compra sin tocar sus límites tiene el mismo <b>riesgo marginal</b> <code>(Σw)ᵢ = σₚ²</code>: si uno tuviera menos, convendría subirle el peso y bajar el riesgo total.', 'Un activo con riesgo marginal mayor que σₚ² queda en el mínimo; uno con menor sube hasta el tope.'],
         `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">Peso</th><th class="n">σᵢ</th><th class="n">Riesgo marginal (Σw)ᵢ</th><th class="n">σₚ²</th></tr></thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(e.w[i], 1)}</td><td class="n">${pct(m.vol[i])}</td><td class="n">${nf(g[i], 5)}</td><td class="n">${nf(v, 5)}</td></tr>`).join('')}</tbody></table></div>`,
         '<p>Inversionistas muy aversos al riesgo, horizontes cortos o cuando no se confía en los rendimientos esperados. Su desventaja: puede tener poco rendimiento y concentrarse en los activos menos volátiles.</p>'));
@@ -92,7 +92,7 @@
     if (top) {
       const order = m.names.map((_, i) => i).sort((a, b) => m.mu[b] - m.mu[a]);
       out.push(box('__maxret', '11.3 Máximo rendimiento', `<p>Es el extremo derecho de la frontera. Sin límites de peso sería un solo activo, el de mayor E(R): no hay diversificación. Con un tope por activo, reparte entre los de mayor rendimiento esperado.</p>`,
-        `<p class="formula"><code>max wᵀμ &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ ${pct(P.cap, 0)}</code></p>`,
+        `<p class="formula"><code>max wᵀμ &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; w<sub>mín</sub> ≤ wᵢ ≤ ${pct(P.cap, 0)}</code></p>`,
         ['Se ordenan los activos por rendimiento esperado, de mayor a menor.', `Se llena cada uno hasta el tope (${pct(P.cap, 0)}) en ese orden, hasta completar el 100 %.`, 'El riesgo no interviene: es el punto de la frontera con mayor E(R) y, casi siempre, el de mayor σ.'],
         `${holdings(m, top.w, pct, esc)}<ul class="sym"><li>Orden por E(R): ${order.map((i) => `${esc(m.names[i])} ${pct(m.mu[i])}`).join(' > ')}.</li><li>E(Rₚ) = <b>${pct(top.ret)}</b>, σₚ = <b>${pct(top.vol)}</b>, Sharpe = ${nf((top.ret - m.rf) / top.vol, 3)}.</li></ul>`,
         '<p>Solo como referencia del máximo alcanzable con los límites de peso. Es el más sensible a errores en los rendimientos esperados.</p>'));
@@ -102,7 +102,7 @@
     if (tan) {
       const slope = (tan.ret - m.rf) / tan.vol;
       out.push(box('tangency', '11.4 Máxima razón de Sharpe (portafolio tangente)', `<p><b>Tobin (1958)</b> mostró que, si se puede invertir o pedir prestado a la tasa libre de riesgo, el mejor portafolio de activos riesgosos es uno solo: el que maximiza la prima por unidad de riesgo. <b>Sharpe (1964)</b> y <b>Lintner (1965)</b> lo llevaron al equilibrio del mercado (CAPM): si todos piensan igual, el tangente es el portafolio de mercado. Su pendiente es la <b>razón de Sharpe</b> (Sharpe, 1966).</p>`,
-        `<p class="formula"><code>max (wᵀμ − rf) / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        `<p class="formula"><code>max (wᵀμ − rf) / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; w<sub>mín</sub> ≤ wᵢ ≤ w<sub>máx</sub></code></p>`,
         ['Se calcula la frontera eficiente (sección 8).', 'Para cada punto se calcula su razón de Sharpe: (E(Rₚ) − rf) / σₚ.', 'La razón sube y luego baja a lo largo de la curva (es unimodal): se toma el punto más alto con una rejilla y se afina con búsqueda de sección áurea.', 'Geométricamente es el punto donde la recta que sale de rf toca la curva sin cortarla: la línea del mercado de capitales (sección 9).', 'Qué activos entran: los que pagan su aporte al riesgo del portafolio (condición de primer orden, sección 12).'],
         `<p>rf = ${pct(m.rf)} → pendiente de la CML = (${pct(tan.ret)} − ${pct(m.rf)}) / ${pct(tan.vol)} = <b>${nf(slope, 3)}</b>: ningún otro portafolio de la frontera da más rendimiento extra por cada punto de riesgo.</p>`,
         '<p>El portafolio de acciones de quien combina con renta fija segura (CDT, TES): la parte riesgosa siempre es esta, y el riesgo total se ajusta con la proporción en renta fija. Es el más defendible en teoría, pero depende mucho de los rendimientos esperados.</p>'));
@@ -122,7 +122,7 @@
     if (P.maxDiv) {
       const e = P.maxDiv;
       out.push(box('maxDiv', '11.6 Máxima diversificación', `<p><b>Choueifaty y Coignard (2008)</b> proponen maximizar la <b>razón de diversificación</b>: cuánto riesgo se elimina al combinar los activos. Si todos tuvieran correlación 1, el riesgo sería el promedio ponderado de las volatilidades <code>Σwᵢσᵢ</code>; el portafolio tiene σₚ, que es menor cuanto menos correlacionados estén.</p>`,
-        `<p class="formula"><code>max DR = Σ wᵢσᵢ / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>`,
+        `<p class="formula"><code>max DR = Σ wᵢσᵢ / √(wᵀΣw) &nbsp; sujeto a &nbsp; Σwᵢ = 1, &nbsp; w<sub>mín</sub> ≤ wᵢ ≤ w<sub>máx</sub></code></p>`,
         ['Es el mismo cálculo que el tangente, pero cambiando los rendimientos μ por las volatilidades σ y rf por 0: se busca el máximo de (Σwᵢσᵢ)/σₚ a lo largo de la frontera «de volatilidades».', 'En el óptimo, todos los activos que entran tienen la misma correlación con el portafolio: ninguno se mueve más con él que los demás.', 'No usa los rendimientos esperados.'],
         `<p>Razón de diversificación DR = ${nf(e.divRatio, 3)}: el riesgo real es ${pct(1 - 1 / e.divRatio, 0)} menor que si todo estuviera perfectamente correlacionado.</p>`,
         '<p>Cuando la prioridad es aprovechar la baja correlación entre activos (por ejemplo, acciones de sectores distintos, renta fija y dólar) y no se confía en los rendimientos esperados.</p>'));
@@ -155,8 +155,8 @@
         <h3>Cómo se calcula, paso a paso</h3><ol>
           <li>Para cada activo: α (Jensen), β y varianza residual σ²(εᵢ) de la regresión contra el índice.</li>
           <li>Peso dentro de la cartera activa: <code>wᵢ ∝ αᵢ / σ²(εᵢ)</code> (la «razón de valoración»: α por unidad de riesgo propio). Un α negativo da peso negativo (venta en corto).</li>
-          <li>α, β y riesgo propio de la cartera activa: α_A = ${pct(tb.alphaA, 2)}, β_A = ${nf(tb.betaA, 3)}, σ²(e_A) = ${nf(tb.resA, 5)}.</li>
-          <li>Peso de la cartera activa: <code>w₀ = [α_A/σ²(e_A)] / [(E(Rₘ) − rf)/σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β_A)·w₀]</code> = <b>${pct(tb.wActive)}</b>; en el índice: ${pct(tb.wIndex)}.</li>
+          <li>α, β y riesgo propio de la cartera activa: α<sub>A</sub> = ${pct(tb.alphaA, 2)}, β<sub>A</sub> = ${nf(tb.betaA, 3)}, σ²(e<sub>A</sub>) = ${nf(tb.resA, 5)}.</li>
+          <li>Peso de la cartera activa: <code>w₀ = [α<sub>A</sub>/σ²(e<sub>A</sub>)] / [(E(Rₘ) − rf)/σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β<sub>A</sub>)·w₀]</code> = <b>${pct(tb.wActive)}</b>; en el índice: ${pct(tb.wIndex)}.</li>
           <li>Sharpe resultante: <code>√(Sₘ² + IR²)</code> = √(${nf(tb.sharpeMkt, 3)}² + ${nf(tb.ir, 3)}²) = <b>${nf(tb.sharpeP, 3)}</b>, donde IR es la razón de información de la cartera activa.</li></ol>
         <h3>Resultado con tus datos</h3>
         <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">α de Jensen</th><th class="n">σ²(ε)</th><th class="n">Peso en la cartera activa</th><th class="n">Peso total</th></tr></thead><tbody>${idx.map((i) => `<tr><td>${esc(m.names[i])}</td><td class="n">${pct(m.assets[i].jensenM, 2)}</td><td class="n">${nf(m.assets[i].residVarM, 5)}</td><td class="n">${pct(tb.wA[i], 1)}</td><td class="n">${pct(tb.assetW[i], 1)}</td></tr>`).join('')}</tbody></table></div>
@@ -230,15 +230,82 @@
     } catch (e) {
       chart = '';
     }
+    /* Paso 2 explicado con matemáticas simples y los datos cargados. Nomenclatura de toda la app:
+     * subíndice ₚ = portafolio, ₘ = mercado (índice), ᵢ y ⱼ = activos, T = portafolio tangente, rf = tasa libre de riesgo */
+    const paso2 = () => {
+      const Ep = E && E.w ? E : P.frontier[Math.floor(P.frontier.length / 2)];
+      const sub = (x) => `<sub>${x}</sub>`;
+      const sup = (x) => `<sup>${x}</sup>`;
+      // Ejemplo con los dos activos de mayor peso del portafolio elegido, en partes iguales
+      const ord = m.names.map((n, i) => [i, Ep.w[i]]).sort((a, b) => b[1] - a[1]);
+      const a = ord[0][0];
+      const b = (ord[1] || ord[0])[0];
+      const A = esc(m.names[a]);
+      const B = esc(m.names[b]);
+      const muA = m.mu[a];
+      const muB = m.mu[b];
+      const vA = m.Sigma[a][a];
+      const vB = m.Sigma[b][b];
+      const cAB = m.Sigma[a][b];
+      const ex = 0.5 * muA + 0.5 * muB;
+      const vx = 0.25 * vA + 0.25 * vB + 2 * 0.25 * cAB;
+      const terms = m.names.map((n, i) => ({ n, w: Ep.w[i], mu: m.mu[i] })).filter((x) => Math.abs(x.w) > 5e-4).sort((x, y) => y.w - x.w);
+      const shown = terms.slice(0, 6);
+      const sumR = terms.reduce((q, x) => q + x.w * x.mu, 0);
+      const wTxt = (w) => String(Math.round(w * 10000) / 10000).replace('.', ',');
+      const ks = [0, Math.floor((P.frontier.length - 1) / 2), P.frontier.length - 1];
+      const tOf = (k) => (k === 0 ? 0 : k === P.frontier.length - 1 ? Infinity : P.front[k] && P.front[k].t);
+      const lo = pct(Math.min(...P.lo), 0);
+      const hi = pct(P.cap, 0);
+      return `<p><b>¿Qué significa «min»?</b> Es la abreviatura de <b>minimizar</b>: entre todas las combinaciones de pesos posibles, quedarse con la que da el valor <b>más pequeño</b> de lo que viene después (aquí, la varianza del portafolio, es decir, su riesgo). <b>«sujeto a»</b> introduce las condiciones que deben cumplir los pesos. En palabras: <i>«de todos los portafolios que rinden lo mismo (R*), elige el que tiene menos riesgo»</i>.</p>
+      <p class="formula"><code>min σ${sub('p')}${sup('2')} = w${sup('T')}Σw &nbsp; sujeto a &nbsp; w${sup('T')}μ = R*, &nbsp; w${sub('1')} + w${sub('2')} + … + w${sub('N')} = 1, &nbsp; w${sub('mín')} ≤ w${sub('i')} ≤ w${sub('máx')}</code></p>
+      <h4>Qué es cada símbolo</h4>
+      <ul class="sym">
+        <li><code>w${sub('i')}</code>: <b>peso</b> del activo i, la fracción del dinero que se pone en él (w = 0,25 es el 25 %). <code>w</code> es la lista de los ${N} pesos: w${sub('1')}, w${sub('2')}, …, w${sub('N')}.</li>
+        <li><code>μ${sub('i')}</code>: rendimiento esperado anual del activo i. <code>σ${sub('i')}${sup('2')}</code>: su varianza. <code>σ${sub('ij')}</code>: covarianza entre los activos i y j. <code>Σ</code> (sigma mayúscula): la tabla con todas las varianzas y covarianzas (sección 4).</li>
+        <li>El superíndice <code>${sup('T')}</code> (transpuesta) solo indica que la lista de pesos se escribe como fila para multiplicarla; no cambia ningún valor.</li>
+        <li><code>w${sup('T')}μ</code> es el <b>rendimiento esperado del portafolio</b>: <code>E(R${sub('p')}) = w${sub('1')}μ${sub('1')} + w${sub('2')}μ${sub('2')} + … + w${sub('N')}μ${sub('N')}</code> (cada peso por el rendimiento de su activo, sumados).</li>
+        <li><code>w${sup('T')}Σw</code> es la <b>varianza del portafolio</b>: <code>σ${sub('p')}${sup('2')} = Σ${sub('i')} Σ${sub('j')} w${sub('i')} w${sub('j')} σ${sub('ij')}</code>, la suma de todas las casillas de la tabla Σ multiplicadas por los pesos de su fila y de su columna (sección 5).</li>
+        <li><code>R*</code>: el rendimiento que se pide. <code>w${sub('mín')}</code> y <code>w${sub('máx')}</code>: peso mínimo y máximo por activo (aquí ${lo} y ${hi}, de Datos → Supuestos).</li>
+      </ul>
+      <h4>Las fórmulas con números: dos activos en partes iguales</h4>
+      <p>Con ${A} (A) y ${B} (B), los de mayor peso en el portafolio ${esc(selP.label)}, y w${sub('A')} = w${sub('B')} = 0,5:</p>
+      <p class="formula"><code>E(R${sub('p')}) = w${sub('A')}μ${sub('A')} + w${sub('B')}μ${sub('B')}</code> = 0,5 × ${pct(muA, 2)} + 0,5 × ${pct(muB, 2)} = <b>${pct(ex, 2)}</b></p>
+      <p class="formula"><code>σ${sub('p')}${sup('2')} = w${sub('A')}${sup('2')}σ${sub('A')}${sup('2')} + w${sub('B')}${sup('2')}σ${sub('B')}${sup('2')} + 2 w${sub('A')}w${sub('B')}σ${sub('AB')}</code> = 0,25 × ${nf(vA, 6)} + 0,25 × ${nf(vB, 6)} + 2 × 0,25 × ${nf(cAB, 6)} = <b>${nf(vx, 6)}</b></p>
+      <p class="formula"><code>σ${sub('p')} = √σ${sub('p')}${sup('2')}</code> = √${nf(vx, 6)} = <b>${pct(Math.sqrt(Math.max(0, vx)), 2)}</b> &nbsp; (cada uno por separado: σ${sub('A')} = ${pct(Math.sqrt(vA), 2)}, σ${sub('B')} = ${pct(Math.sqrt(vB), 2)})</p>
+      <p class="hint">El término <code>2 w${sub('A')}w${sub('B')}σ${sub('AB')}</code> es el de la diversificación: si los activos no se mueven juntos (covarianza baja o negativa), quita riesgo. Con ${N} activos hay ${N} términos de varianza y ${N * (N - 1)} de covarianza; la suma completa está en la sección 5.</p>
+      <h4>Con todos los activos del portafolio ${esc(selP.label)}</h4>
+      <p class="formula"><code>E(R${sub('p')})</code> = ${shown.map((x) => `${wTxt(x.w)} × ${pct(x.mu, 2)}`).join(' + ')}${terms.length > shown.length ? ` + … (${terms.length - shown.length} términos más)` : ''} = <b>${pct(sumR, 2)}</b></p>
+      <p class="formula"><code>σ${sub('p')}${sup('2')} = w${sup('T')}Σw</code> = <b>${nf(Ep.vol * Ep.vol, 6)}</b> &nbsp;→&nbsp; <code>σ${sub('p')}</code> = <b>${pct(Ep.vol, 2)}</b></p>
+      <h4>Las condiciones («sujeto a»)</h4>
+      <ul class="sym">
+        <li><code>w${sup('T')}μ = R*</code>: el portafolio debe rendir exactamente el objetivo R*. El problema se repite con muchos R* distintos y cada solución es un punto de la curva.</li>
+        <li><code>w${sub('1')} + w${sub('2')} + … + w${sub('N')} = 1</code>: se invierte el 100 % del dinero.</li>
+        <li><code>w${sub('mín')} ≤ w${sub('i')} ≤ w${sub('máx')}</code>: ningún activo pesa menos de ${lo} ni más de ${hi} (sin ventas en corto si el mínimo es 0).</li>
+      </ul>
+      <h4>Cómo lo resuelve la app: la tolerancia al riesgo t</h4>
+      <p>En vez de fijar R*, se minimiza una sola expresión que pone en la balanza el riesgo y el rendimiento:</p>
+      <p class="formula"><code>min ½ σ${sub('p')}${sup('2')} − t · E(R${sub('p')}) &nbsp; = &nbsp; min ½ w${sup('T')}Σw − t · w${sup('T')}μ</code></p>
+      <ul class="sym">
+        <li><code>t</code> dice cuánto rendimiento vale una unidad de riesgo. Con <code>t = 0</code> solo se minimiza el riesgo (portafolio de <b>mínima varianza</b>, extremo izquierdo de la curva); al subir <code>t</code> se acepta más riesgo a cambio de más rendimiento y el punto sube por la curva; con <code>t</code> muy grande (t → ∞) solo cuenta el rendimiento (<b>máximo rendimiento</b>, extremo derecho).</li>
+        <li>El <code>½</code> no cambia la solución, solo simplifica la derivada. Al derivar e igualar a cero (sin límites de peso) queda <code>Σw = t · μ + λ · 1</code>: el riesgo que aporta cada activo es proporcional a su rendimiento (Markowitz, 1952).</li>
+        <li>Con los límites de peso se resuelve por programación cuadrática (método de conjunto activo): cada t da un portafolio (σ${sub('p')}, E(R${sub('p')})).</li>
+      </ul>
+      <div class="table-scroll"><table class="data"><thead><tr><th>Punto de la frontera</th><th class="n">t</th><th class="n">σ${sub('p')}${sup('2')}</th><th class="n">E(R${sub('p')})</th><th class="n">½ σ${sub('p')}${sup('2')} − t · E(R${sub('p')})</th></tr></thead><tbody>${ks
+        .map((k, i) => {
+          const pt = P.frontier[k];
+          const t = tOf(k);
+          const obj = fin(t) ? 0.5 * pt.vol * pt.vol - t * pt.ret : NaN;
+          return `<tr><td>${['Mínima varianza (izquierda)', 'Mitad de la curva', 'Máximo rendimiento (derecha)'][i]}</td><td class="n">${t === Infinity ? '∞' : nf(t, 4)}</td><td class="n">${nf(pt.vol * pt.vol, 6)}</td><td class="n">${pct(pt.ret, 2)}</td><td class="n">${fin(obj) ? nf(obj, 6) : '—'}</td></tr>`;
+        })
+        .join('')}</tbody></table></div>`;
+    };
     out.push(`<div class="panel"><h2>8. Cómo se calcula y se grafica la frontera eficiente</h2>
       <p><b>Markowitz (1952)</b> llama eficiente al portafolio que, para su nivel de riesgo, da el mayor rendimiento esperado (o, para su rendimiento, el menor riesgo). La frontera eficiente es la curva que une todos esos portafolios.</p>
       <h3>Paso 1. Datos de entrada</h3>
       <ul class="sym"><li><code>μ</code>: vector de rendimientos esperados anuales de los ${N} activos (sección 4).</li><li><code>Σ</code>: matriz de varianzas y covarianzas anual (sección 4).</li><li>Límites de peso: ${pct(Math.min(...P.lo), 0)} ≤ wᵢ ≤ ${pct(P.cap, 0)} por activo y <code>Σ wᵢ = 1</code> (todo el dinero invertido). El tope de ${pct(P.cap, 0)} es el que fija el portafolio recomendado (sección 11).</li></ul>
       <h3>Paso 2. El problema de optimización</h3>
-      <p class="formula"><code>min σₚ² = wᵀΣw &nbsp; sujeto a &nbsp; wᵀμ = R*, &nbsp; Σwᵢ = 1, &nbsp; loᵢ ≤ wᵢ ≤ hiᵢ</code></p>
-      <p>Para cada rendimiento objetivo R* se busca la combinación de pesos con la menor varianza. La app lo resuelve en la forma equivalente de <b>Markowitz con tolerancia al riesgo t</b>:</p>
-      <p class="formula"><code>min ½ wᵀΣw − t · wᵀμ</code> &nbsp; con t de 0 a ∞</p>
-      <ul class="sym"><li><code>t = 0</code>: solo importa el riesgo → portafolio de <b>mínima varianza</b>, el extremo izquierdo de la curva.</li><li><code>t</code> creciente: se acepta más riesgo por más rendimiento → los puntos suben por la curva.</li><li><code>t → ∞</code>: solo importa el rendimiento → portafolio de <b>máximo rendimiento</b>, el extremo derecho.</li><li>Cada problema es cuadrático con restricciones de caja; se resuelve con un método de conjunto activo (programación cuadrática) y da un punto (σₚ, E(Rₚ)).</li></ul>
+      ${paso2()}
       <h3>Paso 3. Puntos calculados</h3>
       <p>Se resolvieron ${P.frontier.length} puntos. Algunos de ellos:</p>
       <div class="table-scroll"><table class="data"><thead><tr><th class="n">Punto</th><th class="n">t</th><th class="n">E(Rₚ) = wᵀμ</th><th class="n">σₚ = √(wᵀΣw)</th><th class="n">Sharpe</th>${m.names.map((n) => `<th class="n">${esc(n)}</th>`).join('')}</tr></thead><tbody>${show
@@ -259,10 +326,10 @@
       const at = E.vol;
       out.push(`<div class="panel"><h2>9. Línea del mercado de capitales (CML)</h2>
         <p><b>Tobin (1958)</b> y <b>Sharpe (1964)</b>: si se puede prestar o pedir prestado a la tasa libre de riesgo rf, la mejor combinación ya no está sobre la curva sino sobre la recta que sale de rf y toca la frontera en el portafolio <b>tangente</b> T.</p>
-        <p class="formula"><code>E(Rₚ) = rf + [(E(R_T) − rf) / σ_T] · σₚ</code></p>
-        <ul class="sym"><li><code>rf</code> = ${pct(m.rf)}: tasa libre de riesgo (Datos → Supuestos).</li><li><code>E(R_T)</code> = ${pct(tan.ret)} y <code>σ_T</code> = ${pct(tan.vol)}: rendimiento y riesgo del portafolio tangente.</li><li>Pendiente = (${pct(tan.ret)} − ${pct(m.rf)}) / ${pct(tan.vol)} = <b>${nf(slope, 4)}</b>: es la razón de Sharpe del tangente, el mayor premio por unidad de riesgo total que se puede lograr.</li></ul>
+        <p class="formula"><code>E(Rₚ) = rf + [(E(R<sub>T</sub>) − rf) / σ<sub>T</sub>] · σₚ</code></p>
+        <ul class="sym"><li><code>rf</code> = ${pct(m.rf)}: tasa libre de riesgo (Datos → Supuestos).</li><li><code>E(R<sub>T</sub>)</code> = ${pct(tan.ret)} y <code>σ<sub>T</sub></code> = ${pct(tan.vol)}: rendimiento y riesgo del portafolio tangente.</li><li>Pendiente = (${pct(tan.ret)} − ${pct(m.rf)}) / ${pct(tan.vol)} = <b>${nf(slope, 4)}</b>: es la razón de Sharpe del tangente, el mayor premio por unidad de riesgo total que se puede lograr.</li></ul>
         <h3>Cómo se traza</h3>
-        <ol><li>Punto 1: (σ = 0, E(R) = rf = ${pct(m.rf)}), todo en renta fija segura.</li><li>Punto 2: (σ_T = ${pct(tan.vol)}, E(R_T) = ${pct(tan.ret)}), todo en el tangente.</li><li>Se prolonga la recta: a la izquierda de T se combina T con renta fija (prestar); a la derecha, se pide prestado a rf para invertir más de 100 % en T (apalancamiento).</li></ol>
+        <ol><li>Punto 1: (σ = 0, E(R) = rf = ${pct(m.rf)}), todo en renta fija segura.</li><li>Punto 2: (σ<sub>T</sub> = ${pct(tan.vol)}, E(R<sub>T</sub>) = ${pct(tan.ret)}), todo en el tangente.</li><li>Se prolonga la recta: a la izquierda de T se combina T con renta fija (prestar); a la derecha, se pide prestado a rf para invertir más de 100 % en T (apalancamiento).</li></ol>
         <p>Con el riesgo del portafolio elegido (${esc(selP.label)}, σ = ${pct(at)}), la CML da E(R) = ${pct(m.rf)} + ${nf(slope, 4)} × ${pct(at)} = <b>${pct(m.rf + slope * at)}</b>. Se logra con ${pct(at / tan.vol)} en el tangente y ${pct(1 - at / tan.vol)} en renta fija segura.</p></div>`);
     }
 
@@ -312,7 +379,7 @@
     out.push(`<div class="panel"><h2>11. Cómo se eligen los activos de cada portafolio</h2>
       <p>Todos usan los mismos μ y Σ y los mismos límites de peso; cambia lo que se optimiza.</p>
       <div class="table-scroll"><table class="data"><thead><tr><th>Portafolio</th><th>Criterio</th><th>Cómo elige los activos</th><th class="n">E(R)</th><th class="n">σ</th><th class="n">Sharpe</th><th class="n">N efectivo</th></tr></thead><tbody>${rowsP}</tbody></table></div>
-      ${tb ? `<p><b>Treynor y Black (1973)</b>: parte del índice ${esc(m.marketName)} y le agrega una cartera activa con los activos de α de Jensen distinto de cero. Peso de cada activo en la cartera activa: <code>wᵢ ∝ αᵢ / σ²(εᵢ)</code> (α sobre su riesgo propio). Peso de la cartera activa: <code>w₀ = [α_A / σ²(e_A)] / [(E(Rₘ) − rf) / σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β_A) w₀]</code> = ${pct(tb.wActive)}; el resto, ${pct(tb.wIndex)}, va al índice. Sharpe resultante: √(Sₘ² + IR²) = ${nf(tb.sharpeP, 3)}.</p>` : ''}
+      ${tb ? `<p><b>Treynor y Black (1973)</b>: parte del índice ${esc(m.marketName)} y le agrega una cartera activa con los activos de α de Jensen distinto de cero. Peso de cada activo en la cartera activa: <code>wᵢ ∝ αᵢ / σ²(εᵢ)</code> (α sobre su riesgo propio). Peso de la cartera activa: <code>w₀ = [α<sub>A</sub> / σ²(e<sub>A</sub>)] / [(E(Rₘ) − rf) / σₘ²]</code>, ajustado por su beta: <code>w* = w₀ / [1 + (1 − β<sub>A</sub>) w₀]</code> = ${pct(tb.wActive)}; el resto, ${pct(tb.wIndex)}, va al índice. Sharpe resultante: √(Sₘ² + IR²) = ${nf(tb.sharpeP, 3)}.</p>` : ''}
       <h3>Pesos de cada portafolio</h3>
       ${wTable(cols)}</div>`);
 
@@ -330,7 +397,7 @@
       const WHY = { lo: 'en el mínimo: su prima no alcanza a pagar su aporte al riesgo', hi: 'en el tope: rinde más de lo que exige su aporte al riesgo', in: 'interior: su prima paga justo su aporte al riesgo' };
       out.push(`<div class="panel"><h2>12. Por qué un activo entra o no al portafolio tangente</h2>
         <p>Para cada activo se compara su prima con la que exige su aporte al riesgo del portafolio tangente T:</p>
-        <p class="formula"><code>Diferencia ᵢ = [E(Rᵢ) − rf] − βᵢ,T · (E(R_T) − rf)</code>, &nbsp; con &nbsp; <code>βᵢ,T = Cov(rᵢ, r_T) / σ_T² = (Σw_T)ᵢ / (w_TᵀΣw_T)</code></p>
+        <p class="formula"><code>Diferencia ᵢ = [E(Rᵢ) − rf] − βᵢ,T · (E(R<sub>T</sub>) − rf)</code>, &nbsp; con &nbsp; <code>βᵢ,T = Cov(rᵢ, r<sub>T</sub>) / σ<sub>T</sub>² = (Σw<sub>T</sub>)ᵢ / (w<sub>T</sub>ᵀΣw<sub>T</sub>)</code></p>
         <ol><li>Sin límites de peso, el óptimo de Markowitz deja la diferencia en 0 para todos los activos: cada uno paga exactamente su aporte al riesgo (condición de primer orden).</li><li>Con límites (mínimo ${pct(Math.min(...P.lo), 0)} y tope ${pct(P.cap, 0)}), todos los activos <b>interiores</b> comparten una misma diferencia ν${fin(nu) ? ` = ${pct(nu, 2)}` : ''}: es el costo de los límites.</li><li>Un activo con diferencia menor que ν baja hasta el mínimo; uno con diferencia mayor sube hasta el tope. Así se eligen los activos: entran los que más rendimiento aportan por unidad de riesgo que suman al conjunto, no los de mayor rendimiento a secas.</li></ol>
         <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">E(Rᵢ) − rf</th><th class="n">βᵢ,T</th><th class="n">Prima exigida βᵢ,T·${pct(prem)}</th><th class="n">Diferencia</th><th class="n">Peso en T</th><th>Resultado</th></tr></thead><tbody>${m.names
           .map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(m.mu[i] - m.rf)}</td><td class="n">${nf(bT[i], 3)}</td><td class="n">${pct(bT[i] * prem)}</td><td class="n">${pct(diff[i], 2)}</td><td class="n">${pct(tan.w[i])}</td><td>${WHY[state[i]]}</td></tr>`)

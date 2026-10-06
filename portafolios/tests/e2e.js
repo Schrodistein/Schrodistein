@@ -184,7 +184,7 @@ const shots = process.argv[3];
     await page.waitForSelector('#dam-panel');
     const pasos = await page.textContent('#pasos');
     if (!/Markowitz \(1952\)/.test(pasos) || !/βL = βU/.test(pasos) || !/Varianza del portafolio/.test(pasos)) errors.push(label + ': paso a paso incompleto');
-    if (!/Cómo se calcula y se grafica la frontera eficiente/.test(pasos) || !/Dónde queda el portafolio elegido/.test(pasos) || !/promedian las correlaciones/.test(pasos)) errors.push(label + ': falta el paso a paso de la frontera');
+    if (!/Cómo se calcula y se grafica la frontera eficiente/.test(pasos) || !/¿Qué significa «min»?/.test(pasos) || !/Dónde queda el portafolio elegido/.test(pasos) || !/promedian las correlaciones/.test(pasos)) errors.push(label + ': falta el paso a paso de la frontera');
     if ((await page.$$('#pasos .chart-box svg')).length < 2) errors.push(label + ': faltan las gráficas de la frontera y la SML en el paso a paso');
     for (const id of ['paso-erm', 'paso-riesgo', 'paso-r2', 'paso-primas', 'paso-de']) if (!(await page.$('#' + id))) errors.push(`${label}: falta la sección ${id} del paso a paso`);
     if (!(await page.$('#pasos table.corr-likert td[style*="background"]'))) errors.push(label + ': la matriz de correlación no lleva los colores de Likert');

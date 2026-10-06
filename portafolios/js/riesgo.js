@@ -169,7 +169,7 @@
     const prp = fin(spread) ? spread * ratio : NaN;
     const rfLocal = fin(tes10) && fin(spread) ? damodaranRf(tes10, spread) : NaN;
     const rf = ctx && fin(ctx.rf) ? ctx.rf : NaN;
-    // E(Rm) en pesos (Damodaran): sobre la rf local sin riesgo de impago si se conoce; si no, la rf en uso
+    // E(Rₘ) en pesos (Damodaran): sobre la rf local sin riesgo de impago si se conoce; si no, la rf en uso
     const rfBase = fin(rfLocal) ? rfLocal : rf;
     const em = fin(rfBase) && fin(erpM) ? rfBase + erpM + (fin(prp) ? prp : 0) : NaN;
     return { rfBase, rfBaseSrc: fin(rfLocal) ? 'local' : 'uso', tes10, ust10, picol, pius, erpM, embi, ratio, ratioFromData: !fin(ratioIn) && ctx && fin(ctx.volRatio), rfUsdInCop, implicit, spread, spreadSrc: fin(embi) ? 'EMBI' : fin(implicit) ? 'TES' : '', prp, rfLocal, em };
@@ -205,24 +205,24 @@
       const infl = ctx.inflation;
       const btn = (x, label) => (fin(x) ? `<button type="button" class="btn btn-ghost" data-use-em="${(Math.round(x * 10000) / 100).toFixed(2)}">${label || 'Usar en Supuestos'}</button>` : '');
       const vals = table.values[ix(mk)].filter(fin);
-      out.push(`<div class="panel" id="paso-erm"><h2>15. Rendimiento esperado anual del mercado E(Rm)</h2>
-        <p><b>E(Rm)</b> es lo que se espera que rinda en un año el portafolio de mercado, que en Colombia representa el <b>${esc(mk)}</b>. Es el punto de partida del CAPM (<code>E(Rᵢ) = rf + βᵢ [E(Rm) − rf]</code>), del α de Jensen, de la razón de Treynor del mercado y de la pendiente de la línea del mercado de valores. No se observa: se estima, y hay dos caminos.</p>
+      out.push(`<div class="panel" id="paso-erm"><h2>15. Rendimiento esperado anual del mercado E(Rₘ)</h2>
+        <p><b>E(Rₘ)</b> es lo que se espera que rinda en un año el portafolio de mercado, que en Colombia representa el <b>${esc(mk)}</b>. Es el punto de partida del CAPM (<code>E(Rᵢ) = rf + βᵢ [E(Rₘ) − rf]</code>), del α de Jensen, de la razón de Treynor del mercado y de la pendiente de la línea del mercado de valores. No se observa: se estima, y hay dos caminos.</p>
         <h3>a) Histórico: la media de los rendimientos diarios, anualizada</h3>
         <ol>
           <li>Rendimiento de cada rueda: <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Con tus datos hay <b>${n.toLocaleString('es-CO')}</b> rendimientos diarios del ${esc(mk)} (${nf(years, 2)} años de ${f} ruedas).</li>
           <li>Media diaria: <code>r̄ = Σ rₜ / n</code> = <b>${nf(mean, 6)}</b>; varianza diaria <code>s² = Σ (rₜ − r̄)² / (n − 1)</code> = ${nf(v, 8)}.</li>
           <li>Anualizar: los rendimientos logarítmicos se suman en el tiempo, así que <code>μ = r̄ × ${f}</code> = <b>${pct(muLn, 2)}</b> continuo anual y <code>σ² = s² × ${f}</code> = ${nf(s2, 6)} (σ = ${pct(Math.sqrt(s2), 2)}).</li>
-          <li>Pasar a tasa efectiva anual (lo que de verdad creció un peso invertido): <code>e^μ − 1</code> = <b>${pct(geo, 2)}</b>. Es igual a la tasa compuesta del periodo, <code>(P_T / P₀)^(${f}/n) − 1</code>, con P₀ = ${nf(vals[0], 2)} y P_T = ${nf(vals[vals.length - 1], 2)}.</li>
-          <li>Media aritmética esperada (si los rendimientos son lognormales): <code>e^(μ + σ²/2) − 1</code> = <b>${pct(arit, 2)}</b>. Es mayor que la geométrica por la volatilidad; la diferencia ≈ σ²/2.</li>
+          <li>Pasar a tasa efectiva anual (lo que de verdad creció un peso invertido): <code>e<sup>μ</sup> − 1</code> = <b>${pct(geo, 2)}</b>. Es igual a la tasa compuesta del periodo, <code>(P<sub>T</sub> / P₀)<sup>${f}/n</sup> − 1</code>, con P₀ = ${nf(vals[0], 2)} y P<sub>T</sub> = ${nf(vals[vals.length - 1], 2)}.</li>
+          <li>Media aritmética esperada (si los rendimientos son lognormales): <code>e<sup>μ + σ²/2</sup> − 1</code> = <b>${pct(arit, 2)}</b>. Es mayor que la geométrica por la volatilidad; la diferencia ≈ σ²/2.</li>
           <li>Precisión: el error estándar de μ es <code>σ / √años</code> = ${pct(se, 2)}, así que con 95 % de confianza μ está entre <b>${pct(lo, 1)}</b> y <b>${pct(hi, 1)}</b>. Con pocos años el intervalo es muy ancho: la media histórica es el dato con más error de toda la teoría (Merton, 1980).</li>
         </ol>
         <p class="row-btns">${btn(muLn, `Usar μ = ${pct(muLn, 2)}`)} ${btn(geo, `Usar efectiva ${pct(geo, 2)}`)}</p>
         <h3>b) Prospectivo: tasa libre de riesgo + prima de riesgo del mercado</h3>
-        <p class="formula"><code>E(Rm) = rf + PRM + PRP</code></p>
+        <p class="formula"><code>E(Rₘ) = rf + PRM + PRP</code></p>
         <ul class="sym"><li><code>rf</code>: tasa libre de riesgo en pesos (Datos → Renta fija): hoy ${pct(m.rf, 2)}.</li><li><code>PRM</code>: prima de riesgo de un mercado maduro. Histórica (Ibbotson; Dimson, Marsh y Staunton) o implícita en los precios de hoy (Damodaran, «Implied ERP», del S&amp;P 500).</li><li><code>PRP</code>: prima por riesgo país de Colombia (Damodaran, tabla «ctryprem»; o el diferencial EMBI × σ acciones / σ bonos). En la app: ${pct(crp, 2)} (Paso a paso → sección 7).</li></ul>
-        <p>Con tus datos, la prima histórica del ${esc(mk)} sobre la rf es <code>μ − rf</code> = ${pct(muLn, 2)} − ${pct(m.rf, 2)} = <b>${pct(erpHist, 2)}</b>. Si es negativa o muy baja (un periodo de caída del mercado), no sirve como expectativa: la teoría exige <code>E(Rm) &gt; rf</code>, y se usa la prima implícita.</p>
-        <p class="hint"><b>Modelo de Gordon (1959)</b>, otra vía prospectiva: <code>E(Rm) = D₁ / P₀ + g</code>, el rendimiento por dividendo del índice más el crecimiento esperado de los dividendos (≈ crecimiento nominal del PIB a largo plazo). <b>Fisher (1930)</b>: para pasarlo a términos reales, <code>(1 + E(Rm)) / (1 + π) − 1</code>${fin(infl) ? `; con la inflación anual más reciente (${pct(infl, 2)}), la media efectiva histórica equivale a <b>${pct((1 + geo) / (1 + infl) - 1, 2)}</b> real` : ''}.</p>
-        <p>En uso ahora: <b>E(Rm) = ${pct(m.Em, 2)}</b> ${Math.abs(m.Em - m.mktHist) < 1e-9 ? '(la media histórica anual, porque el campo de Supuestos está vacío)' : '(el valor escrito en Supuestos)'}. Los botones de arriba lo pasan a Supuestos.</p>
+        <p>Con tus datos, la prima histórica del ${esc(mk)} sobre la rf es <code>μ − rf</code> = ${pct(muLn, 2)} − ${pct(m.rf, 2)} = <b>${pct(erpHist, 2)}</b>. Si es negativa o muy baja (un periodo de caída del mercado), no sirve como expectativa: la teoría exige <code>E(Rₘ) &gt; rf</code>, y se usa la prima implícita.</p>
+        <p class="hint"><b>Modelo de Gordon (1959)</b>, otra vía prospectiva: <code>E(Rₘ) = D₁ / P₀ + g</code>, el rendimiento por dividendo del índice más el crecimiento esperado de los dividendos (≈ crecimiento nominal del PIB a largo plazo). <b>Fisher (1930)</b>: para pasarlo a términos reales, <code>(1 + E(Rₘ)) / (1 + π) − 1</code>${fin(infl) ? `; con la inflación anual más reciente (${pct(infl, 2)}), la media efectiva histórica equivale a <b>${pct((1 + geo) / (1 + infl) - 1, 2)}</b> real` : ''}.</p>
+        <p>En uso ahora: <b>E(Rₘ) = ${pct(m.Em, 2)}</b> ${Math.abs(m.Em - m.mktHist) < 1e-9 ? '(la media histórica anual, porque el campo de Supuestos está vacío)' : '(el valor escrito en Supuestos)'}. Los botones de arriba lo pasan a Supuestos.</p>
       </div>`);
     }
 
@@ -246,8 +246,8 @@
       const up = m.assets.reduce((q, a, i) => q + e.w[i] * e.w[i] * a.residVarM, 0);
       const wavgUns = m.assets.reduce((q, a, i) => q + e.w[i] * a.residVarM, 0);
       port = `<h3>El portafolio recomendado</h3>
-        <p class="formula"><code>σp² ≈ βp² σm² + Σ wᵢ² σ²(εᵢ)</code> → βp = Σ wᵢ βᵢ = <b>${nf(bp, 3)}</b>; sistemático βp² σm² = ${nf(sp, 6)}; no sistemático Σ wᵢ² σ²(εᵢ) = ${nf(up, 6)}; varianza del portafolio σp² = ${nf(vp, 6)}.</p>
-        <p>El riesgo propio de cada acción entra al portafolio multiplicado por <code>wᵢ²</code>, no por <code>wᵢ</code>: con pesos pequeños casi desaparece. Si se sumaran sin diversificar (Σ wᵢ σ²(εᵢ)) serían ${nf(wavgUns, 6)}; en el portafolio quedan ${nf(up, 6)}, el <b>${pct(wavgUns > 0 ? 1 - up / wavgUns : NaN, 1)}</b> menos. Lo que no se puede quitar es βp² σm²: el riesgo del mercado.</p>`;
+        <p class="formula"><code>σₚ² ≈ βₚ² σₘ² + Σ wᵢ² σ²(εᵢ)</code> → βₚ = Σ wᵢ βᵢ = <b>${nf(bp, 3)}</b>; sistemático βₚ² σₘ² = ${nf(sp, 6)}; no sistemático Σ wᵢ² σ²(εᵢ) = ${nf(up, 6)}; varianza del portafolio σₚ² = ${nf(vp, 6)}.</p>
+        <p>El riesgo propio de cada acción entra al portafolio multiplicado por <code>wᵢ²</code>, no por <code>wᵢ</code>: con pesos pequeños casi desaparece. Si se sumaran sin diversificar (Σ wᵢ σ²(εᵢ)) serían ${nf(wavgUns, 6)}; en el portafolio quedan ${nf(up, 6)}, el <b>${pct(wavgUns > 0 ? 1 - up / wavgUns : NaN, 1)}</b> menos. Lo que no se puede quitar es βₚ² σₘ²: el riesgo del mercado.</p>`;
     }
     // Curva de diversificación con pesos iguales (Evans y Archer, 1968)
     const N = m.names.length;
@@ -278,15 +278,15 @@
         .join('')}</tbody></table></div>
       <p class="hint">Valores anuales (× ${f} ruedas). La suma de sistemático y no sistemático es igual a la varianza total, salvo diferencias por las fechas que cada activo comparte con el índice.</p>
       <h3>Por qué la diversificación solo quita una parte (Evans y Archer, 1968)</h3>
-      <p>Con N activos en partes iguales: <code>σp² = σ̄² / N + (1 − 1/N) · cov̄</code>. Con tus datos, la varianza promedio es σ̄² = ${nf(varBar, 6)} y la covarianza promedio cov̄ = ${nf(covBar, 6)}. El primer término (riesgo propio) cae con N; el segundo (riesgo común) no: el riesgo tiende a <code>√cov̄</code> = ${pct(Math.sqrt(Math.max(0, covBar)), 2)} y nunca baja de ahí.</p>
-      <div class="table-scroll"><table class="data"><thead><tr><th class="n">N activos</th>${curve.map((c) => `<th class="n">${c[0]}</th>`).join('')}</tr></thead><tbody><tr><td>σp</td>${curve.map((c) => `<td class="n">${pct(Math.sqrt(Math.max(0, c[1])), 1)}</td>`).join('')}</tr></tbody></table></div>
+      <p>Con N activos en partes iguales: <code>σₚ² = σ̄² / N + (1 − 1/N) · cov̄</code>. Con tus datos, la varianza promedio es σ̄² = ${nf(varBar, 6)} y la covarianza promedio cov̄ = ${nf(covBar, 6)}. El primer término (riesgo propio) cae con N; el segundo (riesgo común) no: el riesgo tiende a <code>√cov̄</code> = ${pct(Math.sqrt(Math.max(0, covBar)), 2)} y nunca baja de ahí.</p>
+      <div class="table-scroll"><table class="data"><thead><tr><th class="n">N activos</th>${curve.map((c) => `<th class="n">${c[0]}</th>`).join('')}</tr></thead><tbody><tr><td>σₚ</td>${curve.map((c) => `<td class="n">${pct(Math.sqrt(Math.max(0, c[1])), 1)}</td>`).join('')}</tr></tbody></table></div>
       ${port}
       <h3>De aquí salen las betas y las medidas de desempeño</h3>
       <div class="table-scroll"><table class="data"><thead><tr><th>Medida</th><th>Fórmula</th><th>Qué riesgo usa</th><th>Cuándo es la correcta</th></tr></thead><tbody>
         <tr><td><b>β de Sharpe</b> (1963, 1964)</td><td><code>Cov(rᵢ, rₘ) / σₘ²</code></td><td>Solo el sistemático</td><td>Es la medida de riesgo del CAPM: en equilibrio el mercado solo paga el riesgo que no se puede diversificar.</td></tr>
         <tr><td><b>Razón de Sharpe</b> (1966)</td><td><code>(E(R) − rf) / σ</code></td><td>Total (sistemático + no sistemático)</td><td>Cuando el portafolio es <i>toda</i> la inversión: el inversionista soporta también el riesgo propio que no diversificó.</td></tr>
         <tr><td><b>Razón de Treynor</b> (1965)</td><td><code>(E(R) − rf) / β</code></td><td>Solo el sistemático</td><td>Cuando el activo o fondo es una parte de un portafolio ya diversificado, donde el riesgo propio desaparece.</td></tr>
-        <tr><td><b>α de Jensen</b> (1968)</td><td><code>E(R) − [rf + β (E(Rm) − rf)]</code></td><td>Mide contra la línea del mercado de valores, que solo remunera β</td><td>Rendimiento por encima de lo que exige el riesgo sistemático.</td></tr>
+        <tr><td><b>α de Jensen</b> (1968)</td><td><code>E(R) − [rf + β (E(Rₘ) − rf)]</code></td><td>Mide contra la línea del mercado de valores, que solo remunera β</td><td>Rendimiento por encima de lo que exige el riesgo sistemático.</td></tr>
         <tr><td><b>Razón de valoración</b> (Treynor y Black, 1973)</td><td><code>α / σ(ε)</code></td><td>Solo el no sistemático</td><td>Cuánto α se gana por cada unidad de riesgo propio que se acepta al sobreponderar un activo.</td></tr>
         <tr><td><b>β de Damodaran</b> (de abajo hacia arriba)</td><td><code>βL = βU [1 + (1 − t) D/E]</code></td><td>Sistemático del negocio (βU) + riesgo financiero de la deuda</td><td>Estima la β sistemática con el sector y la estructura de capital, en lugar de con la regresión, que tiene error.</td></tr>
         <tr><td><b>β total</b> (Damodaran)</td><td><code>β / ρᵢₘ = β / √R²</code></td><td>Total, en unidades de β</td><td>Para un dueño no diversificado (una sola empresa): carga también el riesgo propio. Última columna de la tabla.</td></tr>
@@ -462,7 +462,7 @@
     const q = premiums(pa.inp, { rf: m.rf, volRatio: pa.inp.ratio });
     const hist = m.mktHist - m.rf;
     return `<div class="panel" id="paso-primas"><h2>18. Prima de riesgo del mercado y prima por riesgo país</h2>
-      <p><b>Prima de riesgo del mercado (PRM)</b>: <code>E(Rm) − rf</code>, lo que se exige por invertir en acciones en lugar de en el activo sin riesgo. Es la pendiente de la línea del mercado de valores y lo que multiplica la β en el CAPM. <b>Prima por riesgo país (PRP)</b>: lo que se exige además por invertir en Colombia y no en un mercado maduro (Estados Unidos): riesgo de impago del Estado, inestabilidad fiscal o política, convertibilidad de la moneda. Con las dos, el costo del patrimonio de una acción colombiana es</p>
+      <p><b>Prima de riesgo del mercado (PRM)</b>: <code>E(Rₘ) − rf</code>, lo que se exige por invertir en acciones en lugar de en el activo sin riesgo. Es la pendiente de la línea del mercado de valores y lo que multiplica la β en el CAPM. <b>Prima por riesgo país (PRP)</b>: lo que se exige además por invertir en Colombia y no en un mercado maduro (Estados Unidos): riesgo de impago del Estado, inestabilidad fiscal o política, convertibilidad de la moneda. Con las dos, el costo del patrimonio de una acción colombiana es</p>
       <p class="formula"><code>Kₑ = rf + β · PRM + λ · PRP</code></p>
       <ul class="sym"><li><code>rf</code>: tasa libre de riesgo (${pct(m.rf, 2)}).</li><li><code>β</code>: riesgo sistemático del activo (sección 16).</li><li><code>λ</code>: exposición de la empresa al riesgo del país (Damodaran, 2003). Con λ = 1 todas cargan la prima completa; con λ = β, en proporción a su β. Una empresa con ingresos en dólares (exportadora) tiene λ &lt; 1.</li></ul>
       <h3>Cómo se establece la PRM</h3>

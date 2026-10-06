@@ -469,7 +469,7 @@ test('libro de cálculos: hojas, fórmulas y resultados iguales a los de la app'
   assert(cells('Estadisticas').some((c) => /^SLOPE\(Rendimientos!\$C\$3:\$C\$62,Rendimientos!\$B\$3:\$B\$62\)$/.test(c.f)), 'beta con PENDIENTE');
   assert(cells('Covarianza').some((c) => /CORREL|Correlacion!/.test(c.f)));
   const port = rep.sheets.find((x) => x.name === 'Portafolios').rows;
-  const eRow = port.find((r) => r && r[0] === 'Rendimiento esperado E(Rp)');
+  const eRow = port.find((r) => r && r[0] === 'Rendimiento esperado E(Rₚ)');
   assert(eRow && near(eRow[1].v, P.recommended.ret, 1e-12) && /^SUMPRODUCT/.test(eRow[1].f));
   const bytes = rep.bytes();
   assert(bytes.length > 50000 && bytes[0] === 0x50);
@@ -684,6 +684,12 @@ test('frontera paso a paso: correlación promedio implícita reproduce σp y cad
   const ports = [{ key: 'recommended', label: 'Recomendado' }, { key: 'tangency', label: 'Máxima Sharpe' }, { key: 'minVar', label: 'Mínima varianza' }];
   const html = PF.frontera.render({ m, P, esc: (x) => String(x), pct: (x) => (x * 100).toFixed(2) + '%', sel: 'tangency', ports, tb: PF.model.treynorBlack(m), width: 600 });
   for (const t of ['11.1 La idea común', '11.2 Mínima varianza', '11.4 Máxima razón de Sharpe', '11.5 Recomendado', '11.7 Paridad de riesgo', '11.10 ¿Cuál elegir?', 'separación de Tobin', 'Michaud', 'frontera eficiente', 'mercado de capitales', 'mercado de valores', 'Cómo se eligen', 'Por qué un activo entra', 'Dónde queda', 'promedian las correlaciones', 'Máximo rendimiento', 'Máxima Sharpe (elegido)']) assert(html.includes(t), 'falta ' + t);
+  // Paso 2 con números: E(Rₚ) de dos activos en partes iguales, sin NaN ni guiones bajos de subíndice
+  const p2 = html.slice(html.indexOf('Paso 2.'), html.indexOf('Paso 3.'));
+  assert(p2.includes('¿Qué significa «min»?') && p2.includes('<sub>p</sub>') && !/NaN|undefined/.test(p2) && !/[A-Za-zσβμ]_[A-Za-z]/.test(p2), 'paso 2 explicado');
+  const ord = T.w.map((x, i) => [i, x]).sort((x, y) => y[1] - x[1]);
+  assert(p2.includes('<b>' + ((0.5 * m.mu[ord[0][0]] + 0.5 * m.mu[ord[1][0]]) * 100).toFixed(2) + '%</b>'), 'E(Rₚ) de A y B al 50 %');
+  assert(PF.pasos.NOMEN.includes('Nomenclatura') && PF.pasos.NOMEN.includes('<b>Mercado</b>'));
 });
 
 test('guía de la BVC y catálogo de activos', () => {

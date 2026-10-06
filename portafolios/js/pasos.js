@@ -82,6 +82,30 @@
   }
 
   /* ctx: { m, table, retType, P, esc, pct, num, a, b, dam: {list, inputs}, crp } */
+  /* Nomenclatura única para toda la app: la misma letra significa lo mismo en cada pantalla, gráfica y archivo. */
+  const NOMEN = `<h2>Nomenclatura</h2>
+    <p>Las mismas letras significan lo mismo en toda la app. Los subíndices (letras pequeñas abajo) dicen <b>de quién</b> es el valor; los superíndices (arriba) son potencias o la transpuesta.</p>
+    <div class="table-scroll"><table class="data"><thead><tr><th>Símbolo</th><th>Significa</th><th>Ejemplo</th></tr></thead><tbody>
+      <tr><td><code>i</code>, <code>j</code></td><td>Un activo cualquiera (acción, ETF, bono) y otro activo</td><td><code>σ<sub>ij</sub></code>: covarianza entre los activos i y j</td></tr>
+      <tr><td><code>A</code>, <code>B</code></td><td>Los dos activos que se usan en los ejemplos numéricos</td><td><code>r<sub>A,t</sub></code>: rendimiento del activo A el día t</td></tr>
+      <tr><td><code>p</code></td><td><b>Portafolio</b> (la combinación de activos que se analiza)</td><td><code>E(R<sub>p</sub>)</code>, <code>σ<sub>p</sub></code>, <code>β<sub>p</sub></code></td></tr>
+      <tr><td><code>m</code></td><td><b>Mercado</b>: el índice de referencia (MSCI COLCAP, o el índice propio del activo)</td><td><code>E(R<sub>m</sub>)</code>, <code>σ<sub>m</sub><sup>2</sup></code>, <code>r<sub>m</sub></code></td></tr>
+      <tr><td><code>T</code></td><td>Portafolio <b>tangente</b> (el de mayor Sharpe)</td><td><code>E(R<sub>T</sub>)</code>, <code>σ<sub>T</sub></code>, <code>w<sub>T</sub></code></td></tr>
+      <tr><td><code>rf</code></td><td>Tasa libre de riesgo anual</td><td><code>E(R<sub>m</sub>) − rf</code>: prima de mercado</td></tr>
+      <tr><td><code>t</code></td><td>Un día de negociación (rueda); en la frontera, la tolerancia al riesgo</td><td><code>r<sub>t</sub> = ln(P<sub>t</sub> / P<sub>t−1</sub>)</code></td></tr>
+      <tr><td><code>P</code></td><td>Precio de cierre</td><td><code>P<sub>t</sub></code>: precio el día t</td></tr>
+      <tr><td><code>r</code></td><td>Rendimiento diario (logarítmico)</td><td><code>r<sub>i,t</sub></code></td></tr>
+      <tr><td><code>R</code>, <code>E(R)</code>, <code>μ</code></td><td>Rendimiento anual y rendimiento esperado anual</td><td><code>μ<sub>i</sub> = E(R<sub>i</sub>)</code></td></tr>
+      <tr><td><code>w</code></td><td>Peso: fracción del dinero en cada activo (suman 1)</td><td><code>w<sub>i</sub> = 0,25</code> es el 25 %</td></tr>
+      <tr><td><code>σ</code>, <code>σ<sup>2</sup></code></td><td>Desviación estándar (riesgo) y varianza</td><td><code>σ<sub>p</sub> = √σ<sub>p</sub><sup>2</sup></code></td></tr>
+      <tr><td><code>Σ</code></td><td>Como letra sola: la matriz de varianzas y covarianzas. Delante de una expresión: «suma de»</td><td><code>w<sup>T</sup>Σw</code>; <code>Σ w<sub>i</sub> = 1</code></td></tr>
+      <tr><td><code>ρ</code></td><td>Correlación (de −1 a +1)</td><td><code>ρ<sub>ij</sub> = σ<sub>ij</sub> / (σ<sub>i</sub> σ<sub>j</sub>)</code></td></tr>
+      <tr><td><code>β</code>, <code>α</code>, <code>ε</code></td><td>Beta (riesgo sistemático), alfa de Jensen y error de la regresión (riesgo propio)</td><td><code>r<sub>i</sub> = α<sub>i</sub> + β<sub>i</sub> r<sub>m</sub> + ε<sub>i</sub></code></td></tr>
+      <tr><td><code>N</code></td><td>Número de activos</td><td><code>w<sub>1</sub> + … + w<sub>N</sub> = 1</code></td></tr>
+      <tr><td><code>f</code></td><td>Ruedas por año (242) para anualizar</td><td><code>σ<sub>anual</sub> = σ<sub>diaria</sub> √f</code></td></tr>
+      <tr><td><code><sup>T</sup></code> (superíndice)</td><td>Transpuesta: la lista de pesos escrita como fila para multiplicar</td><td><code>w<sup>T</sup>μ = Σ w<sub>i</sub> μ<sub>i</sub></code></td></tr>
+    </tbody></table></div>`;
+
   function render(ctx) {
     const { m, table, esc, pct } = ctx;
     const f = m.f;
@@ -96,7 +120,7 @@
     const rA = R[ix(A)];
     const rB = R[ix(B)];
     const pc = pairCalc(rA, rB);
-    const out = [];
+    const out = [`<div class="panel" id="paso-nomen">${NOMEN}</div>`];
     const sel = (id, v) => `<select id="${id}">${m.names.map((n, i) => `<option value="${i}"${n === v ? ' selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
 
     out.push(`<div class="panel"><h2>1. De precios a rendimientos</h2>
@@ -265,5 +289,5 @@ table{border-collapse:collapse;font-size:.9rem;margin:8px 0}td,th{border:1px sol
 </style></head><body><h1>${title}</h1><p class="sub">Frontera Eficiente · aplicación de Schrödinstein (la teoría y los modelos son de los autores citados) · generado el ${new Date().toISOString().slice(0, 10)}.</p>${body}</body></html>`;
   }
 
-  PF.pasos = { render, pairCalc, parseDamodaran, suggestIndustry, relever, unlever, documentHTML };
+  PF.pasos = { NOMEN, render, pairCalc, parseDamodaran, suggestIndustry, relever, unlever, documentHTML };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

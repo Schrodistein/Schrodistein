@@ -11,7 +11,7 @@
   const fin = Number.isFinite;
 
   const FREQ_TXT = { diaria: 'Diaria', semanal: 'Semanal', mensual: 'Mensual', trimestral: 'Trimestral', anual: 'Anual' };
-  const MU_TXT = { hist: 'Media histórica', capm: 'CAPM: rf + β(E(Rm) − rf)', mix: '50 % media histórica + 50 % CAPM' };
+  const MU_TXT = { hist: 'Media histórica', capm: 'CAPM: rf + β(E(Rₘ) − rf)', mix: '50 % media histórica + 50 % CAPM' };
 
   /* ctx: { m, P, table:{names,dates,values}, marketIdx, s:{freq,retType,agg,history,muModel,covModel,wmin,wmax,capital},
    *        extra:[{label, w}] (portafolios adicionales: el del usuario, el del plan), plan, generated } */
@@ -99,7 +99,7 @@
     E.push(['Periodos por año (f)', f]); // B6
     E.push(['rf por periodo = rf / f', { f: 'B5/B6', v: m.rfp, s: 'num6' }]); // B7
     const emFormula = s.marketReturnSet ? null : `${C(0)}17`;
-    E.push(['Rendimiento esperado del mercado E(Rm)', emFormula ? { f: emFormula, v: m.Em, s: 'pct' } : { v: m.Em, s: 'pct' }]); // B8
+    E.push(['Rendimiento esperado del mercado E(Rₘ)', emFormula ? { f: emFormula, v: m.Em, s: 'pct' } : { v: m.Em, s: 'pct' }]); // B8
     E.push(['Modelo de rendimiento esperado', MU_TXT[s.muModel] || s.muModel]); // B9
     E.push(['Covarianzas', s.covModel === 'index' ? 'Modelo de índice único de Sharpe' : common ? 'Muestrales, solo periodos comunes' : 'Muestrales, por pares (cada activo con toda su historia)']);
     E.push([]);
@@ -122,14 +122,14 @@
       ['sd', 'Desviación estándar por periodo', 'num6', (j) => `_xlfn.STDEV.S(${range(j)})`, (j) => Math.sqrt(PF.stats.variance(ret[j].filter(fin))), '√varianza'],
       ['volh', 'Volatilidad histórica anual', 'pct', (j) => `${local('sd', j)}*SQRT($B$6)`, (j) => Math.sqrt(PF.stats.variance(ret[j].filter(fin)) * f), 'Desviación × √f'],
       ['bench', 'Índice de referencia del segmento', 'n', () => null, (j) => (j === 0 ? m.marketName : assetAt(j).bench), 'Renta variable: el índice principal; renta fija: COLTES o COLIBR; divisas: TRM; derivados: el índice del subyacente'],
-      ['eb', 'E(R) del índice de referencia', 'pct', (j) => (j === 0 || !ownBench(j) ? '$B$8' : `AVERAGE(${Rb(j)})*$B$6`), (j) => (j === 0 ? m.Em : assetAt(j).benchRet), 'E(Rm) del índice principal, o la media histórica anual del índice del segmento'],
-      ['beta', 'Beta β (frente a su índice)', 'num4', (j) => (j === 0 ? '1' : `SLOPE(${range(j)},${Rb(j)})`), (j) => (j === 0 ? 1 : assetAt(j).beta), 'Pendiente de la regresión de r del activo sobre r de su índice = Cov(rᵢ, rb) / Var(rb)'],
+      ['eb', 'E(R) del índice de referencia', 'pct', (j) => (j === 0 || !ownBench(j) ? '$B$8' : `AVERAGE(${Rb(j)})*$B$6`), (j) => (j === 0 ? m.Em : assetAt(j).benchRet), 'E(Rₘ) del índice principal, o la media histórica anual del índice del segmento'],
+      ['beta', 'Beta β (frente a su índice)', 'num4', (j) => (j === 0 ? '1' : `SLOPE(${range(j)},${Rb(j)})`), (j) => (j === 0 ? 1 : assetAt(j).beta), 'Pendiente de la regresión de r del activo sobre r de su índice = Cov(rᵢ, rₘ) / Var(rₘ)'],
       ['r2', 'R² con su índice', 'num4', (j) => (j === 0 ? '1' : `RSQ(${range(j)},${Rb(j)})`), (j) => (j === 0 ? 1 : assetAt(j).r2), 'Parte del riesgo explicada por el índice (riesgo sistemático)'],
       ['alphah', 'Alfa histórico anual (regresión)', 'pct', (j) => (j === 0 ? '0' : `(INTERCEPT(${range(j)},${Rb(j)})-$B$7*(1-${local('beta', j)}))*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).alphaHist), 'Ordenada de la regresión del exceso de rendimiento (r − rf) sobre el del índice, × f'],
       ['resid', 'Varianza residual anual σ²(ε)', 'num6', (j) => (j === 0 ? '0' : `STEYX(${range(j)},${Rb(j)})^2*$B$6`), (j) => (j === 0 ? 0 : assetAt(j).residVar), 'Riesgo no sistemático: error típico de la regresión al cuadrado × f'],
-      ['betaM', 'Beta frente al índice principal βM', 'num4', (j) => (j === 0 ? '1' : ownBench(j) ? `SLOPE(${range(j)},${Rm})` : local('beta', j)), (j) => (j === 0 ? 1 : assetAt(j).betaM), 'Para la β del portafolio y el modelo de índice único'],
+      ['betaM', 'Beta frente al índice principal βₘ', 'num4', (j) => (j === 0 ? '1' : ownBench(j) ? `SLOPE(${range(j)},${Rm})` : local('beta', j)), (j) => (j === 0 ? 1 : assetAt(j).betaM), 'Para la β del portafolio y el modelo de índice único'],
       ['residM', 'σ²(ε) frente al índice principal', 'num6', (j) => (j === 0 ? '0' : ownBench(j) ? `STEYX(${range(j)},${Rm})^2*$B$6` : local('resid', j)), (j) => (j === 0 ? 0 : assetAt(j).residVarM), 'Riesgo no sistemático frente al índice principal'],
-      ['capm', 'Rendimiento CAPM', 'pct', (j) => `$B$5+${local('beta', j)}*(${local('eb', j)}-$B$5)`, (j) => (j === 0 ? m.Em : assetAt(j).capmRet), 'rf + β (E(Rb) − rf)'],
+      ['capm', 'Rendimiento CAPM', 'pct', (j) => `$B$5+${local('beta', j)}*(${local('eb', j)}-$B$5)`, (j) => (j === 0 ? m.Em : assetAt(j).capmRet), 'rf + β (E(Rₘ) − rf)'],
       [
         'exp',
         'Rendimiento esperado usado E(R)',
@@ -141,11 +141,11 @@
       ['vol', 'Volatilidad usada σ (de la matriz de covarianzas)', 'pct', (j) => (j === 0 ? local('volh', j) : `SQRT(INDEX(Covarianza!$B$${COV0 + 1}:$${col(N)}$${COV0 + N},${j},${j}))`), (j) => (j === 0 ? m.mktVol : m.vol[j - 1]), 'Raíz de la diagonal de la matriz de covarianzas anual'],
       ['sharpe', 'Razón de Sharpe', 'num4', (j) => `(${local('exp', j)}-$B$5)/${local('vol', j)}`, (j) => (j === 0 ? m.mktSharpe : assetAt(j).sharpe), '(E(R) − rf) / σ'],
       ['treynor', 'Razón de Treynor', 'pct', (j) => `(${local('exp', j)}-$B$5)/${local('beta', j)}`, (j) => (j === 0 ? m.Em - m.rf : assetAt(j).treynor), '(E(R) − rf) / β'],
-      ['jensen', 'Alfa de Jensen', 'pct', (j) => `${local('exp', j)}-($B$5+${local('beta', j)}*(${local('eb', j)}-$B$5))`, (j) => (j === 0 ? 0 : assetAt(j).jensen), 'E(R) − [rf + β (E(Rb) − rf)]'],
+      ['jensen', 'Alfa de Jensen', 'pct', (j) => `${local('exp', j)}-($B$5+${local('beta', j)}*(${local('eb', j)}-$B$5))`, (j) => (j === 0 ? 0 : assetAt(j).jensen), 'E(R) − [rf + β (E(Rₘ) − rf)]'],
     ];
     const COV0 = 5; // fila (1-based) del encabezado de la matriz anual en la hoja Covarianza
     measures.forEach((ms, k) => (statRow[ms[0]] = 13 + k));
-    // la fila de «hist» del mercado alimenta E(Rm) (B8) cuando no se fijó a mano
+    // la fila de «hist» del mercado alimenta E(Rₘ) (B8) cuando no se fijó a mano
     if (emFormula) E[7][1] = { f: `${C(0)}${statRow.hist}`, v: m.Em, s: 'pct' };
     for (const [key, label, sty, fx, vx, expl] of measures) {
       const row = [label];
@@ -214,7 +214,7 @@
     Cv.push([{ v: 'Matriz de varianzas y covarianzas', s: 't' }]);
     const covTxt =
       s.covModel === 'index'
-        ? 'Modelo de índice único de Sharpe: σᵢⱼ = βᵢ βⱼ σm² (+ σ²(εᵢ) en la diagonal).'
+        ? 'Modelo de índice único de Sharpe: σᵢⱼ = βᵢ βⱼ σₘ² (+ σ²(εᵢ) en la diagonal).'
         : common
           ? 'Covarianza muestral de los periodos comunes, anualizada: COVARIANZA.M(rᵢ, rⱼ) × f.'
           : 'Covarianza por pares: σᵢⱼ = ρᵢⱼ σᵢ σⱼ, con ρ de la hoja Correlacion (fechas que comparten los dos activos) y σ anual de la hoja Estadisticas.';
@@ -311,18 +311,18 @@
       Pt.push(['σᵢ'].concat(m.names.map((_, i) => ({ f: cell('vol', i + 1), v: m.vol[i], s: 'pct' }))));
       const Sw = PF.stats.matVec(m.Sigma, blk.w);
       Pt.push(['(Σw)ᵢ = Σⱼ σᵢⱼ wⱼ'].concat(m.names.map((_, i) => ({ f: `SUMPRODUCT(${covRow(i)},${wR})`, v: Sw[i], s: 'num6' })), [{ v: '=SUMAPRODUCTO(fila i de la matriz; pesos)', s: 'n' }]));
-      Pt.push(['Contribución al riesgo wᵢ(Σw)ᵢ / σp²'].concat(m.names.map((_, i) => ({ f: `${col(i + 1)}${rw}*${col(i + 1)}${rSw}/$B$${rVar}`, v: e.riskContrib[i], s: 'pct' }))));
+      Pt.push(['Contribución al riesgo wᵢ(Σw)ᵢ / σₚ²'].concat(m.names.map((_, i) => ({ f: `${col(i + 1)}${rw}*${col(i + 1)}${rSw}/$B$${rVar}`, v: e.riskContrib[i], s: 'pct' }))));
       const metric = (label, fx, v, sty, txt) => Pt.push([label, { f: fx, v, s: sty }, { v: txt, s: 'n' }]);
-      metric('Rendimiento esperado E(Rp)', `SUMPRODUCT(${wR},$B$${rw + 1}:$${col(N)}$${rw + 1})`, e.ret, 'pctb', 'Σ wᵢ E(Rᵢ)');
-      metric('Varianza σp²', `SUMPRODUCT(${wR},$B$${rSw}:$${col(N)}$${rSw})`, e.vol * e.vol, 'num6', 'wᵀ Σ w = Σ wᵢ (Σw)ᵢ');
-      metric('Riesgo σp', `SQRT(B${rVar})`, e.vol, 'pctb', '√σp²');
-      metric('Beta βp', `SUMPRODUCT(${wR},$B$${rw + 2}:$${col(N)}$${rw + 2})`, e.beta, 'num4', 'Σ wᵢ βᵢ');
-      metric('Razón de Sharpe', `(B${rVar - 1}-Estadisticas!$B$5)/B${rVar + 1}`, e.sharpe, 'num4', '(E(Rp) − rf) / σp');
-      metric('Razón de Treynor', `(B${rVar - 1}-Estadisticas!$B$5)/B${rVar + 2}`, e.treynor, 'pct', '(E(Rp) − rf) / βp');
-      metric('Alfa de Jensen', `B${rVar - 1}-(Estadisticas!$B$5+B${rVar + 2}*(Estadisticas!$B$8-Estadisticas!$B$5))`, e.jensen, 'pct', 'E(Rp) − [rf + βp (E(Rm) − rf)]');
-      metric('M² de Modigliani', `Estadisticas!$B$5+B${rVar + 3}*${cell('vol', 0)}`, e.m2, 'pct', 'rf + Sharpe × σm');
+      metric('Rendimiento esperado E(Rₚ)', `SUMPRODUCT(${wR},$B$${rw + 1}:$${col(N)}$${rw + 1})`, e.ret, 'pctb', 'Σ wᵢ E(Rᵢ)');
+      metric('Varianza σₚ²', `SUMPRODUCT(${wR},$B$${rSw}:$${col(N)}$${rSw})`, e.vol * e.vol, 'num6', 'wᵀ Σ w = Σ wᵢ (Σw)ᵢ');
+      metric('Riesgo σₚ', `SQRT(B${rVar})`, e.vol, 'pctb', '√σₚ²');
+      metric('Beta βₚ', `SUMPRODUCT(${wR},$B$${rw + 2}:$${col(N)}$${rw + 2})`, e.beta, 'num4', 'Σ wᵢ βᵢ');
+      metric('Razón de Sharpe', `(B${rVar - 1}-Estadisticas!$B$5)/B${rVar + 1}`, e.sharpe, 'num4', '(E(Rₚ) − rf) / σₚ');
+      metric('Razón de Treynor', `(B${rVar - 1}-Estadisticas!$B$5)/B${rVar + 2}`, e.treynor, 'pct', '(E(Rₚ) − rf) / βₚ');
+      metric('Alfa de Jensen', `B${rVar - 1}-(Estadisticas!$B$5+B${rVar + 2}*(Estadisticas!$B$8-Estadisticas!$B$5))`, e.jensen, 'pct', 'E(Rₚ) − [rf + βₚ (E(Rₘ) − rf)]');
+      metric('M² de Modigliani', `Estadisticas!$B$5+B${rVar + 3}*${cell('vol', 0)}`, e.m2, 'pct', 'rf + Sharpe × σₘ');
       metric('Número efectivo de activos', `1/SUMSQ(${wR})`, e.effN, 'num2', '1 / Σ wᵢ²');
-      metric('Razón de diversificación', `SUMPRODUCT(${wR},$B$${rw + 3}:$${col(N)}$${rw + 3})/B${rVar + 1}`, e.divRatio, 'num4', 'Σ wᵢ σᵢ / σp');
+      metric('Razón de diversificación', `SUMPRODUCT(${wR},$B$${rw + 3}:$${col(N)}$${rw + 3})/B${rVar + 1}`, e.divRatio, 'num4', 'Σ wᵢ σᵢ / σₚ');
       metric('Suma de pesos', `SUM(${wR})`, blk.w.reduce((q, x) => q + x, 0), 'pct', 'Debe dar 100 %');
       Pt.push([]);
       summaryRows.push([blk.label, e]);
@@ -379,9 +379,9 @@
       const q = t + 2; // primera fila de resultados
       L('Efectivo sin invertir', `B4-G${t}-I${t}-B9`, plan.cash, 'money', 'Presupuesto − invertido − comisiones de compra − renta fija segura');
       L('Rendimiento esperado del portafolio comprado', `SUMPRODUCT(H${r0}:H${r1},K${r0}:K${r1})`, ev.e.ret, 'pct', 'Σ peso real × E(R)');
-      L(`Valor esperado en ${H} ${H === 1 ? 'año' : 'años'}`, `G${t}*(1+B${q + 1})^B7+B9*(1+B8)^B7+B${q}-J${t}`, ev.proj.value, 'moneyb', 'Invertido × (1 + E(Rp))^H + renta fija × (1 + tasa)^H + efectivo − comisiones de venta');
+      L(`Valor esperado en ${H} ${H === 1 ? 'año' : 'años'}`, `G${t}*(1+B${q + 1})^B7+B9*(1+B8)^B7+B${q}-J${t}`, ev.proj.value, 'moneyb', 'Invertido × (1 + E(Rₚ))ᴴ + renta fija × (1 + tasa)ᴴ + efectivo − comisiones de venta');
       L('Ganancia esperada neta', `B${q + 2}-B4`, ev.proj.gain, 'money', 'Valor esperado − presupuesto');
-      L('Rendimiento neto anual', `(B${q + 2}/B4)^(1/B7)-1`, ev.netRet, 'pctb', '(valor / presupuesto)^(1/H) − 1');
+      L('Rendimiento neto anual', `(B${q + 2}/B4)^(1/B7)-1`, ev.netRet, 'pctb', '(valor / presupuesto)⁽¹ᐟᴴ⁾ − 1');
       L('Rendimiento mínimo anual para cubrir comisiones', `IF(G${t}>0,(I${t}+J${t})/G${t}/B7,0)`, ev.breakEven, 'pct', '(comisiones de compra + venta) / invertido / H');
     }
 
@@ -400,29 +400,29 @@
     add('Desviación estándar y volatilidad anual', 'σ = √s² × √f', '=DESVEST.M(rango)*RAIZ(f)', a1 ? gp(Math.sqrt(PF.stats.variance(ret[1].filter(fin)) * f)) : '', 'Estadisticas');
     add('Covarianza', 'Cov(rᵢ, rⱼ) = Σ (rᵢ − r̄ᵢ)(rⱼ − r̄ⱼ) / (n − 1)', '=COVARIANZA.M(rango i; rango j)', '', 'Covarianza, Desviaciones');
     add('Correlación', 'ρᵢⱼ = Cov(rᵢ, rⱼ) / (σᵢ σⱼ)', '=COEF.DE.CORREL(rango i; rango j)', '', 'Correlacion');
-    add('Covarianza anual usada', s.covModel === 'index' ? 'σᵢⱼ = βᵢ βⱼ σm² (+ σ²(εᵢ) si i = j)' : common ? 'σᵢⱼ = Cov(rᵢ, rⱼ) × f' : 'σᵢⱼ = ρᵢⱼ σᵢ σⱼ (anuales)', '', '', 'Covarianza');
-    add('Beta', 'β = Cov(rᵢ, rm) / Var(rm)', '=PENDIENTE(rango i; rango mercado)', a1 ? g(a1.beta) : '', 'Estadisticas');
+    add('Covarianza anual usada', s.covModel === 'index' ? 'σᵢⱼ = βᵢ βⱼ σₘ² (+ σ²(εᵢ) si i = j)' : common ? 'σᵢⱼ = Cov(rᵢ, rⱼ) × f' : 'σᵢⱼ = ρᵢⱼ σᵢ σⱼ (anuales)', '', '', 'Covarianza');
+    add('Beta', 'β = Cov(rᵢ, rₘ) / Var(rₘ)', '=PENDIENTE(rango i; rango mercado)', a1 ? g(a1.beta) : '', 'Estadisticas');
     add('R²', 'R² = ρ(rᵢ, rm)²', '=COEFICIENTE.R2(rango i; rango mercado)', a1 ? g(a1.r2) : '', 'Estadisticas');
     add('Alfa histórico', 'α = [intersección − rf/f × (1 − β)] × f', '=(INTERSECCION.EJE(rango i; rango mercado)-rf_periodo*(1-β))*f', a1 ? gp(a1.alphaHist) : '', 'Estadisticas');
-    add('Rendimiento CAPM', 'E(R) = rf + β (E(Rm) − rf)', '=rf+β*(E(Rm)-rf)', a1 ? gp(a1.capmRet) : '', 'Estadisticas');
+    add('Rendimiento CAPM', 'E(R) = rf + β (E(Rₘ) − rf)', '=rf+β*(E(Rₘ)-rf)', a1 ? gp(a1.capmRet) : '', 'Estadisticas');
     add('Rendimiento esperado usado', MU_TXT[s.muModel], '', a1 ? gp(a1.expRet) : '', 'Estadisticas');
     add('Razón de Sharpe', 'S = (E(R) − rf) / σ', '=(E-rf)/σ', a1 ? g(a1.sharpe) : '', 'Estadisticas, Portafolios');
     add('Razón de Treynor', 'T = (E(R) − rf) / β', '=(E-rf)/β', a1 ? gp(a1.treynor) : '', 'Estadisticas, Portafolios');
-    add('Alfa de Jensen', 'α = E(R) − [rf + β (E(Rm) − rf)]', '=E-(rf+β*(E(Rm)-rf))', a1 ? gp(a1.jensen) : '', 'Estadisticas, Portafolios');
-    add('Rendimiento del portafolio', 'E(Rp) = Σ wᵢ E(Rᵢ)', '=SUMAPRODUCTO(pesos; E)', '', 'Portafolios');
-    add('Varianza del portafolio', 'σp² = Σᵢ Σⱼ wᵢ wⱼ σᵢⱼ = Σ wᵢ (Σw)ᵢ', '=SUMAPRODUCTO(pesos; Σw)', '', 'Portafolios');
-    add('Beta del portafolio', 'βp = Σ wᵢ βᵢ', '=SUMAPRODUCTO(pesos; β)', '', 'Portafolios');
-    add('M² de Modigliani', 'M² = rf + Sharpe × σm', '', '', 'Portafolios');
+    add('Alfa de Jensen', 'α = E(R) − [rf + β (E(Rₘ) − rf)]', '=E-(rf+β*(E(Rₘ)-rf))', a1 ? gp(a1.jensen) : '', 'Estadisticas, Portafolios');
+    add('Rendimiento del portafolio', 'E(Rₚ) = Σ wᵢ E(Rᵢ)', '=SUMAPRODUCTO(pesos; E)', '', 'Portafolios');
+    add('Varianza del portafolio', 'σₚ² = Σᵢ Σⱼ wᵢ wⱼ σᵢⱼ = Σ wᵢ (Σw)ᵢ', '=SUMAPRODUCTO(pesos; Σw)', '', 'Portafolios');
+    add('Beta del portafolio', 'βₚ = Σ wᵢ βᵢ', '=SUMAPRODUCTO(pesos; β)', '', 'Portafolios');
+    add('M² de Modigliani', 'M² = rf + Sharpe × σₘ', '', '', 'Portafolios');
     add('Número efectivo de activos', 'N = 1 / Σ wᵢ²', '=1/SUMA.CUADRADOS(pesos)', '', 'Portafolios');
-    add('Razón de diversificación', 'DR = Σ wᵢ σᵢ / σp', '', '', 'Portafolios');
+    add('Razón de diversificación', 'DR = Σ wᵢ σᵢ / σₚ', '', '', 'Portafolios');
     add('Frontera eficiente', 'min ½ wᵀΣw − t μᵀw, Σw = 1, límites por activo', 'Solver (la app usa un método exacto de conjunto activo)', '', 'Frontera');
-    add('Portafolio tangente', 'max (E(Rp) − rf) / σp', 'Solver', '', 'Portafolios');
-    add('Portafolio recomendado', 'max E(Rp) sobre la frontera eficiente, con 1 / Σ wᵢ² ≥ N*', 'Solver (restricción: 1/SUMA.CUADRADOS(pesos) >= N*)', P.recommended && P.recommended.div ? 'N* = ' + g(P.recommended.div.target, 2) : '', 'Portafolios');
+    add('Portafolio tangente', 'max (E(Rₚ) − rf) / σₚ', 'Solver', '', 'Portafolios');
+    add('Portafolio recomendado', 'max E(Rₚ) sobre la frontera eficiente, con 1 / Σ wᵢ² ≥ N*', 'Solver (restricción: 1/SUMA.CUADRADOS(pesos) >= N*)', P.recommended && P.recommended.div ? 'N* = ' + g(P.recommended.div.target, 2) : '', 'Portafolios');
     add('Comisiones', 'Costo = comisión de compra × activos + comisión de venta × activos (los CDT no pagan)', '=SUMA(comisiones)', '', 'Plan_compra');
     add('Monto mínimo por inversión', '(comisión de compra + venta) / (1 % × H), sin pasar de la mitad del presupuesto', '', '', 'Plan_compra');
     add('Reparto con renta fija segura', 'mayor α con P(pérdida en H) ≤ p:  H·rs + α[H(μ − rs) − z σ √H] ≥ 0', '', '', 'Plan_compra');
-    add('Valor esperado al horizonte', 'V = I (1 + E(Rp))^H + S (1 + rs)^H + efectivo − comisiones de venta', '', '', 'Plan_compra');
-    add('Rendimiento neto anual', '(V / presupuesto)^(1/H) − 1', '', '', 'Plan_compra');
+    add('Valor esperado al horizonte', 'V = I (1 + E(Rₚ))ᴴ + S (1 + rs)ᴴ + efectivo − comisiones de venta', '', '', 'Plan_compra');
+    add('Rendimiento neto anual', '(V / presupuesto)⁽¹ᐟᴴ⁾ − 1', '', '', 'Plan_compra');
 
     /* ---------- Resumen ---------- */
     const Rs = [];
@@ -438,7 +438,7 @@
     Rs.push(['Rendimientos', logRet ? 'Logarítmicos: ln(Pₜ / Pₜ₋₁)' : 'Simples: Pₜ / Pₜ₋₁ − 1']);
     Rs.push(['Fechas distintas entre activos', common ? 'Solo periodos comunes' : 'Toda la historia de cada activo (correlaciones por pares)']);
     Rs.push(['Tasa libre de riesgo', { v: m.rf, s: 'pct' }]);
-    Rs.push(['E(Rm)', { v: m.Em, s: 'pct' }]);
+    Rs.push(['E(Rₘ)', { v: m.Em, s: 'pct' }]);
     Rs.push(['Rendimiento esperado', MU_TXT[s.muModel]]);
     Rs.push(['Límites de peso', `${pctTxt(s.wmin)} a ${pctTxt(s.wmax)}`]);
     Rs.push([]);

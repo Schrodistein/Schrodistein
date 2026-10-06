@@ -50,7 +50,7 @@
           <li><b>Presupuesto y costos.</b> Cada compra paga una comisión fija o mínima: con montos pequeños conviene tener pocos activos o un ETF. La app calcula un monto mínimo por inversión para que la comisión no se coma el rendimiento.</li>
         </ol>
         ${theory(`<p><b>Teorema de separación de Tobin (1958)</b>: todos los inversionistas deberían tener el mismo portafolio de acciones (el tangente) y ajustar su riesgo solo con la proporción que ponen en renta fija segura. <b>Regla de seguridad primero de Roy (1952)</b>: elegir esa proporción para que la probabilidad de perder no pase de un límite. En la práctica: el portafolio tangente para la parte de acciones y una proporción en renta fija segura según tu tolerancia a la pérdida.</p>
-          <p class="formula"><code>E(Rₚ) = (1 − α)·rf + α·E(R_T)</code> &nbsp; con α tal que P(pérdida en el plazo) ≤ p</p>`)}
+          <p class="formula"><code>E(Rₚ) = (1 − α)·rf + α·E(R<sub>T</sub>)</code> &nbsp; con α tal que P(pérdida en el plazo) ≤ p</p>`)}
         ${inApp(go('frontera', 'Portafolio'))}`,
     },
     {

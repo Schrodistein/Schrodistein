@@ -8,6 +8,12 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.0**
+- **Terminal por segmento**: renta variable (acciones, ETF e índices de acciones, frente al MSCI COLCAP), renta fija (TES, bonos, CDT, COLTES y COLIBR, frente al COLTES) y divisas (dólar y euro, frente al USD/COP o la TRM), cada una con su lista, su ficha, sus gráficas y su mapa de correlaciones.
+- **Cotizaciones diarias, siempre**: el análisis usa cada rueda de la BVC y anualiza con 242 ruedas; no se agrupan por semana ni por mes.
+- **Datos y guía** en una sola pestaña; sin pestaña Comprar (los pesos salen de Portafolio y las compras se registran en Confirmar).
+- Flechas para desplazar la barra de menús cuando no cabe en la pantalla.
+
 - **Guía** (segunda pestaña): manual para aprender a operar acciones y ETF en la BVC, en 10 capítulos (qué se negocia, objetivo y riesgo, abrir la cuenta, órdenes y liquidación, datos, análisis de cada activo, construir el portafolio, pasar a las órdenes, seguimiento e impuestos, errores comunes), cada uno con la teoría que lo sostiene (Fama, Tobin, Roy, Markowitz, Sharpe, Lintner, Treynor y Black, Gordon, Chen, Roll y Ross, Kahneman y Tversky), ejemplos con tus datos, botones a la sección donde se practica, glosario y referencias.
 - **Activos del portafolio** (Portafolio y Datos): elige cualquier grupo de dos o más activos; la frontera, los portafolios, el paso a paso y el plan se recalculan solo con ellos.
 - **Catálogo de la BVC** (Biblioteca): las acciones y ETF locales, los índices de referencia y las divisas, con lo que ya está guardado y lo que falta. La app de escritorio abre la BVC para descargar los que faltan e importa cada archivo a la biblioteca.

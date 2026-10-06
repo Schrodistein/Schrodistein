@@ -30,10 +30,10 @@ const NEWS = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel>
 
 const BVC_CSV =
   '﻿Fecha;Nemotécnico;Precio cierre;Precio máximo;Precio promedio ponderado;Precio mínimo;Variación absoluta;Variación porcentual;Cantidad;Volumen\r\n' +
-  '2026-08-13;ECOPETROL;2,700.00;2,720.00;2,705.00;2,690.00;10.00;0.37;1,000.00;2,700,000.00\r\n' +
-  '2026-08-14;ECOPETROL;2,745.00;2,750.00;2,730.00;2,700.00;45.00;1.67;1,000.00;2,745,000.00\r\n' +
+  '2026-08-13;ECOPETROL;1,500.00;1,520.00;1,505.00;1,490.00;10.00;0.67;1,000.00;1,500,000.00\r\n' +
+  '2026-08-14;ECOPETROL;1,520.00;1,530.00;1,510.00;1,500.00;20.00;1.33;1,000.00;1,520,000.00\r\n' +
   '2026-08-17;ECOPETROL;;;;;;;;\r\n' +
-  '2026-08-18;ECOPETROL;2,770.00;2,780.00;2,760.00;2,740.00;25.00;0.91;1,000.00;2,770,000.00\r\n';
+  '2026-08-18;ECOPETROL;1,540.00;1,550.00;1,530.00;1,520.00;20.00;1.32;1,000.00;1,540,000.00\r\n';
 
 function writeAll(dir) {
   fs.mkdirSync(dir, { recursive: true });

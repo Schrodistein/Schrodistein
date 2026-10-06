@@ -527,11 +527,12 @@
         <li><b>Covarianza</b> y <b>Correlacion</b>: las matrices anual y por periodo.</li>
         <li><b>Portafolios</b>: para cada portafolio, los pesos, (Σw)ᵢ, σp² = wᵀΣw, σp, βp, Sharpe, Treynor, Jensen, M², N efectivo y la contribución al riesgo.</li>
         <li><b>Frontera</b>, <b>Plan_compra</b> (acciones, comisiones y rendimiento neto) y <b>Formulas</b> (guía de cada fórmula con un ejemplo).</li>
+        <li>Las matrices del paso a paso: <b>Desv_media</b> (r − r̄ de cada periodo), <b>Cov_ponderada</b> (wᵢwⱼσᵢⱼ del portafolio elegido), <b>Frontera_puntos</b> (t, E(Rp), σp, Sharpe y pesos), <b>CML</b>, <b>SML</b>, <b>Eleccion_activos</b> (condición del tangente), <b>Corr_promedio</b> (simple y ponderada) y <b>Contrib_riesgo</b>.</li>
       </ul>
       <button type="button" class="btn btn-primary" id="dl-xlsx">Descargar libro de Excel (.xlsx)</button>
     </div>
     <div class="panel">
-      <h2>Matrices sueltas en CSV</h2>
+      <h2>Todas las matrices de cálculo en CSV</h2>
       <div class="row-btns">
         <button type="button" class="btn" id="dl-cov">Matriz de covarianzas</button>
         <button type="button" class="btn" id="dl-corr">Matriz de correlación</button>
@@ -539,6 +540,14 @@
         <button type="button" class="btn" id="dl-stats">Estadísticas por activo</button>
         <button type="button" class="btn" id="dl-ports">Pesos de los portafolios</button>
         <button type="button" class="btn" id="dl-plan">Plan de compra</button>
+        <button type="button" class="btn" id="dl-desv">Desviaciones respecto a la media</button>
+        <button type="button" class="btn" id="dl-pond">Covarianzas ponderadas wᵢwⱼσᵢⱼ</button>
+        <button type="button" class="btn" id="dl-front">Puntos de la frontera eficiente</button>
+        <button type="button" class="btn" id="dl-cml">Línea del mercado de capitales (CML)</button>
+        <button type="button" class="btn" id="dl-sml">Línea del mercado de valores (SML)</button>
+        <button type="button" class="btn" id="dl-elec">Elección de activos (tangente)</button>
+        <button type="button" class="btn" id="dl-corrp">Correlación promedio</button>
+        <button type="button" class="btn" id="dl-contrib">Contribución al riesgo</button>
         <button type="button" class="btn" id="dl-macro">Variables macroeconómicas</button>
       </div>
     </div>

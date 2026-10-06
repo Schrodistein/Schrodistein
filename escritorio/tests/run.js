@@ -79,15 +79,15 @@ test('RSS de Google News: CDATA, entidades y medio fuera del título', () => {
 test('almacén: la BVC tiene prioridad sobre la fuente automática', () => {
   const st = new Store(tmp());
   st.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-18'], [2740, 2771], 'yahoo');
-  const n = st.mergePrices('ECOPETROL', ['2026-08-14'], [2745], 'bvc');
+  const n = st.mergePrices('ECOPETROL', ['2026-08-14'], [1520], 'bvc');
   assert(n === 1);
-  st.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-19'], [2741, 2790], 'yahoo');
+  st.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-19'], [2741, 1560], 'yahoo');
   const h = st.history('ECOPETROL');
   assert(h.dates.join() === '2026-08-14,2026-08-18,2026-08-19');
-  assert(h.prices[0] === 2745 && h.sources[0] === 'bvc', 'la BVC no se sobrescribe');
+  assert(h.prices[0] === 1520 && h.sources[0] === 'bvc', 'la BVC no se sobrescribe');
   st.save();
   const again = new Store(path.dirname(st.file));
-  assert(again.history('ECOPETROL').prices[2] === 2790, 'se guarda en disco');
+  assert(again.history('ECOPETROL').prices[2] === 1560, 'se guarda en disco');
 });
 
 test('actualización: solo divisas de la fuente automática; acciones, índices y ETF solo de la BVC', async () => {
@@ -122,15 +122,15 @@ test('actualización: solo divisas de la fuente automática; acciones, índices 
 test('quien ya usaba la app pierde los cierres automáticos de acciones y conserva los de la BVC', () => {
   const dir = tmp();
   const old = new Store(dir);
-  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-19'], [2700, 2745, 2790], 'yahoo');
-  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-18'], [2700, 2745, 2770], 'bvc');
+  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-19'], [1500, 1520, 1560], 'yahoo');
+  old.mergePrices('ECOPETROL', ['2026-08-13', '2026-08-14', '2026-08-18'], [1500, 1520, 1540], 'bvc');
   old.mergePrices('USD/COP', ['2026-08-13', '2026-08-14', '2026-08-18'], [4000, 4010, 4020], 'yahoo');
   old.asset('ECOPETROL').yahoo = 'ECOPETROL.CL';
   old.data.meta.defaults = 4;
   old.save();
   const st = new Store(dir);
   const h = st.history('ECOPETROL');
-  assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((x) => x === 'bvc') && h.prices[1] === 2745, 'ECOPETROL: ' + h.dates.join());
+  assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((x) => x === 'bvc') && h.prices[1] === 1520, 'ECOPETROL: ' + h.dates.join());
   assert(st.asset('ECOPETROL').yahoo === '' && st.history('USD/COP').dates.length === 3, 'el dólar se conserva');
 });
 
@@ -141,7 +141,7 @@ test('importación de un CSV de la BVC', () => {
   assert(r.errors.length === 1 && /news\.xml/.test(r.errors[0]));
   const h = st.history('ECOPETROL');
   assert(h.dates.join() === '2026-08-13,2026-08-14,2026-08-18' && h.sources.every((s) => s === 'bvc'));
-  st.mergePrices('ECOPETROL', ['2026-08-19'], [2800], 'yahoo');
+  st.mergePrices('ECOPETROL', ['2026-08-19'], [1600], 'yahoo');
   assert(st.series().find((x) => x.name === 'ECOPETROL').dates.length === 3, 'el análisis usa solo la BVC');
   const x = updater.importFiles(st, ['/no/existe/libro.xlsx'], null);
   assert(/sección Datos/.test(x.errors[0]), x.errors[0]);
@@ -159,17 +159,17 @@ test('un índice importado se marca como índice', () => {
 
 test('respaldo: exportar e importar en otro equipo sin perder la prioridad de la BVC', () => {
   const a = new Store(tmp());
-  a.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-18'], [2745, 2770], 'bvc');
+  a.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-18'], [1520, 1540], 'bvc');
   a.mergePrices('NUTRESA', ['2026-08-14', '2026-08-18'], [50000, 50500], 'yahoo');
   a.addNews([{ asset: 'ECOPETROL', title: 'Titular', link: 'https://x/1', date: new Date().toISOString() }]);
   const backup = JSON.parse(JSON.stringify(a.exportData()));
   const b = new Store(tmp());
-  b.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-19'], [2700, 2800], 'yahoo');
+  b.mergePrices('ECOPETROL', ['2026-08-14', '2026-08-19'], [1500, 1600], 'yahoo');
   const r = b.importData(backup);
   assert(r.assets === 1 && r.news === 1, JSON.stringify(r));
   const h = b.history('ECOPETROL');
   // Solo la BVC: los cierres automáticos de acciones (de este equipo o del respaldo) no se guardan
-  assert(h.dates.join() === '2026-08-14,2026-08-18' && h.prices[0] === 2745 && h.sources.every((x) => x === 'bvc'), JSON.stringify(h));
+  assert(h.dates.join() === '2026-08-14,2026-08-18' && h.prices[0] === 1520 && h.sources.every((x) => x === 'bvc'), JSON.stringify(h));
   assert(b.asset('NUTRESA') && b.history('NUTRESA').dates.length === 0);
   let err = null;
   try {
@@ -277,16 +277,16 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   assert(w.matrix && w.matrix.assets >= 1 && fs.existsSync(path.join(dir, 'Matriz de precios.xlsx')), 'matriz de precios en la biblioteca');
   const csv = fs.readFileSync(path.join(dir, 'acciones', 'ECOPETROL.csv'), 'utf8');
   // Formato de Excel en español: punto y coma, punto de miles y coma decimal
-  assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;2\.770;BVC;1\.000;2\.770\.000/.test(csv), csv.slice(0, 160));
+  assert(/Fecha;Cierre;Fuente;Cantidad;Volumen/.test(csv) && /2026-08-18;1\.540;BVC;1\.000;1\.540\.000/.test(csv), csv.slice(0, 160));
   // Fiel a la fuente: solo los días negociados (sin fines de semana ni festivos)
   assert(!/2026-08-1[567]/.test(csv) && csv.trim().split('\r\n').length === 1 + 3, 'solo 13, 14 y 18 de agosto');
   assert(bib.excelNum(4230.25) === '4.230,25' && bib.excelNum(0.105 * 100) === '10,5');
   // El CSV de la biblioteca se vuelve a leer con los mismos valores
   const reread = updater.loadPF().data.parseSeriesText(csv, 'ECOPETROL.csv')[0];
-  assert(reread.prices.at(-1) === 2770 && reread.vol.at(-1) === 2770000 && reread.qty.at(-1) === 1000, 'relectura: ' + reread.prices.at(-1) + ' ' + reread.vol.at(-1));
+  assert(reread.prices.at(-1) === 1540 && reread.vol.at(-1) === 1540000 && reread.qty.at(-1) === 1000, 'relectura: ' + reread.prices.at(-1) + ' ' + reread.vol.at(-1));
   assert(reread.dates.join() === '2026-08-13,2026-08-14,2026-08-18', 'al volver a leerlo, los días sin negociación no cuentan como cotización: ' + reread.dates.join());
   const ser = st.series().find((x) => x.name === 'ECOPETROL');
-  assert(ser.qty && ser.qty.length === ser.dates.length && ser.vol.at(-1) === 2770000, 'la serie lleva cantidad y volumen');
+  assert(ser.qty && ser.qty.length === ser.dates.length && ser.vol.at(-1) === 1540000, 'la serie lleva cantidad y volumen');
   assert(/Fuente: datos\.gov\.co/.test(fs.readFileSync(path.join(dir, 'macro', 'trm.csv'), 'utf8')) && fs.existsSync(path.join(dir, 'macro', 'todas.csv')) && fs.existsSync(path.join(dir, 'LEEME.txt')));
   // Varios tramos de la misma acción: un solo archivo en la biblioteca
   const t2 = path.join(tmp(), 'ECOPETROL_20260908_045427.csv');

@@ -334,17 +334,17 @@ test('tabla ancha: dos filas de encabezado, columna ITEM, huecos y fechas descen
   const rows = [
     ['ITEM', 'FECHA', 'MSCI COLCAP', 'PRECIO MAXIMO', ''],
     ['', '', '', 'ECOPETROL', 'CIBEST'],
-    [1, new Date(2026, 7, 21), 2459.23, 2715, 91840],
-    [2, new Date(2026, 7, 20), 2444.32, 2780, 88640],
-    [3, new Date(2026, 7, 19), 2453.87, 2775, 88720],
-    [4, new Date(2026, 7, 18), '', 2770, ''],
+    [1, new Date(2026, 7, 21), 1210.37, 107.5, 53.2],
+    [2, new Date(2026, 7, 20), 1198.62, 98, 51.7],
+    [3, new Date(2026, 7, 19), 1225.04, 103.4, 50.9],
+    [4, new Date(2026, 7, 18), '', 101, ''],
     ['', 'RENDIMIENTO ESPERADO', 0.1, 0.2, 0.3],
   ];
   const r = PF.data.readRows(rows, 'libro.xlsx');
   assert(r.layout === 'ancho' && !r.returnsLike);
   assert(r.series.map((x) => x.name).join() === 'MSCI COLCAP,ECOPETROL,CIBEST', r.series.map((x) => x.name).join());
   const e = r.series[1];
-  assert(e.dates.join() === '2026-08-18,2026-08-19,2026-08-20,2026-08-21' && e.prices[0] === 2770);
+  assert(e.dates.join() === '2026-08-18,2026-08-19,2026-08-20,2026-08-21' && e.prices[0] === 101);
   const ret = PF.data.readRows([['FECHA', 'A', 'B'], ['2024-01-02', 0.01, -0.02], ['2024-01-03', 0.02, 0.01], ['2024-01-04', -0.01, 0]], 'r.csv');
   assert(ret.returnsLike, 'una hoja de rendimientos se reconoce como tal');
 });
@@ -422,7 +422,7 @@ test('precio de compra: cierre del día, o el último cierre anterior', () => {
 
 
 test('plan de compra: acciones enteras, nunca pasa del presupuesto, descarta lo que no alcanza', () => {
-  const items = [{ name: 'A', w: 0.5, price: 2715 }, { name: 'B', w: 0.3, price: 48400 }, { name: 'C', w: 0.2, price: 91840 }];
+  const items = [{ name: 'A', w: 0.5, price: 2700 }, { name: 'B', w: 0.3, price: 48000 }, { name: 'C', w: 0.2, price: 90000 }];
   const p = PF.plan.integerPlan(items, 1e6, 15000);
   assert(p.k === 3 && p.buyFees === 45000 && p.sellFees === 45000);
   assert(p.rows.every((r) => Number.isInteger(r.shares) && r.shares > 0));
@@ -704,16 +704,16 @@ test('guía de la BVC y catálogo de activos', () => {
 
 test('matriz de precios como «M. PRECIOS»: ruedas de la BVC, último precio cuando un activo no negoció, vacío antes de cotizar', () => {
   // COLCAP negocia lun 2026-08-10 a vie 08-14 y mar 08-18 (lunes 17 festivo); NUEVA empieza a cotizar el 13
-  const colcap = { name: 'MSCI COLCAP', dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'], prices: [2372.5, 2423.37, 2430.45, 2432.1, 2452.46, 2461.23] };
-  const eco = { name: 'ECOPETROL', dates: ['2026-08-10', '2026-08-12', '2026-08-14', '2026-08-18'], prices: [2735, 2665, 2745, 2770] };
+  const colcap = { name: 'MSCI COLCAP', dates: ['2026-08-10', '2026-08-11', '2026-08-12', '2026-08-13', '2026-08-14', '2026-08-18'], prices: [1000, 1010, 1020, 1030, 1040, 1050] };
+  const eco = { name: 'ECOPETROL', dates: ['2026-08-10', '2026-08-12', '2026-08-14', '2026-08-18'], prices: [100, 90, 110, 120] };
   const nueva = { name: 'NUEVA', dates: ['2026-08-13', '2026-08-18'], prices: [100, 101] };
   const tasa = { name: 'TES', kind: 'tasa', dates: ['2026-08-10', '2026-08-11'], prices: [0.1, 0.11] };
   const mx = PF.matriz.build([eco, nueva, colcap, tasa], { market: 'MSCI COLCAP', calendar: 'habiles' });
   assert(mx.names.join() === 'MSCI COLCAP,ECOPETROL,NUEVA', 'el índice va primero y las tasas no entran');
   assert(mx.dates.join() === '2026-08-10,2026-08-11,2026-08-12,2026-08-13,2026-08-14,2026-08-17,2026-08-18', 'días hábiles sin fines de semana: ' + mx.dates.join());
-  assert(mx.values[0][5] === 2452.46 && mx.filled[0][5], 'festivo: se mantiene el último precio del índice');
-  assert(mx.values[1].join() === '2735,2735,2665,2665,2745,2745,2770', 'ECOPETROL: ' + mx.values[1].join());
-  assert(mx.values[1][2] === 2665 && !mx.filled[1][2] && mx.filled[1][1], 'los precios cotizados no cambian');
+  assert(mx.values[0][5] === 1040 && mx.filled[0][5], 'festivo: se mantiene el último precio del índice');
+  assert(mx.values[1].join() === '100,100,90,90,110,110,120', 'ECOPETROL: ' + mx.values[1].join());
+  assert(mx.values[1][2] === 90 && !mx.filled[1][2] && mx.filled[1][1], 'los precios cotizados no cambian');
   assert(isNaN(mx.values[2][0]) && isNaN(mx.values[2][2]) && mx.values[2][3] === 100 && mx.values[2][5] === 100, 'vacío antes de la primera cotización');
   const cal = PF.matriz.build([eco, colcap], { calendar: 'calendario', market: 'MSCI COLCAP' });
   assert(!cal.dates.includes('2026-08-15') && !cal.dates.includes('2026-08-16'), 'nunca se agregan fines de semana');
@@ -721,12 +721,12 @@ test('matriz de precios como «M. PRECIOS»: ruedas de la BVC, último precio cu
   // festivos: la base de 242 ruedas al año con que se anualiza no cambia.
   const ru = PF.matriz.build([eco, nueva, colcap], { market: 'MSCI COLCAP' });
   assert(ru.dates.join() === '2026-08-10,2026-08-11,2026-08-12,2026-08-13,2026-08-14,2026-08-18', 'ruedas: ' + ru.dates.join());
-  assert(ru.values[1].join() === '2735,2735,2665,2665,2745,2770' && ru.filled[1][1], 'ECOPETROL no negoció el 11: lleva el precio del 10');
-  const fri = { name: 'X', dates: ['2026-08-07', '2026-08-10'], prices: [17400, 18900] };
+  assert(ru.values[1].join() === '100,100,90,90,110,120' && ru.filled[1][1], 'ECOPETROL no negoció el 11: lleva el precio del 10');
+  const fri = { name: 'X', dates: ['2026-08-07', '2026-08-10'], prices: [1000, 2000] };
   assert(PF.matriz.build([fri]).dates.join() === '2026-08-07,2026-08-10', 'el sábado y el domingo no se agregan');
   // Un archivo con columna «Negociación = No» no cuenta esos días como cotización
-  const back = PF.data.parseSeriesText('Fecha;Nemotécnico;Precio cierre;Negociación\r\n2026-08-07;X;17.400;Sí\r\n2026-08-08;X;17.400;No (último precio)\r\n2026-08-10;X;18.900;Sí', 'X.csv')[0];
-  assert(back.dates.join() === '2026-08-07,2026-08-10' && back.prices.join() === '17400,18900', 'relectura: ' + back.dates.join());
+  const back = PF.data.parseSeriesText('Fecha;Nemotécnico;Precio cierre;Negociación\r\n2026-08-07;X;1.000;Sí\r\n2026-08-08;X;1.000;No (último precio)\r\n2026-08-10;X;2.000;Sí', 'X.csv')[0];
+  assert(back.dates.join() === '2026-08-07,2026-08-10' && back.prices.join() === '1000,2000', 'relectura: ' + back.dates.join());
   const cut = PF.matriz.build([eco, colcap], { market: 'MSCI COLCAP', cut: '2026-08-12' });
   assert(cut.dates[cut.dates.length - 1] === '2026-08-12');
   // Hoja: encabezados como en «M. PRECIOS» y la fecha más reciente arriba
@@ -734,7 +734,7 @@ test('matriz de precios como «M. PRECIOS»: ruedas de la BVC, último precio cu
   assert(sh.rows.length === 2 + 7);
   assert(sh.name === 'M. PRECIOS' && sh.rows[0][0].v === 'ITEM' && sh.rows[0][1].v === 'FECHA' && sh.rows[0][2].v === 'MSCI COLCAP' && sh.rows[0][3].v === 'PRECIO DE CIERRE');
   assert(sh.rows[1][3].v === 'ECOPETROL' && sh.rows[1][4].v === 'NUEVA');
-  assert(sh.rows[2][0] === 1 && sh.rows[2][1].v === PF.matriz.serial('2026-08-18') && sh.rows[2][1].s === 'date' && sh.rows[2][3].v === 2770 && sh.rows[2][3].s === 'px');
+  assert(sh.rows[2][0] === 1 && sh.rows[2][1].v === PF.matriz.serial('2026-08-18') && sh.rows[2][1].s === 'date' && sh.rows[2][3].v === 120 && sh.rows[2][3].s === 'px');
   assert(PF.matriz.serial('2026-08-21') === 46255, 'serie de Excel');
   assert(sh.rows[sh.rows.length - 1][4] === null, 'celda vacía antes de cotizar');
   const wb = PF.matriz.workbook([eco, colcap], { market: 'MSCI COLCAP' });

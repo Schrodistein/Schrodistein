@@ -103,8 +103,8 @@ const shots = process.argv[3];
     if ((await page.$$eval('#pick-assets [data-pick]:checked', (els) => els.length)) !== nAll) errors.push(label + ': «Todos» no devuelve los activos');
     // Catálogo de la BVC y matriz de precios en la biblioteca
     await page.evaluate(() => PFApp.saveToLibrary([
-      { name: 'MSCI COLCAP', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [2432.1, 2452.46, 2461.23] },
-      { name: 'ECOPETROL', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [2700, 2745, 2770] },
+      { name: 'MSCI COLCAP', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [1000, 1010, 1020] },
+      { name: 'ECOPETROL', dates: ['2026-08-13', '2026-08-14', '2026-08-18'], prices: [100, 105, 110] },
     ]));
     await page.click('#tab-datos');
     await page.click('#tab-biblioteca');
@@ -138,6 +138,17 @@ const shots = process.argv[3];
     if (head !== 'PK' || !/\.xlsx$/.test(dl.suggestedFilename())) errors.push(`${label}: descarga de Excel inválida`);
     const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#dl-cov')]);
     if (!/matriz-covarianzas/.test(dl2.suggestedFilename())) errors.push(`${label}: CSV de covarianzas`);
+    // Todas las matrices de cálculo del paso a paso, en CSV y como hojas del libro
+    for (const k of ['desv', 'pond', 'front', 'cml', 'sml', 'elec', 'corrp', 'contrib']) {
+      const [d] = await Promise.all([page.waitForEvent('download'), page.click('#dl-' + k)]);
+      const txt = fs.readFileSync(await d.path(), 'utf8');
+      if (!/\.csv$/.test(d.suggestedFilename()) || txt.split('\r\n').length < 3) errors.push(`${label}: matriz ${k} vacía`);
+    }
+    if (!/Cov_ponderada.*Corr_promedio/.test(await page.textContent('#dl-status').catch(() => '')) && !/Cov_ponderada/.test(await page.evaluate(() => document.getElementById('dl-status').textContent))) {
+      await page.click('#dl-xlsx');
+      await page.waitForTimeout(300);
+      if (!/Desv_media.*Cov_ponderada.*Frontera_puntos.*CML.*SML.*Eleccion_activos.*Corr_promedio.*Contrib_riesgo/.test(await page.textContent('#dl-status'))) errors.push(`${label}: el libro no trae las hojas nuevas: ` + (await page.textContent('#dl-status')));
+    }
     if (shots) await page.screenshot({ path: `${shots}/${label}-descargas.png`, fullPage: true });
     await page.evaluate(() => localStorage.clear());
     await page.close();

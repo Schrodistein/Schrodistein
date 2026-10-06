@@ -991,6 +991,52 @@
     return { m, P: st.P, table: st.table || st.parsed, marketIdx: st.s.market, s: Object.assign({}, st.s, { marketReturnSet: st.s.marketReturn != null }), extra, plan: st.plan && st.plan.plan, generated: stamp() };
   }
 
+  /* Matrices de cálculo adicionales (las del paso a paso): CSV sueltos y hojas del libro de Excel. */
+  function calcMatrices() {
+    const m = st.model;
+    const P = st.P;
+    if (!m || !P) return [];
+    const sel = PORTS.find((p) => p.key === st.sel && P[p.key]) || PORTS[0];
+    const E = P[sel.key];
+    const out = [];
+    // Desviaciones respecto a la media (por periodo)
+    const p = st.table || st.parsed;
+    const R = PF.data.toReturns(p.values, st.s.kind, st.s.retType === 'log');
+    const idx = m.names.map((n) => p.names.indexOf(n));
+    const dates = p.dates.slice(st.s.kind === 'prices' ? 1 : 0);
+    const means = idx.map((i) => {
+      const v = R[i].filter(Number.isFinite);
+      return v.reduce((a, x) => a + x, 0) / v.length;
+    });
+    out.push({ key: 'desv', label: 'Desviaciones respecto a la media', sheet: 'Desv_media', rows: [['Fecha'].concat(m.names.map((n) => `${n}: r − r̄`))].concat(dates.map((d, t) => [d].concat(idx.map((i, k) => (Number.isFinite(R[i][t]) ? R[i][t] - means[k] : ''))))) });
+    // Covarianzas ponderadas del portafolio elegido
+    out.push({ key: 'pond', label: `Covarianzas ponderadas wᵢwⱼσᵢⱼ (${sel.label})`, sheet: 'Cov_ponderada', rows: [[`wᵢwⱼσᵢⱼ · ${sel.label}`].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.Sigma[i].map((c, j) => E.w[i] * E.w[j] * c))), [[], ['Varianza del portafolio σp² (suma)', E.vol * E.vol], ['Desviación σp', E.vol]]) });
+    // Frontera eficiente
+    out.push({ key: 'front', label: 'Puntos de la frontera eficiente', sheet: 'Frontera_puntos', rows: [['Punto', 't', 'E(Rp)', 'σp', 'Sharpe'].concat(m.names)].concat(P.frontier.map((q, k) => [k + 1, P.front[k] && Number.isFinite(P.front[k].t) ? P.front[k].t : 'max', q.ret, q.vol, (q.ret - m.rf) / q.vol].concat(q.w))) });
+    // CML y SML
+    const tan = P.tangency;
+    const cml = [['σp', 'E(Rp) en la CML', '% en el tangente', '% en renta fija segura']];
+    if (tan) for (let k = 0; k <= 20; k++) {
+      const v = (tan.vol * 1.5 * k) / 20;
+      cml.push([v, m.rf + ((tan.ret - m.rf) / tan.vol) * v, v / tan.vol, 1 - v / tan.vol]);
+    }
+    const sml = [['Activo o portafolio', 'β', 'E(R) esperado', 'E(R) exigido por la SML', 'α de Jensen']].concat(m.assets.map((a) => [a.name, a.betaM, a.expRet, m.rf + a.betaM * (m.Em - m.rf), a.expRet - (m.rf + a.betaM * (m.Em - m.rf))]), PORTS.filter((q) => P[q.key]).map((q) => [q.label, P[q.key].beta, P[q.key].ret, m.rf + P[q.key].beta * (m.Em - m.rf), P[q.key].jensen]));
+    out.push({ key: 'cml', label: 'Línea del mercado de capitales (CML)', sheet: 'CML', rows: cml });
+    out.push({ key: 'sml', label: 'Línea del mercado de valores (SML)', sheet: 'SML', rows: sml });
+    // Elección de activos en el tangente
+    if (tan) {
+      const bT = PF.frontera.betasTo(m, tan.w);
+      out.push({ key: 'elec', label: 'Elección de activos (portafolio tangente)', sheet: 'Eleccion_activos', rows: [['Activo', 'E(Rᵢ) − rf', 'βᵢ,T', 'Prima exigida βᵢ,T(E(R_T) − rf)', 'Diferencia', 'Peso en T']].concat(m.names.map((n, i) => [n, m.mu[i] - m.rf, bT[i], bT[i] * (tan.ret - m.rf), m.mu[i] - m.rf - bT[i] * (tan.ret - m.rf), tan.w[i]])) });
+    }
+    // Correlación promedio
+    const ac = PF.frontera.avgCorr(m, E.w);
+    out.push({ key: 'corrp', label: `Correlación promedio (${sel.label})`, sheet: 'Corr_promedio', rows: [['Par', 'ρᵢⱼ', '2wᵢwⱼσᵢσⱼ', 'Aporte 2wᵢwⱼσᵢσⱼρᵢⱼ']].concat(ac.list.map((q) => [`${m.names[q.i]} – ${m.names[q.j]}`, q.r, q.k, q.k * q.r]), [[], ['Promedio simple ρ̄', ac.simple], ['Promedio ponderado ρ̄p', ac.weighted], ['Σ wᵢ²σᵢ²', ac.own], ['(Σ wᵢσᵢ)²', ac.naive * ac.naive], ['σp²', ac.varP]]) });
+    // Contribución al riesgo de cada portafolio
+    const list = PORTS.filter((q) => P[q.key]);
+    out.push({ key: 'contrib', label: 'Contribución al riesgo por portafolio', sheet: 'Contrib_riesgo', rows: [['Activo'].concat(list.map((q) => q.label))].concat(m.names.map((n, i) => [n].concat(list.map((q) => P[q.key].riskContrib[i])))) });
+    return out;
+  }
+
   function doDownload(kind) {
     if (kind === 'macro' || kind === 'macrodoc') {
       const data = macroData();
@@ -1004,7 +1050,7 @@
     }
     if (!st.model) return dlStatus('Primero carga datos en la sección Datos.', 'bad');
     if (kind === 'pasos') {
-      download(documents()[0].html, `paso-a-paso-${stamp()}.html`, 'text/html;charset=utf-8');
+      download(documents().find((d) => /^Paso a paso/.test(d.name)).html, `paso-a-paso-${stamp()}.html`, 'text/html;charset=utf-8');
       return dlStatus('Documento paso a paso generado.', 'ok');
     }
     const m = st.model;
@@ -1012,11 +1058,19 @@
       if (kind === 'xlsx') {
         if (st.s.kind !== 'prices') return dlStatus('El libro de Excel necesita precios; en Datos, los datos cargados son rendimientos.', 'bad');
         const rep = PF.report.build(reportContext());
+        // Hojas adicionales con las matrices del paso a paso (valores)
+        const fmt = (c) => (typeof c === 'number' && Number.isFinite(c) ? { v: c, s: 'num6' } : c);
+        for (const x of calcMatrices()) rep.sheets.splice(rep.sheets.length - 1, 0, { name: x.sheet, rows: x.rows.map((r, k) => (k === 0 ? r.map((v) => ({ v, s: 'h' })) : r.map(fmt))), cols: [30].concat(Array.from({ length: Math.max(...x.rows.map((r) => r.length)) }, () => 14)), freeze: { row: 1, col: 1 } });
         download(rep.bytes(), `frontera-eficiente-calculos-${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         return dlStatus(`Libro generado con ${rep.sheets.length} hojas: ${rep.sheets.map((x) => x.name).join(', ')}.`, 'ok');
       }
       let rows;
       let name;
+      const extraM = calcMatrices().find((x) => x.key === kind);
+      if (extraM) {
+        download(csv(extraM.rows), `${extraM.sheet.toLowerCase()}-${stamp()}.csv`, 'text/csv;charset=utf-8');
+        return dlStatus(`${extraM.label}: listo.`, 'ok');
+      }
       if (kind === 'cov') {
         rows = [['Covarianza anual'].concat(m.names)].concat(m.names.map((n, i) => [n].concat(m.Sigma[i])));
         name = 'matriz-covarianzas';
@@ -1838,7 +1892,7 @@
     $('plan-optk').addEventListener('change', renderPlan);
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('[data-go-where]') && go('invertir'));
     $('plan-out').addEventListener('click', (ev) => ev.target.closest('#plan-register') && registerPlan());
-    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan', 'macro', 'pasos', 'macrodoc']) $('dl-' + k).addEventListener('click', () => doDownload(k));
+    for (const k of ['xlsx', 'cov', 'corr', 'ret', 'stats', 'ports', 'plan', 'desv', 'pond', 'front', 'cml', 'sml', 'elec', 'corrp', 'contrib', 'macro', 'pasos', 'macrodoc']) $('dl-' + k).addEventListener('click', () => doDownload(k));
     $('mode-pesos').addEventListener('click', () => setMode('pesos'));
     $('mode-acciones').addEventListener('click', () => setMode('acciones'));
     const buysChanged = debounce(() => {

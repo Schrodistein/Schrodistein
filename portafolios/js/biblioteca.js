@@ -145,7 +145,7 @@
       // Las series de tasa llegan convertidas en índice: se guarda la tasa original
       const raw = s.kind === 'tasa' && s.rates ? Object.assign({}, s, { prices: s.rates }) : s;
       const { rec, added } = mergeRecord(old, raw, source, now);
-      if (old) rec.name = old.name;
+      rec.name = old ? old.name : PF.data && PF.data.cleanName ? PF.data.cleanName(rec.name) : rec.name;
       if (!old) out.nuevas++;
       out.agregadas += added;
       out.porActivo[rec.name] = added;
@@ -153,6 +153,46 @@
     }
     await tx('series', 'readwrite', (os, m) => recs.forEach((r) => (os ? os.put(r) : m.set(r.name, r))));
     return out;
+  }
+
+  /* Une los registros que son el mismo activo con nombres distintos (por ejemplo, tramos guardados
+   * como «1790829234836-COLTES LP», «1790829249314-COLTES LP»…) en uno solo, con el nombre limpio.
+   * Los valores guardados no cambian: solo se suman las fechas de cada tramo. */
+  function mergeGroups(records, now) {
+    const D = PF.data;
+    const groups = new Map();
+    for (const r of records) {
+      const k = D.assetKey(r.name);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(r);
+    }
+    const puts = [];
+    const dels = [];
+    for (const list of groups.values()) {
+      const clean = D.cleanName(list[0].name);
+      if (list.length === 1 && list[0].name === clean) continue;
+      list.sort((a, b) => (a.dates[0] < b.dates[0] ? -1 : 1));
+      let acc = null;
+      for (const r of list) {
+        acc = acc ? mergeRecord(acc, r, r.source, now).rec : Object.assign({}, r);
+        if (r.use === false) acc.use = false;
+      }
+      acc.name = clean;
+      acc.source = [...new Set(list.map((r) => r.source))].join(' + ');
+      for (const r of list) if (r.name !== clean) dels.push(r.name);
+      puts.push(acc);
+    }
+    return { puts, dels };
+  }
+  async function mergeDuplicates() {
+    if (!PF.data || !PF.data.assetKey) return 0;
+    const { puts, dels } = mergeGroups(await getAll('series'), new Date().toISOString());
+    if (!puts.length) return 0;
+    await tx('series', 'readwrite', (os, m) => {
+      for (const n of dels) os ? os.delete(n) : m.delete(n);
+      for (const r of puts) os ? os.put(r) : m.set(r.name, r);
+    });
+    return dels.length;
   }
 
   async function saveMacro(key, d, source) {
@@ -188,5 +228,5 @@
     return Object.assign(res, { macro: mac });
   }
 
-  PF.lib = { isStaleFixed, notBvc, mergeRecord, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
+  PF.lib = { mergeGroups, isStaleFixed, notBvc, mergeRecord, mergeDuplicates, toSeries, all, saveSeries, saveMacro, setUse, remove, clear, exportJSON, importJSON };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

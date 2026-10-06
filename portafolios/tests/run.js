@@ -742,6 +742,21 @@ test('matriz de precios como «M. PRECIOS»: ruedas de la BVC, último precio cu
   if (process.env.MATRIZ_OUT) require('fs').writeFileSync(process.env.MATRIZ_OUT, Buffer.from(PF.matriz.workbook([eco, nueva, colcap], { market: 'MSCI COLCAP' }).bytes));
 });
 
+test('tramos con número de descarga: 1790829234836-COLTES LP y los demás son un solo índice', () => {
+  const parts = ['1790829234836-COLTES LP.csv', '1790829249314-COLTES LP.csv', 'COLTES_LP_20260908_051610.csv'];
+  const rows = [['2026/01/02', '443,97'], ['2026/07/01', '401,89'], ['2026/08/13', '411,69']];
+  const list = parts.flatMap((f, i) => PF.data.parseSeriesText(`Fecha;Valor hoy\n${rows[i][0]};${rows[i][1]}\n2026/0${i + 1}/2${i};${rows[i][1]}\n`, f));
+  assert(list.every((x) => x.name === 'COLTES LP'), list.map((x) => x.name).join());
+  const one = PF.data.combineSeries(list);
+  assert(one.length === 1 && one[0].name === 'COLTES LP' && one[0].dates.length === 6, JSON.stringify(one.map((x) => [x.name, x.dates.length])));
+  // Biblioteca con tramos guardados por separado en versiones anteriores: se unen al abrir
+  const now = new Date().toISOString();
+  const mk = (name, d, p) => PF.lib.mergeRecord(null, { name, dates: d, prices: p }, 'BVC', now).rec;
+  const g = PF.lib.mergeGroups([mk('1790829234836-COLTES LP', ['2026-01-02', '2026-01-05'], [443.97, 444]), mk('1790829249314-COLTES LP', ['2026-07-01', '2026-07-02'], [401.89, 396.49]), mk('ECOPETROL', ['2026-01-02', '2026-01-05'], [10, 11])], now);
+  assert(g.puts.length === 1 && g.dels.length === 2 && g.puts[0].name === 'COLTES LP', JSON.stringify(g.dels));
+  assert(g.puts[0].dates.join() === '2026-01-02,2026-01-05,2026-07-01,2026-07-02' && g.puts[0].prices.join() === '443.97,444,401.89,396.49', 'mismos valores de cada tramo');
+});
+
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {
   const X = PF.data.excelNum;
   assert(X(2400) === '2.400' && X(2400.5) === '2.400,5' && X(1234567.891) === '1.234.567,891' && X(-0.0525) === '-0,0525' && X(10.500000000000002) === '10,5' && X(NaN) === '' && X(999) === '999');

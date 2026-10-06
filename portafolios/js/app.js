@@ -1459,6 +1459,8 @@
       for (const [k, d] of Object.entries(old)) if (d && d.dates) await PF.lib.saveMacro(k, d, d.source);
       store.set('macro', null);
     }
+    // Tramos de un mismo activo guardados con nombres distintos (p. ej. con número de descarga): uno solo
+    await PF.lib.mergeDuplicates().catch(() => 0);
     await refreshLib();
     if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos${libCut() ? `, hasta el ${libCut()}` : ''}. Para agregar fechas nuevas, sube los archivos en Datos.`);
   }

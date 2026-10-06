@@ -391,12 +391,17 @@
     });
   }
 
+  // Número largo que algunas descargas ponen antes del nombre (1790829234836-COLTES LP)
+  const DOWNLOAD_ID = /^\d{6,}\s*[-_ ]\s*(?=\S)/;
+  const cleanName = (n) => String(n).replace(DOWNLOAD_ID, '').trim();
+
   function nameFromFile(fileName) {
     return String(fileName || 'Activo')
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/\s*(\(\d+\))$/, '')
       .replace(/\s*[-_]?\s*(historical data|datos hist[óo]ricos|hist[óo]rico|history)$/i, '')
       .replace(/^[0-9a-f]{8}-/i, '') // prefijo de algunos gestores de descargas
+      .replace(DOWNLOAD_ID, '') // número de descarga antes del nombre: 1790829234836-COLTES LP
       .replace(/[ _-]\d{8}([ _-]\d{4,6})?([ _-]\d+(\.\d+)?)?$/, '') // sufijo de la BVC: _20260915_2, _20260908_051610
       .replace(/\.(CL|BVC)$/i, '')
       .replace(/[_]+/g, ' ')
@@ -593,7 +598,7 @@
   /* Clave de un activo: el mismo nemotécnico aunque cambien mayúsculas, tildes, espacios o
    * guiones bajos entre los archivos (la BVC entrega cada historial en tramos de 6 meses). */
   const assetKey = (name) =>
-    String(name)
+    cleanName(name)
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toUpperCase()
@@ -604,7 +609,7 @@
     const by = new Map();
     for (const s of list) {
       const k = assetKey(s.name);
-      if (!by.has(k)) by.set(k, { name: s.name, column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur });
+      if (!by.has(k)) by.set(k, { name: cleanName(s.name), column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur });
       const g = by.get(k);
       g.parts++;
       g.noTrade += s.noTrade || 0;
@@ -847,6 +852,6 @@
 
   Object.assign(PF, {
     stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { assetKey, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    data: { assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

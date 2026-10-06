@@ -10,6 +10,10 @@ const RANK = { bvc: 2, yahoo: 1 };
 
 /* Precios de acciones, índices y ETF: solo de la BVC. La fuente automática (Yahoo Finance) queda
  * únicamente para divisas (dólar, euro), que no se negocian en la BVC. */
+// Número largo de descarga antes del nombre (1790829234836-COLTES LP): no es parte del activo
+const cleanName = (n) => String(n).replace(/^\d{6,}\s*[-_ ]\s*(?=\S)/, '').trim();
+const keyOf = (n) => cleanName(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[\s_]+/g, ' ');
+
 const isFx = (a) => !!a && (a.cls === 'divisa' || /^[A-Z]{3}\/[A-Z]{3}$/i.test(a.name));
 
 const DEFAULT_ASSETS = [
@@ -99,6 +103,7 @@ class Store {
           if (from < 5) this.bvcOnly();
           this.data.meta.defaults = DEFAULTS_VERSION;
         }
+        this.mergeDuplicates();
       }
     } catch (e) {
       /* primera vez o archivo dañado: se empieza vacío */
@@ -165,13 +170,51 @@ class Store {
   }
 
   asset(name) {
-    return this.data.assets.find((a) => a.name.toUpperCase() === String(name).toUpperCase());
+    const k = keyOf(name);
+    return this.data.assets.find((a) => keyOf(a.name) === k);
+  }
+
+  /* Une los activos que son el mismo con nombres distintos (tramos con número de descarga, guiones
+   * bajos, tildes): un solo activo con el nombre limpio y todas sus fechas. Si dos tramos tienen la
+   * misma fecha, queda el de la fuente de mayor rango (la BVC). Devuelve cuántos se unieron. */
+  mergeDuplicates() {
+    const groups = new Map();
+    for (const a of this.data.assets) {
+      const k = keyOf(a.name);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(a);
+    }
+    let merged = 0;
+    const drop = new Set();
+    for (const list of groups.values()) {
+      const clean = cleanName(list[0].name);
+      if (list.length === 1 && list[0].name === clean) continue;
+      const keep = list.find((a) => a.name === clean) || list[0];
+      const book = {};
+      for (const a of list) {
+        for (const [d, v] of Object.entries(this.data.prices[a.name] || {})) if (!book[d] || RANK[v[1]] > RANK[book[d][1]]) book[d] = v;
+        if (a !== keep) {
+          drop.add(a);
+          delete this.data.prices[a.name];
+          delete this.data.meta.errors[a.name];
+          merged++;
+          for (const f of ['cls', 'kind', 'dur']) if (keep[f] == null && a[f] != null) keep[f] = a[f];
+          keep.index = keep.index || a.index;
+        }
+      }
+      delete this.data.prices[keep.name];
+      keep.name = clean;
+      if (Object.keys(book).length) this.data.prices[clean] = book;
+    }
+    if (drop.size) this.data.assets = this.data.assets.filter((a) => !drop.has(a));
+    return merged;
   }
 
   /* Agrega el activo si no está en la lista (p. ej. al importar un CSV de otra acción). */
   ensureAsset(name, isIndex, info) {
     let a = this.asset(name);
     if (!a) {
+      name = cleanName(name);
       a = { name, yahoo: '', news: name + (isIndex ? '' : ' acción'), index: !!isIndex, enabled: true };
       this.data.assets.push(a);
     }
@@ -300,6 +343,7 @@ class Store {
       }
     }
     this.bvcOnly(); // un respaldo antiguo puede traer cierres automáticos de acciones
+    this.mergeDuplicates();
     return { assets, points, news: news.length };
   }
 
@@ -326,4 +370,4 @@ class Store {
   }
 }
 
-module.exports = { catalog, isFx, isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };
+module.exports = { catalog, cleanName, isFx, isStaleFixed, Store, DEFAULT_ASSETS, DEFAULT_SETTINGS, RANK };

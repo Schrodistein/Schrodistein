@@ -230,6 +230,29 @@ test('catálogo de la BVC: la app nueva y quien ya la usaba tienen todos los act
   assert(again.asset('PFAVAL') && again.data.assets.length === names.length && again.data.meta.lastPrices === null);
 });
 
+test('tramos con número de descarga (1790829234836-COLTES LP): un solo índice, nuevo o ya guardado', () => {
+  const dir = tmp();
+  const old = new Store(dir);
+  // Como quedaban en versiones anteriores: un activo por tramo
+  old.data.assets.push({ name: '1790829234836-COLTES LP', yahoo: '', news: '', index: true, enabled: true }, { name: '1790829249314-COLTES LP', yahoo: '', news: '', index: true, enabled: true });
+  old.data.prices['1790829234836-COLTES LP'] = { '2026-01-02': [443.97, 'bvc'], '2026-01-05': [444, 'bvc'] };
+  old.data.prices['1790829249314-COLTES LP'] = { '2026-07-01': [401.89, 'bvc'], '2026-07-02': [396.49, 'bvc'] };
+  old.save();
+  const st = new Store(dir);
+  const coltes = st.data.assets.filter((a) => /COLTES LP/.test(a.name));
+  assert(coltes.length === 1 && coltes[0].name === 'COLTES LP', coltes.map((a) => a.name).join());
+  assert(st.history('COLTES LP').dates.join() === '2026-01-02,2026-01-05,2026-07-01,2026-07-02' && st.history('COLTES LP').prices[2] === 401.89);
+  // Nuevos tramos descargados con número: se suman al mismo índice
+  const d = tmp();
+  const f1 = path.join(d, '1790829263305-COLTES LP.csv');
+  const f2 = path.join(d, '1790829271528-COLTES LP.csv');
+  fs.writeFileSync(f1, 'Fecha;Valor hoy;Valor ayer\n2026/08/13;411,69;410,00\n2026/08/14;412,10;411,69\n');
+  fs.writeFileSync(f2, 'Fecha;Valor hoy;Valor ayer\n2026/08/18;382,48;412,10\n2026/08/19;383,00;382,48\n');
+  const r = updater.importFiles(st, [f1, f2], null);
+  assert(Object.keys(r.assets).join() === 'COLTES LP', JSON.stringify(r.assets));
+  assert(st.data.assets.filter((a) => /COLTES/.test(a.name)).length === 1 && st.history('COLTES LP').dates.length === 8);
+});
+
 test('limpieza única: borra COLTES y renta fija leídos antes, conserva acciones y pide descargar todo', () => {
   const dir = tmp();
   const old = new Store(dir);

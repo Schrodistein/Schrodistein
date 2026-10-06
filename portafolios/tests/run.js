@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca', 'riesgo', 'tes-banrep']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'sistema', 'indices', 'biblioteca', 'riesgo']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -791,9 +791,8 @@ test('series del Banco de la República: elige la serie por su nombre, PIB en ni
   // Un archivo de índices de tasa de cambio real no se toma como TRM
   const itcr = [[null, 'Serie'], [null, nb('Índice de tasa de cambio real FMI'), nb('Índice de tasa de cambio real IPC NT')], [45688, 104.5, 95.1], [45716, 104.6, 95.2], [45747, 104.7, 95.3]];
   assert(PF.macro.parseBanrep(itcr, 'trm', 'TRM.xlsx') === null);
-  // Las series incluidas en la app
-  const B = PF.macroBanrep;
-  assert(B && ['inflacion', 'pib', 'desempleo'].every((k) => B.series[k].dates.length === B.series[k].values.length && B.series[k].dates.length > 50 && /^Banco de la República/.test(B.series[k].source)));
+  // La app no trae series incluidas: la biblioteca empieza vacía
+  assert(!PF.macroBanrep && !PF.tesBanrep, 'no debe haber datos precargados');
 });
 
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {
@@ -1013,7 +1012,6 @@ test('Tasas cero cupón TES del Banco de la República (CSV de suameca): seis se
   const back = PF.data.combineSeries([PF.lib.toSeries(rec)]);
   const c = PF.riesgo.rfCandidates(back);
   assert(back[0].ref && near(c[0].value, 0.133, 1e-12), JSON.stringify(c));
-  assert(Object.keys(PF.tesBanrep.series).length === 6, 'semilla de TES');
 });
 
 test('Documentos para la tasa libre de riesgo y el riesgo país: FRED, EMBIG, Damodaran', () => {

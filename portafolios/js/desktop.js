@@ -47,7 +47,7 @@
     if (!summary) return;
     const s = summary.settings;
     const m = summary.meta;
-    $('mk-meta').textContent = `Última actualización de cierres: ${fmtDateTime(m.lastPrices)} · de noticias: ${fmtDateTime(m.lastNews)}${s.auto ? ` · la próxima, en unas ${s.intervalHours >= 48 ? Math.round(s.intervalHours / 24) + ' días' : s.intervalHours + ' h'}` : ' · actualización automática apagada'}.`;
+    $('mk-meta').textContent = `Última actualización de cierres: ${fmtDateTime(m.lastPrices)} · de noticias: ${fmtDateTime(m.lastNews)}${!s.auto ? ' · actualización automática apagada' : !m.lastPrices ? ' · la actualización automática empieza cuando cargues tus archivos' : ` · la próxima, en unas ${s.intervalHours >= 48 ? Math.round(s.intervalHours / 24) + ' días' : s.intervalHours + ' h'}`}.`;
     const rows = summary.assets
       .map((a, i) => {
         const ch = a.price && a.prev ? Math.log(a.price / a.prev) : null; // rendimiento logarítmico del día

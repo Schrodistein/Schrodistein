@@ -132,6 +132,13 @@
 
   /* ---------- Datos ---------- */
   function parse(keepMarket) {
+    if (!$('csv').value.trim()) {
+      // App vacía: todavía no se han subido archivos
+      st.parsed = null;
+      st.model = null;
+      renderEmpty();
+      return;
+    }
     try {
       st.parsed = PF.data.parseCSV($('csv').value);
       if (!isDaily(st.parsed.dates)) throw new Error('La app trabaja siempre con cotizaciones diarias (una fila por rueda de la BVC, 242 al año). Los datos pegados o cargados tienen fechas semanales, mensuales o sin fecha: sube los históricos diarios de la BVC.');
@@ -1757,21 +1764,15 @@
     }
     // Tramos de un mismo activo guardados con nombres distintos (p. ej. con número de descarga): uno solo
     await PF.lib.mergeDuplicates().catch(() => 0);
-    // Series del Banco de la República incluidas en la app (inflación, PIB y desempleo): reemplazan a las
-    // de otras fuentes una vez por versión de los datos; después solo se agregan fechas nuevas
-    const B = PF.macroBanrep;
-    if (B && store.get('banrepSeed') !== B.version) {
-      for (const [k, d] of Object.entries(B.series)) {
-        await PF.lib.remove('macro', k).catch(() => {});
-        await PF.lib.saveMacro(k, { dates: d.dates, values: d.values }, d.source);
-      }
-      store.set('banrepSeed', B.version);
-    }
-    // Tasas cero cupón de los TES del Banco de la República (referencia para la tasa libre de riesgo)
-    const T = PF.tesBanrep;
-    if (T && store.get('tesSeed') !== T.version) {
-      await PF.lib.saveSeries(Object.entries(T.series).map(([name, d]) => ({ name, dates: d.dates, prices: d.values.map((v) => v / 100), kind: 'tasa', cls: 'tes', dur: d.dur, ref: true, column: T.source })), T.source);
-      store.set('tesSeed', T.version);
+    // La app no trae datos: la biblioteca empieza vacía y se llena con los archivos que se suben. Las series
+    // que versiones anteriores (2.4 a 2.5.5) cargaban solas se quitan una vez; lo subido por el usuario no se toca.
+    if (store.get('seedPurge') !== 1) {
+      const SEEDED = /^(Banco de la República \(fuente: DANE(, GEIH)?\) · |Superintendencia Financiera \(datos\.gov\.co\) · Tasa de cambio representativa del mercado \(TRM\), diaria$|Banco de la República · Tasas cero cupón TES$)/;
+      const all = await PF.lib.all().catch(() => ({ series: [], macro: {} }));
+      for (const [k, d] of Object.entries(all.macro || {})) if (SEEDED.test(d.source || '')) await PF.lib.remove('macro', k).catch(() => {});
+      for (const r of all.series || []) if (SEEDED.test(r.source || '')) await PF.lib.remove('series', r.name).catch(() => {});
+      for (const k of ['banrepSeed', 'tesSeed']) store.set(k, null);
+      store.set('seedPurge', 1);
     }
     await refreshLib();
     if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos, ${windowText()}. Para agregar fechas nuevas, sube los archivos en Datos.`);
@@ -2164,7 +2165,8 @@
     } catch (e) {
       dailyCsv = false;
     }
-    $('csv').value = dailyCsv ? savedCsv : PF.sample.csv(0, { daily: true });
+    // Sin datos hasta que el usuario sube sus archivos (o pide el ejemplo simulado)
+    $('csv').value = dailyCsv ? savedCsv : '';
 
     document.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => go(b.getAttribute('data-go'))));
     // Flechas para desplazar la barra de menús cuando no cabe completa

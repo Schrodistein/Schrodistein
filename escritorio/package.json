@@ -1,12 +1,12 @@
 {
   "name": "frontera-eficiente",
   "productName": "Frontera Eficiente",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "description": "Portafolios eficientes con datos diarios y noticias de la Bolsa de Valores de Colombia (Markowitz, Sharpe, Treynor, Jensen).",
   "main": "main.js",
   "private": true,
   "author": {
-    "name": "Schrödistein",
+    "name": "Schrödinstein",
     "email": "frontera-eficiente@users.noreply.github.com"
   },
   "license": "MIT",
@@ -26,7 +26,7 @@
   "build": {
     "appId": "co.schrodistein.fronteraeficiente",
     "productName": "Frontera Eficiente",
-    "copyright": "© Schrödistein",
+    "copyright": "© Schrödinstein",
     "artifactName": "Frontera-Eficiente-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "dist",
@@ -86,7 +86,8 @@
         "deb"
       ],
       "category": "Office",
-      "maintainer": "Schrodistein <frontera-eficiente@users.noreply.github.com>"
+      "maintainer": "Schrödinstein <frontera-eficiente@users.noreply.github.com>",
+      "vendor": "Schrödinstein"
     },
     "publish": [
       {

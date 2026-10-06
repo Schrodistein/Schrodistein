@@ -4,12 +4,12 @@ Aplicación web para construir y **confirmar portafolios eficientes** con la teo
 
 Ábrela con `portafolios/index.html` (o con `npm start` en `http://localhost:8080/portafolios/`).
 
-Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son de sus autores (Markowitz, Tobin, Sharpe, Lintner, Treynor, Jensen, Treynor y Black, Damodaran y los demás), citados en la app con sus referencias.
+Autor de la aplicación: **Schrödinstein**. La teoría y los modelos que usa son de sus autores (Markowitz, Tobin, Sharpe, Lintner, Treynor, Jensen, Treynor y Black, Damodaran y los demás), citados en la app con sus referencias.
 
 ## Qué hace
 
 **Versión 2.4**
-- La biblioteca trae incluidas las series estadísticas del **Banco de la República** (fuente primaria DANE), descargadas el 06/10/2026: inflación total anual (mensual, desde 1955), crecimiento anual del PIB (trimestral, calculado del PIB a precios constantes de 2015 desestacionalizado, desde 2006) y tasa de desempleo total nacional (mensual, desde 2001). Reemplazan a las de otras fuentes y no se mezclan con ellas.
+- La app arranca vacía: la biblioteca se llena con los archivos que subes (históricos de la BVC, series del **Banco de la República** y del DANE, tasas de los TES, FRED, EMBIG y los documentos de Damodaran). En la app de escritorio, la actualización de Mercado (divisas, noticias y macro) empieza después de que cargas tus archivos.
 - Macro lee los Excel del Banco de la República tal como se descargan de su sistema: elige la serie por su nombre (por ejemplo «Tasa de desempleo – Total Nacional» entre seis), omite los valores ausentes y convierte el PIB en niveles a crecimiento anual. Avisa si un archivo trae índices de tasa de cambio real (ITCR) en lugar de la TRM.
 
 **Versión 2.3**

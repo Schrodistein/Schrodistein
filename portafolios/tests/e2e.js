@@ -18,6 +18,33 @@ const shots = process.argv[3];
     await page.waitForSelector('#screen-datos:not([hidden])');
     const first = await page.$eval('.tabs button', (b) => b.textContent);
     if (first !== 'Datos y guía') errors.push(label + ': la primera pestaña es ' + first);
+    // La app arranca vacía: sin datos, sin biblioteca y sin variables macro precargadas
+    await page.waitForTimeout(800);
+    if (await page.$eval('#csv', (t) => t.value.trim())) errors.push(label + ': la app no arranca vacía');
+    const lib0 = await page.evaluate(async () => { const a = await PF.lib.all(); return a.series.length + Object.keys(a.macro).length; });
+    if (lib0) errors.push(label + ': la biblioteca no arranca vacía (' + lib0 + ')');
+    for (const id of ['tab-terminal', 'tab-activos', 'tab-frontera', 'tab-estadistica', 'tab-macro', 'tab-sistema', 'tab-confirmar', 'tab-biblioteca', 'tab-descargas']) await page.click('#' + id);
+    await page.click('#tab-datos');
+    await page.click('#btn-sample');
+    await page.waitForTimeout(800);
+    // Tasas cero cupón de los TES (CSV de suameca) subidas en Renta fija
+    {
+      const lines = ['"Periodo(MMM DD, AAAA)";' + ['pesos - 1 año', 'pesos - 5 años', 'pesos - 10 años', 'UVR - 1 año', 'UVR - 5 años', 'UVR - 10 años'].map((x) => `"Tasa de interés Cero Cupón, Títulos de Tesorería (TES), ${x}"`).join(';')];
+      for (let t = Date.UTC(2025, 0, 2), k = 0; k < 300; t += 864e5) {
+        const d = new Date(t);
+        if (d.getUTCDay() % 6 === 0) continue;
+        const b = 11 + Math.sin(k / 20);
+        lines.push(`"${d.toISOString().slice(0, 10).replace(/-/g, '/')}";` + [b, b + 0.4, b + 0.6, 4.8, 5.9, 6.1].map((v) => v.toFixed(2).replace('.', ',')).join(';'));
+        k++;
+      }
+      const f = path.join(os.tmpdir(), 'Deuda_publica.csv');
+      fs.writeFileSync(f, lines.join('\n'));
+      await page.click('#datos-sub [data-sub="fija"]');
+      await page.setInputFiles('#file-fija', f);
+      await page.waitForFunction(() => /Series de referencia guardadas/.test(document.getElementById('rf-status').textContent), null, { timeout: 8000 }).catch(() => errors.push(label + ': no se leyó el CSV de TES'));
+      await page.click('#datos-sub [data-sub="variable"]');
+    }
+    await page.click('#tab-terminal');
     await page.click('#tab-terminal');
     await page.waitForSelector('#tc-price svg');
     // Terminal dividida en renta variable, renta fija y divisas

@@ -427,7 +427,7 @@
     /* ---------- Resumen ---------- */
     const Rs = [];
     Rs.push([{ v: 'Frontera Eficiente · cálculos del portafolio', s: 't' }]);
-    Rs.push([{ v: 'Aplicación de Schrödistein. La teoría y los modelos son de los autores citados en la hoja Formulas.', s: 'n' }]);
+    Rs.push([{ v: 'Aplicación de Schrödinstein. La teoría y los modelos son de los autores citados en la hoja Formulas.', s: 'n' }]);
     Rs.push([{ v: `Generado el ${ctx.generated || new Date().toISOString().slice(0, 10)}. Todas las cifras son anuales salvo que se indique.`, s: 'n' }]);
     Rs.push([]);
     Rs.push([{ v: 'Datos', s: 'b' }]);

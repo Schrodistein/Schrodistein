@@ -11,7 +11,7 @@
   'use strict';
   const PF = (root.PF = root.PF || {});
 
-  const AUTHOR = 'Schrödistein';
+  const AUTHOR = 'Schrödinstein';
   const STYLE = { h: 1, b: 2, pct: 3, num4: 4, num6: 5, money: 6, num2: 7, t: 8, n: 9, pctb: 10, moneyb: 11, int: 12, date: 13, px: 14 };
 
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');

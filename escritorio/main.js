@@ -121,14 +121,27 @@ function runUpdate(reason) {
   return running;
 }
 
+/* La app arranca vacía: la actualización de Mercado (divisas, noticias, macro) corre solo después de que
+ * el usuario cargó sus archivos (algún historial de la BVC guardado). */
+function hasUserData() {
+  return Object.values(store.data.prices || {}).some((book) => Object.values(book).some((x) => x && x[1] === 'bvc'));
+}
 function schedule() {
   clearInterval(timer);
   const s = store.data.settings;
   if (!s.auto) return;
   const every = Math.max(1, s.intervalHours) * 36e5;
-  timer = setInterval(() => runUpdate('programada'), every);
+  timer = setInterval(() => hasUserData() && runUpdate('programada'), every);
   const last = Date.parse(store.data.meta.lastPrices || 0) || 0;
-  if (Date.now() - last > every) setTimeout(() => runUpdate('al abrir'), 4000);
+  if (hasUserData() && Date.now() - last > every) setTimeout(() => runUpdate('al abrir'), 4000);
+}
+/* Recién cargados los archivos: si la actualización automática está activa y nunca se ha corrido
+ * (o ya pasó el intervalo), se actualiza Mercado con ellos. */
+function updateAfterFiles() {
+  const s = store.data.settings;
+  if (!s.auto || !hasUserData()) return;
+  const last = Date.parse(store.data.meta.lastPrices || 0) || 0;
+  if (Date.now() - last > Math.max(1, s.intervalHours) * 36e5) setTimeout(() => runUpdate('tras cargar archivos'), 1500);
 }
 
 function showWindow() {
@@ -259,6 +272,7 @@ function registerIpc() {
     }
     store.save();
     writeLibrary();
+    updateAfterFiles();
     return res;
   });
   ipcMain.handle('datos:importar', async () => {
@@ -272,6 +286,7 @@ function registerIpc() {
     store.save();
     writeLibrary();
     broadcast({ imported: res });
+    updateAfterFiles();
     return res;
   });
   ipcMain.handle('datos:exportar', async () => {
@@ -399,7 +414,7 @@ app.on('window-all-closed', () => {
 });
 
 app.whenReady().then(() => {
-  app.setAboutPanelOptions({ applicationName: 'Frontera Eficiente', applicationVersion: app.getVersion(), copyright: '© Schrödistein', authors: ['Schrödistein'] });
+  app.setAboutPanelOptions({ applicationName: 'Frontera Eficiente', applicationVersion: app.getVersion(), copyright: '© Schrödinstein · editor, dueño y autor', authors: ['Schrödinstein'], credits: 'Editor, dueño y autor: Schrödinstein' });
   store = new Store(app.getPath('userData'));
   registerIpc();
   // Al abrir: se borran los archivos temporales de descargas que quedaron de sesiones anteriores
@@ -410,6 +425,6 @@ app.whenReady().then(() => {
   schedule();
   powerMonitor.on('resume', () => {
     const last = Date.parse(store.data.meta.lastPrices || 0) || 0;
-    if (store.data.settings.auto && Date.now() - last > store.data.settings.intervalHours * 36e5) runUpdate('al reanudar');
+    if (store.data.settings.auto && hasUserData() && Date.now() - last > store.data.settings.intervalHours * 36e5) runUpdate('al reanudar');
   });
 });

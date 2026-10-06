@@ -255,12 +255,12 @@
 
   /* Documento autónomo (para guardar en la biblioteca o descargar). */
   function documentHTML(title, body) {
-    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><meta name="author" content="Schrödistein"><style>
+    return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><meta name="author" content="Schrödinstein"><style>
 body{font-family:'Times New Roman',Times,serif;max-width:1100px;margin:24px auto;padding:0 16px;color:#111722;background:#fff;line-height:1.5}
 h1{font-size:1.8rem}h2{margin-top:28px;border-bottom:1px solid #ccd3dd;padding-bottom:4px}code{background:#eef1f5;padding:1px 4px;border-radius:3px}
 table{border-collapse:collapse;font-size:.9rem;margin:8px 0}td,th{border:1px solid #d6dbe3;padding:3px 7px}td.n,th.n{text-align:right}.hl td{background:#eef3fb;font-weight:600}.hint,.sub{color:#465163;font-size:.92em}
 .pos{color:#0a7a3a}.neg{color:#b42318}input,select,button,label.btn,datalist{display:none}.form{display:none}svg{max-width:420px}.gl{stroke:#e2e6ec}.tk{font-size:10px;fill:#7c8799}
-</style></head><body><h1>${title}</h1><p class="sub">Frontera Eficiente · aplicación de Schrödistein (la teoría y los modelos son de los autores citados) · generado el ${new Date().toISOString().slice(0, 10)}.</p>${body}</body></html>`;
+</style></head><body><h1>${title}</h1><p class="sub">Frontera Eficiente · aplicación de Schrödinstein (la teoría y los modelos son de los autores citados) · generado el ${new Date().toISOString().slice(0, 10)}.</p>${body}</body></html>`;
   }
 
   PF.pasos = { render, pairCalc, parseDamodaran, suggestIndustry, relever, unlever, documentHTML };

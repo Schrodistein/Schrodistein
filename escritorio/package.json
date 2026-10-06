@@ -63,7 +63,9 @@
       "createDesktopShortcut": true,
       "shortcutName": "Frontera Eficiente",
       "language": "3082",
-      "artifactName": "Frontera-Eficiente-${version}-win-x64-instalador.${ext}"
+      "artifactName": "Frontera-Eficiente-${version}-win-x64-instalador.${ext}",
+      "deleteAppDataOnUninstall": true,
+      "include": "build/uninstaller.nsh"
     },
     "mac": {
       "target": [
@@ -96,6 +98,9 @@
     ],
     "portable": {
       "artifactName": "Frontera-Eficiente-${version}-win-x64-portable.${ext}"
+    },
+    "deb": {
+      "afterRemove": "build/linux-after-remove.sh"
     }
   },
   "desktopName": "frontera-eficiente.desktop"

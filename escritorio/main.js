@@ -23,6 +23,7 @@ let store = null;
 let timer = null;
 let running = null;
 let quitting = false;
+let wipeAll = null; // carpeta de la biblioteca a borrar al salir, si el usuario pidió borrar todo
 
 const log = (...a) => {
   try {
@@ -393,6 +394,32 @@ function registerIpc() {
     return res;
   });
   ipcMain.handle('cache:limpiar', () => cleanCache());
+  // Borrar todo lo que la app guardó en el equipo (para macOS, la versión portátil y AppImage, que no
+  // tienen desinstalador; en Windows y .deb el desinstalador lo hace solo)
+  ipcMain.handle('datos:borrar-todo', async () => {
+    const lib = libraryDir();
+    const r = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Cancelar', 'Borrar todo y cerrar'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Borrar todos los datos',
+      message: 'Se borrarán los datos de la app, la biblioteca local y la caché de este equipo.',
+      detail: `Carpetas: ${app.getPath('userData')} y ${lib}. No se puede deshacer. Si quieres conservar algo, primero usa «Exportar mis datos».`,
+    });
+    if (r.response !== 1) return false;
+    wipeAll = lib;
+    try {
+      app.setLoginItemSettings({ openAtLogin: false });
+    } catch (e) {
+      /* sin inicio automático */
+    }
+    await session.defaultSession.clearStorageData().catch(() => {});
+    await session.defaultSession.clearCache().catch(() => {});
+    quitting = true;
+    setTimeout(() => app.quit(), 200);
+    return true;
+  });
   ipcMain.handle('bvc:estado', () => ({ template: store.data.meta.bvcTemplate || null, last: store.data.meta.bvcLast || null, running: !!bvcRunning }));
   ipcMain.handle('bvc:descargar', async () => {
     if (!store.data.meta.bvcTemplate) return { needsLearning: true };
@@ -453,6 +480,32 @@ function registerIpc() {
 }
 
 app.on('second-instance', showWindow);
+app.on('will-quit', () => {
+  if (!wipeAll) return;
+  // Solo carpetas de la app: la de datos y la biblioteca (por defecto Documentos/Frontera Eficiente)
+  const lib = path.resolve(wipeAll);
+  const libRoot = path.basename(lib) === 'Biblioteca' && path.basename(path.dirname(lib)) === 'Frontera Eficiente' ? path.dirname(lib) : lib;
+  const dirs = [libRoot, app.getPath('userData')];
+  for (const d of dirs) {
+    try {
+      fs.rmSync(d, { recursive: true, force: true });
+    } catch (e) {
+      /* archivo en uso: lo borra el proceso de abajo */
+    }
+  }
+  // Electron vuelve a escribir unos archivos en la carpeta de datos al cerrarse: un proceso aparte la
+  // borra cuando la app ya terminó
+  try {
+    const { spawn } = require('child_process');
+    const p = process.platform === 'win32'
+      ? spawn('cmd.exe', ['/c', `timeout /t 3 /nobreak >nul & ${dirs.map((d) => `rmdir /s /q "${d}"`).join(' & ')}`], { detached: true, stdio: 'ignore', windowsHide: true })
+      : spawn('/bin/sh', ['-c', `sleep 3; rm -rf ${dirs.map((d) => `'${d.replace(/'/g, "'\\''")}'`).join(' ')}`], { detached: true, stdio: 'ignore' });
+    p.unref();
+  } catch (e) {
+    /* sin procesos auxiliares */
+  }
+});
+
 app.on('before-quit', () => {
   quitting = true;
 });

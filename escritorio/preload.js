@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('bvc', {
   abrirBVC: () => ipcRenderer.invoke('bvc:abrir'),
   bvcEstado: () => ipcRenderer.invoke('bvc:estado'),
   limpiarCache: () => ipcRenderer.invoke('cache:limpiar'),
+  borrarTodo: () => ipcRenderer.invoke('datos:borrar-todo'),
   bvcDescargar: () => ipcRenderer.invoke('bvc:descargar'),
   bvcOlvidar: () => ipcRenderer.invoke('bvc:olvidar'),
   guardarAjustes: (p) => ipcRenderer.invoke('ajustes:guardar', p),

@@ -267,6 +267,9 @@
         status('No se pudo limpiar la caché: ' + e.message, 'bad');
       }
     });
+    $('mk-wipe').addEventListener('click', async () => {
+      if (await api.borrarTodo()) status('Borrando los datos de la app; se cerrará en un momento.', 'warn');
+    });
     $('mk-bvc').addEventListener('click', () => {
       api.abrirBVC();
       status('Se abrió la BVC en otra ventana. Busca cada acción, descarga su histórico y la app lo importa sola al terminar la descarga.');

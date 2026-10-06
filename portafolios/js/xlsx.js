@@ -5,7 +5,8 @@
  *
  * Celda: null | número | texto | { v, f, s }   (f = fórmula sin «=», s = estilo)
  * Estilos: h (encabezado), b (negrita), t (título), n (nota), pct, pctb, num2, num4,
- *          num6, int, money, moneyb, date (fecha m/d/yyyy), px (#,##0.00) */
+ *          num6, int, money, moneyb, date (fecha m/d/yyyy), px (#,##0.00)
+ * Hoja: { name, rows, cols, freeze, colorScale: ['B4:K13'] (rojo −1, amarillo 0, verde +1) } */
 (function (root) {
   'use strict';
   const PF = (root.PF = root.PF || {});
@@ -53,7 +54,11 @@
       const attrs = [col ? `xSplit="${col}"` : '', row ? `ySplit="${row}"` : ''].filter(Boolean).join(' ');
       view = `<sheetViews><sheetView workbookViewId="0"><pane ${attrs} topLeftCell="${ref(row, col)}" activePane="${row && col ? 'bottomRight' : row ? 'bottomLeft' : 'topRight'}" state="frozen"/></sheetView></sheetViews>`;
     }
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${view}${cols}<sheetData>${rows}</sheetData></worksheet>`;
+    // Escala de color de 3 puntos (correlaciones: −1 rojo, 0 amarillo, +1 verde), formato condicional de Excel
+    const cf = (sh.colorScale || [])
+      .map((range, k) => `<conditionalFormatting sqref="${range}"><cfRule type="colorScale" priority="${k + 1}"><colorScale><cfvo type="num" val="-1"/><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale></cfRule></conditionalFormatting>`)
+      .join('');
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${view}${cols}<sheetData>${rows}</sheetData>${cf}</worksheet>`;
   }
 
   const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">

@@ -518,3 +518,20 @@ table.dam td .sub { display: block; font-size: 0.75em; color: var(--ink-3); }
 .t-segs .sub { opacity: .75; font-size: .8em; margin-left: 4px; }
 .guia-wrap { margin-top: 28px; } .guia-title { font-size: 1.6rem; margin: 8px 0; }
 .pf-sel { border-color: var(--s1); box-shadow: 0 0 0 1px var(--s1) inset; }
+
+/* Matriz de correlaciones: escala de Likert (rojo −1, amarillo 0, verde +1) */
+#chart-corr { overflow-x: auto; }
+.likert { margin-top: 12px; font-size: 13px; }
+.likert-bar { position: relative; height: 14px; border-radius: 7px; max-width: 420px; display: flex; justify-content: space-between; align-items: center; padding: 0 6px; color: #1d1d1f; font-size: 11px; font-weight: 600; }
+.likert ul { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 4px; }
+.likert li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.likert li i { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.likert li span { color: var(--ink-2); }
+table.corr-likert td.n { font-variant-numeric: tabular-nums; }
+
+/* Submenú de Datos: renta variable, renta fija y guía */
+.subtabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 16px; }
+.subtabs button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.subtabs button .sub { font-weight: 400; font-size: 12px; color: var(--ink-2); }
+.subtabs button[aria-current='page'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+@media (max-width: 560px) { .subtabs button { flex: 1 1 100%; } }

@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca', 'riesgo']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -933,6 +933,47 @@ test('biblioteca: tramos de 6 meses de una acción = un solo activo; valores gua
   const imp = await PF.lib.importJSON(json);
   assert(imp.nuevas === 2 && (await PF.lib.all()).macro.trm.dates.length === 3);
   await PF.lib.clear();
+});
+
+test('TRM de datos.gov.co (VALOR con $ y coma decimal, VIGENCIADESDE): se lee en Datos y en Macro', () => {
+  const csv = '"VALOR","UNIDAD","VIGENCIADESDE","VIGENCIAHASTA"\n"$3.209,78","COP","06/10/2026","06/10/2026"\n"$3.273,49","COP","03/10/2026","05/10/2026"\n"$3.307,73","COP","02/10/2026","02/10/2026"\n"$3.312,84","COP","01/10/2026","01/10/2026"\n"$643,42","COP","02/12/1991","02/12/1991"\n';
+  const r = PF.data.readText(csv, 'Tasa_de_Cambio_Representativa_del_Mercado-_TRM_20261006.csv');
+  const s = r.series[0];
+  assert(s.name === 'TRM' && s.dates[0] === '1991-12-02' && s.prices[s.prices.length - 1] === 3209.78, JSON.stringify([s.name, s.dates, s.prices]));
+  const d = PF.macro.parseFile(csv, 'trm.csv');
+  assert(d.dates.length === 5 && d.values[d.values.length - 1] === 3209.78 && d.values[0] === 643.42, JSON.stringify(d));
+});
+
+test('Matriz de precios: sin sábados ni domingos (la TRM del sábado pasa al lunes)', () => {
+  const mx = PF.matriz.build([{ name: 'ECOPETROL', dates: ['2026-10-02', '2026-10-05'], prices: [1, 2] }, { name: 'TRM', dates: ['2026-10-02', '2026-10-03'], prices: [10, 11] }]);
+  assert(mx.dates.join() === '2026-10-02,2026-10-05' && mx.values[1].join() === '10,11' && mx.filled[1][1], JSON.stringify(mx));
+  const mf = PF.matriz.build([{ name: 'A', dates: ['2023-08-18', '2023-08-22', '2023-08-23'], prices: [1, 2, 3] }], { from: '2023-08-22' });
+  assert(mf.dates[0] === '2023-08-22', 'fecha de inicio');
+});
+
+test('Escala de Likert de las correlaciones: rojo −1, amarillo 0, verde +1', () => {
+  const L = PF.stats.likert;
+  assert(L(1).color === '#63be7b' && L(0).color === '#ffeb84' && L(-1).color === '#f8696b', [L(1).color, L(0).color, L(-1).color].join());
+  assert(L(0.9).label === 'Totalmente de acuerdo' && L(0).label === 'Ni de acuerdo ni en desacuerdo' && L(-0.9).label === 'Totalmente en desacuerdo' && L(0.4).point === 4);
+  const x = PF.xlsx.build([{ name: 'C', rows: [[1, 0.5], [0.5, 1]], colorScale: ['A1:B2'] }]);
+  assert(new TextDecoder().decode(x).includes('<cfRule type="colorScale"'), 'formato condicional en el xlsx');
+});
+
+test('Tasa libre de riesgo y primas: candidatas de renta fija, Fisher, PRP de Damodaran', () => {
+  const dates = [];
+  const px = [];
+  for (let k = 0; k <= 400; k++) {
+    dates.push(new Date(Date.UTC(2025, 0, 1) + k * 864e5).toISOString().slice(0, 10));
+    px.push(100 * Math.pow(1.09, k / 365));
+  }
+  const c = PF.riesgo.rfCandidates([{ name: 'COLIBR', dates, prices: px }, { name: 'TES 2036', kind: 'tasa', dur: 7, dates: dates.slice(0, 3), prices: [0.11, 0.111, 0.112] }, { name: 'ECOPETROL', dates, prices: px }]);
+  assert(c.length === 2 && c[0].name === 'TES 2036' && near(c[0].value, 0.112, 1e-12), JSON.stringify(c));
+  assert(near(c[1].value, 0.09, 1e-6), 'COLIBR ' + c[1].value);
+  assert(near(PF.riesgo.fisher(0.04, 0.05, 0.02), (1.04 * 1.05) / 1.02 - 1, 1e-12));
+  const q = PF.riesgo.premiums({ tes10: 11, ust10: 4, picol: 5, pius: 2, erp: 4.5, embi: 250, ratio: 1.5 }, { rf: 0.09 });
+  assert(near(q.spread, 0.025, 1e-12) && near(q.prp, 0.0375, 1e-12) && near(q.rfLocal, 0.085, 1e-12) && near(q.em, 0.09 + 0.045 + 0.0375, 1e-12), JSON.stringify(q));
+  const q2 = PF.riesgo.premiums({ tes10: 11, ust10: 4, picol: 5, pius: 2 }, { volRatio: 2 });
+  assert(near(q2.spread, 0.11 - PF.riesgo.fisher(0.04, 0.05, 0.02), 1e-12) && q2.ratio === 2 && q2.spreadSrc === 'TES');
 });
 
 Promise.all(pending).then(() => {

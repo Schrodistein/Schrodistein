@@ -14,7 +14,7 @@
   const iso = (t) => new Date(t).toISOString().slice(0, 10);
 
   /* series: [{ name, dates (yyyy-mm-dd), prices }]; opts.calendar: 'ruedas' (predeterminado) o 'habiles' (lunes a viernes);
-   * opts.market: nombre del índice que va en la primera columna; opts.cut: fecha de corte. */
+   * opts.market: nombre del índice que va en la primera columna; opts.cut: fecha de corte; opts.from: fecha de inicio. */
   function build(series, opts) {
     const o = Object.assign({ calendar: 'ruedas' }, opts);
     const list = series.filter((s) => s && s.dates && s.dates.length && s.kind !== 'tasa');
@@ -23,7 +23,7 @@
     const ordered = (m ? [m] : []).concat(list.filter((s) => s !== m));
     const maps = ordered.map((s) => {
       const mp = new Map();
-      s.dates.forEach((d, i) => fin(s.prices[i]) && (!o.cut || d <= o.cut) && mp.set(d.slice(0, 10), s.prices[i]));
+      s.dates.forEach((d, i) => fin(s.prices[i]) && (!o.cut || d <= o.cut) && (!o.from || d >= o.from) && mp.set(d.slice(0, 10), s.prices[i]));
       return mp;
     });
     const all = maps.flatMap((mp) => [...mp.keys()]).sort();
@@ -39,7 +39,12 @@
     } else {
       // Ruedas de la BVC: los días en que se negoció al menos uno de los activos (sin fines de semana
       // ni festivos). Es la base de 242 ruedas al año con que se anualizan los rendimientos.
-      dates = [...new Set(all)];
+      // La TRM rige también sábados y domingos: esas fechas no son ruedas y no entran (el precio del
+      // sábado pasa al lunes como último precio). Si hay activos de la BVC, mandan sus fechas.
+      const wd = (d) => new Date(d + 'T00:00:00Z').getUTCDay() % 6 !== 0;
+      const bvc = maps.filter((mp, j) => !/(^|\W)(trm|usd|eur|cop)(\W|$)|d[oó]lar/i.test(ordered[j].name) && ordered[j].kind !== 'divisa' && ordered[j].cls !== 'divisa');
+      const base = (bvc.length ? bvc : maps).flatMap((mp) => [...mp.keys()]);
+      dates = [...new Set(base)].filter(wd).sort();
     }
     // Precio de cada fecha: el cotizado ese día o, si no hubo operación, el último anterior
     const values = [];

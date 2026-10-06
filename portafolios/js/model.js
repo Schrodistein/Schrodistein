@@ -95,6 +95,9 @@
         // Frente al índice principal: β del portafolio, modelo de índice único y Treynor-Black
         betaM: regM.beta,
         residVarM: regM.residVar * f,
+        // R² frente al índice principal: parte de la varianza que es riesgo sistemático
+        r2M: regM.r2,
+        nM: y.length,
         periods: own.length,
       };
     });

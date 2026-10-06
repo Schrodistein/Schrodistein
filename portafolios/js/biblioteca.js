@@ -62,8 +62,8 @@
   }
 
   /* Serie de la biblioteca en el formato del motor (las de tasa vuelven a ser índice al unirse). */
-  function toSeries(rec, cut) {
-    const keep = rec.dates.map((d) => !cut || d <= cut);
+  function toSeries(rec, cut, from) {
+    const keep = rec.dates.map((d) => (!cut || d <= cut) && (!from || d >= from));
     const pick = (a) => (a ? a.filter((_, i) => keep[i]).map((x) => (x == null ? NaN : x)) : undefined);
     const s = { name: rec.name, dates: rec.dates.filter((_, i) => keep[i]), prices: pick(rec.prices), column: `biblioteca (${rec.source})`, rank: 2, parts: 1 };
     if (rec.cls) s.cls = rec.cls;

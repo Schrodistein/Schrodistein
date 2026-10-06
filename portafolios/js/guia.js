@@ -210,17 +210,29 @@
       <div class="panel"><h2>Glosario</h2><dl class="guia-gloss">${GLOSSARY.map(([t, d]) => `<dt>${t}</dt><dd>${d}</dd>`).join('')}</dl></div>
       <div class="panel"><h2>Referencias</h2><ul class="refs">
         <li>Chen, N.-F., Roll, R. y Ross, S. A. (1986). Economic forces and the stock market. <i>Journal of Business, 59</i>(3), 383-403.</li>
+        <li>Damodaran, A. (2003). Country risk and company exposure: Theory and practice. <i>Journal of Applied Finance, 13</i>(2), 63-76.</li>
+        <li>Evans, J. L. y Archer, S. H. (1968). Diversification and the reduction of dispersion: An empirical analysis. <i>Journal of Finance, 23</i>(5), 761-767.</li>
         <li>Fama, E. F. (1970). Efficient capital markets: A review of theory and empirical work. <i>Journal of Finance, 25</i>(2), 383-417.</li>
+        <li>Fisher, I. (1930). <i>The theory of interest</i>. Macmillan.</li>
         <li>Gordon, M. J. (1959). Dividends, earnings, and stock prices. <i>Review of Economics and Statistics, 41</i>(2), 99-105.</li>
         <li>Graham, B. y Dodd, D. (1934). <i>Security analysis</i>. McGraw-Hill.</li>
+        <li>Granger, C. W. J. y Newbold, P. (1974). Spurious regressions in econometrics. <i>Journal of Econometrics, 2</i>(2), 111-120.</li>
+        <li>Hamada, R. S. (1972). The effect of the firm's capital structure on the systematic risk of common stocks. <i>Journal of Finance, 27</i>(2), 435-452.</li>
         <li>Jensen, M. C. (1968). The performance of mutual funds in the period 1945-1964. <i>Journal of Finance, 23</i>(2), 389-416.</li>
         <li>Kahneman, D. y Tversky, A. (1979). Prospect theory: An analysis of decision under risk. <i>Econometrica, 47</i>(2), 263-291.</li>
         <li>Lintner, J. (1965). The valuation of risk assets and the selection of risky investments in stock portfolios and capital budgets. <i>Review of Economics and Statistics, 47</i>(1), 13-37.</li>
         <li>Markowitz, H. (1952). Portfolio selection. <i>Journal of Finance, 7</i>(1), 77-91.</li>
-        <li>Roy, A. D. (1952). Safety first and the holding of assets. <i>Econometrica, 20</i>(3), 431-449.</li>
+        <li>Merton, R. C. (1980). On estimating the expected return on the market: An exploratory investigation. <i>Journal of Financial Economics, 8</i>(4), 323-361.</li>
+        <li>Modigliani, F. y Miller, M. H. (1958). The cost of capital, corporation finance and the theory of investment. <i>American Economic Review, 48</i>(3), 261-297.</li>
+        <li>Nelson, C. R. y Siegel, A. F. (1987). Parsimonious modeling of yield curves. <i>Journal of Business, 60</i>(4), 473-489.</li>
         <li>Ross, S. A. (1976). The arbitrage theory of capital asset pricing. <i>Journal of Economic Theory, 13</i>(3), 341-360.</li>
+        <li>Roy, A. D. (1952). Safety first and the holding of assets. <i>Econometrica, 20</i>(3), 431-449.</li>
+        <li>Sharpe, W. F. (1963). A simplified model for portfolio analysis. <i>Management Science, 9</i>(2), 277-293.</li>
         <li>Sharpe, W. F. (1964). Capital asset prices: A theory of market equilibrium under conditions of risk. <i>Journal of Finance, 19</i>(3), 425-442.</li>
+        <li>Sharpe, W. F. (1966). Mutual fund performance. <i>Journal of Business, 39</i>(1), 119-138.</li>
+        <li>Svensson, L. E. O. (1994). Estimating and interpreting forward interest rates: Sweden 1992-1994. <i>NBER Working Paper</i> 4871.</li>
         <li>Tobin, J. (1958). Liquidity preference as behavior towards risk. <i>Review of Economic Studies, 25</i>(2), 65-86.</li>
+        <li>Treynor, J. L. (1965). How to rate management of investment funds. <i>Harvard Business Review, 43</i>(1), 63-75.</li>
         <li>Treynor, J. L. y Black, F. (1973). How to use security analysis to improve portfolio selection. <i>Journal of Business, 46</i>(1), 66-86.</li>
       </ul></div>`;
   }

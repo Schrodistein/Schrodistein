@@ -93,7 +93,12 @@
       <h1>Datos, supuestos y guía</h1>
       <p class="lede">Sube los historiales de precios de tus acciones y del índice de mercado (las descargas de la BVC en Excel o CSV) o pega una tabla con un activo por columna. Todo se calcula en tu navegador.</p>
     </div>
-    <div class="grid-2">
+    <nav class="subtabs" id="datos-sub" aria-label="Secciones de Datos">
+      <button type="button" data-sub="variable" aria-current="page">Renta variable <span class="sub">acciones, ETF y MSCI COLCAP</span></button>
+      <button type="button" data-sub="fija">Renta fija y tasa libre de riesgo <span class="sub">TES, bonos, COLTES, COLIBR, primas</span></button>
+      <button type="button" data-sub="guia">Guía <span class="sub">aprender a operar en la BVC</span></button>
+    </nav>
+    <div class="grid-2" data-sub="variable">
       <div class="panel drop" id="drop">
         <h2>Fuente</h2>
         <div class="row-btns">
@@ -158,18 +163,18 @@
         <p class="hint" id="div-hint"></p>
       </div>
     </div>
-    <div class="panel" id="guia-datos">
+    <div class="panel" id="guia-datos" data-sub="variable">
       <h2>Cómo obtener cada dato que pide la app</h2>
       <p class="hint">Los datos de mercado vienen de los archivos que cargas. Los supuestos los escribes tú en Supuestos, en Confirmar o en Paso a paso. Esta tabla dice de dónde sale cada uno y cómo lo usa la app.</p>
       <div class="table-scroll"><table class="data guia"><thead><tr><th>Dato</th><th>Qué es</th><th>Dónde se obtiene en Colombia</th><th>Cómo se calcula o se usa</th></tr></thead><tbody>
         <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). Es la única fuente de precios de la app: acciones y ETF en tramos de 6 meses, índices por trimestre. Se cargan en Datos (o en Mercado, en la app de escritorio).</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
-        <tr><td><b>Tasa libre de riesgo (rf)</b></td><td>Lo que rinde una inversión sin riesgo de impago, al plazo del análisis.</td><td>Rendimiento de los TES de corto plazo (1 año) que publica el Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES), la tasa de los CDT a 90 días (DTF) o el rendimiento anual del COLIBR (botón en «Índices de referencia», si lo cargas).</td><td>Se escribe en % efectivo anual. Entra en Sharpe <code>(E(R) − rf)/σ</code>, Treynor, Jensen, CAPM y la línea del mercado de capitales.</td></tr>
+        <tr><td><b>Tasa libre de riesgo (rf)</b></td><td>Lo que rinde una inversión sin riesgo de impago, al plazo del análisis.</td><td>Datos → <b>Renta fija y tasa libre de riesgo</b>: TIR de los TES (1 año para análisis de corto plazo, 10 años para valorar acciones), el rendimiento anual del COLIBR o de los COLTES de la BVC, y la rf local de Damodaran (TES − diferencial por impago).</td><td>Se escribe en % efectivo anual. Entra en Sharpe <code>(E(R) − rf)/σ</code>, Treynor, Jensen, CAPM y la línea del mercado de capitales.</td></tr>
         <tr><td><b>Rendimiento esperado del mercado E(Rm)</b></td><td>Lo que se espera que rinda el índice de referencia en un año.</td><td>Si se deja vacío, la app usa la media histórica anual del índice cargado (MSCI COLCAP). También se puede escribir <code>rf + prima de mercado</code>.</td><td>Base del CAPM <code>E(Rᵢ) = rf + βᵢ (E(Rm) − rf)</code> y del α de Jensen.</td></tr>
         <tr><td><b>Prima de riesgo de mercado</b></td><td><code>E(Rm) − rf</code>: lo que se paga por asumir el riesgo del mercado accionario.</td><td>Histórica: la app la calcula con el COLCAP (Activos → fila del mercado). Implícita: la que publica Aswath Damodaran para mercados maduros (pages.stern.nyu.edu/~adamodar → Data → Implied ERP), más la prima por riesgo país de Colombia.</td><td>Se obtiene restando: escribe E(Rm) = rf + prima en Supuestos. Es la pendiente de la línea del mercado de valores.</td></tr>
-        <tr><td><b>Prima por riesgo país (PRP)</b></td><td>Retorno adicional que se exige por invertir en Colombia en lugar de un mercado maduro.</td><td>Tabla de primas por país de Damodaran (ctryprem, fila Colombia), o el diferencial EMBI de Colombia que publica el Banco de la República multiplicado por σ acciones / σ bonos.</td><td>Paso a paso → Beta de Damodaran: <code>Kₑ = rf + β·prima + PRP</code>.</td></tr>
+        <tr><td><b>Prima por riesgo país (PRP)</b></td><td>Retorno adicional que se exige por invertir en Colombia en lugar de un mercado maduro.</td><td>Datos → <b>Renta fija → Prima de riesgo y riesgo país</b>: diferencial EMBI (o el implícito en los TES frente al Tesoro de EE. UU.) × σ acciones / σ bonos; o la tabla ctryprem de Damodaran. Paso a paso → sección 18.</td><td>Paso a paso → Beta de Damodaran: <code>Kₑ = rf + β·prima + PRP</code>.</td></tr>
         <tr><td><b>Beta β</b></td><td>Sensibilidad del activo al índice de su segmento.</td><td>La app la calcula con los precios cargados (regresión de Sharpe). La de Damodaran se arma con βU, D/E e impuestos.</td><td><code>β = Cov(rᵢ, rₘ) / Var(rₘ)</code>; Damodaran: <code>βL = βU [1 + (1 − t) D/E]</code>.</td></tr>
         <tr><td><b>Beta desapalancada de la industria (βU)</b></td><td>Riesgo del negocio sin deuda, promedio de empresas comparables.</td><td>Damodaran, «Betas by sector» para mercados emergentes (betaemerg.xls). La app de escritorio lo descarga con un botón en Paso a paso.</td><td>Se elige la industria de cada activo y la app reapalanca con su D/E.</td></tr>
-        <tr><td><b>Deuda / patrimonio (D/E)</b></td><td>Endeudamiento financiero de la empresa frente a su valor de mercado.</td><td>Deuda financiera (obligaciones financieras y bonos) del último estado de situación financiera que el emisor reporta a la Superintendencia Financiera (información relevante y RNVE) o en su página de inversionistas. Capitalización = precio × acciones en circulación.</td><td><code>D/E = deuda financiera / capitalización bursátil</code>.</td></tr>
+        <tr><td><b>Deuda / patrimonio (D/E)</b></td><td>Endeudamiento financiero de la empresa frente a su valor de mercado.</td><td>Deuda financiera (obligaciones financieras y bonos) del último estado de situación financiera que el emisor reporta a la Superintendencia Financiera (información relevante y RNVE) o en su página de inversionistas. Deuda = obligaciones financieras + bonos emitidos + arrendamientos (NIIF 16); no proveedores ni impuestos. Capitalización = precio × acciones en circulación. Calculadora en Paso a paso → sección 19.</td><td><code>D/E = deuda financiera / capitalización bursátil</code>. En bancos no se usa (la deuda es su materia prima).</td></tr>
         <tr><td><b>Tasa de impuestos (t)</b></td><td>Tasa marginal del impuesto de renta de las sociedades.</td><td>35 % para sociedades en Colombia (Estatuto Tributario), salvo regímenes especiales; o la tasa efectiva del estado de resultados del emisor.</td><td>La deuda pesa <code>(1 − t)</code> porque los intereses se deducen de impuestos.</td></tr>
         <tr><td><b>Acciones en circulación</b></td><td>Número de acciones emitidas en manos de los inversionistas.</td><td>Ficha del emisor en bvc.com.co o la nota de patrimonio de sus estados financieros.</td><td>Capitalización (precio × acciones) y rotación del COLEQTY (Sistema financiero).</td></tr>
         <tr><td><b>Índices de referencia</b></td><td>MSCI COLCAP, COLTES, COLIBR y TRM.</td><td>bvc.com.co → Índices (históricos). TRM: Superintendencia Financiera o datos.gov.co.</td><td>β, CAPM, Treynor y Jensen de cada segmento (tabla de abajo).</td></tr>
@@ -177,7 +182,7 @@
         <tr><td><b>Comisiones</b></td><td>Costo por cada compra y cada venta.</td><td>Tarifa vigente de tu intermediario: trii (≈ $15.000 por operación) o la de tu comisionista de bolsa, que debe entregarla por escrito.</td><td>Confirmar: costo de cada compra registrada.</td></tr>
       </tbody></table></div>
     </div>
-    <div class="panel" id="bench-panel">
+    <div class="panel" id="bench-panel" data-sub="variable">
       <h2>Índices de referencia e instrumentos</h2>
       <p class="hint">Cada segmento se mide contra su propio índice de mercado: con él se calculan β, el rendimiento CAPM, Treynor y el α de Jensen de cada activo. Descarga el histórico de cada índice y súbelo junto con los demás archivos. Si falta uno, sus activos se miden contra el índice principal.</p>
       <div class="table-scroll"><table class="data" id="bench-table"></table></div>
@@ -185,7 +190,7 @@
       <h3>Instrumentos cargados</h3>
       <div class="table-scroll"><table class="data" id="inst-table"></table></div>
     </div>
-    <div class="panel guide">
+    <div class="panel guide" data-sub="variable">
       <h2>Datos reales de la Bolsa de Valores de Colombia</h2>
       <p>La app lee directamente los históricos que descargas de la BVC: nemotécnico, fecha, cantidad, volumen y precio de cierre. La BVC entrega la descarga gratuita en tramos de hasta 6 meses y con hasta 5 años de antigüedad. La app une los tramos de cada acción.</p>
       <ol>
@@ -198,7 +203,53 @@
       </ol>
       <p><b>Otros instrumentos.</b> Los archivos de <b>TES, bonos y CDT</b> pueden traer precio o solo la tasa (TIR, tasa de negociación o de valoración): con la tasa la app arma un índice de rendimiento total que suma la causación de la tasa y resta el efecto precio por duración (<code>Rₜ = (1 + yₜ₋₁)^Δt − 1 − D/(1 + yₜ₋₁)·Δy</code>). Si el archivo trae una columna de duración se usa; si no, 6 años para TES, 4 para bonos y 0,5 para CDT. Las <b>divisas</b> se leen de columnas como «TRM» o «Tasa de cambio», y los <b>futuros y opciones</b> de su precio de cierre o de liquidación.</p>
     </div>
-      <div class="guia-wrap" id="guia-wrap">
+    <div class="panel" id="rf-load" data-sub="fija">
+      <h2>Renta fija: datos para la tasa libre de riesgo</h2>
+      <p>La tasa libre de riesgo de un país la fija su mercado de renta fija: es el rendimiento al que se negocian los títulos de deuda del Gobierno en su moneda, los <b>TES</b>. Aquí se cargan los índices de renta fija de la BVC y las tasas de los TES y bonos; con ellos la app propone la tasa libre de riesgo, la prima por riesgo país y el rendimiento esperado del mercado. La teoría completa está en <b>Teoría → Tasa libre de riesgo</b> y en <b>Paso a paso</b>, secciones 15 a 18.</p>
+      <div class="row-btns">
+        <label class="btn btn-primary file" for="file-fija">Subir archivos de renta fija (Excel o CSV)<input type="file" id="file-fija" multiple></label>
+      </div>
+      <p class="status" id="rf-status" role="status" hidden></p>
+      <h3>Qué descargar</h3>
+      <div class="table-scroll"><table class="data guia"><thead><tr><th>Archivo</th><th>Qué mide</th><th>Dónde</th><th>Para qué sirve aquí</th></tr></thead><tbody>
+        <tr><td><b>COLIBR</b></td><td>Índice de la BVC que acumula el IBR overnight del Banco de la República (mercado monetario).</td><td>bvc.com.co → Índices → COLIBR → Históricos (por trimestre)</td><td>Tasa libre de riesgo de corto plazo: su rendimiento efectivo del último año.</td></tr>
+        <tr><td><b>COLTES CP</b></td><td>TES tasa fija en pesos de 1 a 5 años (rendimiento total: precio + cupones).</td><td>bvc.com.co → Índices → Renta fija → COLTES CP</td><td>Rendimiento realizado de la deuda pública de corto y mediano plazo.</td></tr>
+        <tr><td><b>COLTES LP</b></td><td>TES tasa fija en pesos de más de 5 años.</td><td>bvc.com.co → Índices → Renta fija → COLTES LP</td><td>Índice de referencia del segmento de renta fija (β de TES y bonos) y σ de los bonos para la prima por riesgo país.</td></tr>
+        <tr><td><b>COLTES UVR</b></td><td>TES denominados en UVR (indexados a la inflación).</td><td>bvc.com.co → Índices → Renta fija → COLTES UVR</td><td>Tasa libre de riesgo real.</td></tr>
+        <tr><td><b>TES tasa fija de 1 y de 10 años</b></td><td>Tasa (TIR) a la que se negocia cada referencia de TES (nemotécnicos TFIT…).</td><td>bvc.com.co → Renta fija → Deuda pública → la referencia → Históricos; o la curva cero cupón de TES del Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES)</td><td>La TIR del TES de 1 año es la rf de corto plazo; la del TES de 10 años, la rf de largo plazo para valorar acciones (Damodaran).</td></tr>
+        <tr><td><b>Bonos corporativos y CDT</b> (opcional)</td><td>Tasa de negociación de bonos de empresas y CDT.</td><td>bvc.com.co → Renta fija → Deuda privada</td><td>Comparar con los TES: la diferencia es la prima por riesgo de crédito de la empresa.</td></tr>
+      </tbody></table></div>
+      <p class="hint">Los archivos con columna de tasa (TIR, tasa de negociación, tasa de valoración) se guardan como tasas; los de los índices COLTES y COLIBR, como precios del índice. Todo queda en la biblioteca y se usa con la ventana de análisis (Biblioteca).</p>
+    </div>
+    <div class="panel" id="rf-panel" data-sub="fija">
+      <h2>Candidatas a tasa libre de riesgo con tus datos</h2>
+      <p id="rf-now" class="meta"></p>
+      <div id="rf-cands"></div>
+    </div>
+    <div class="panel" id="prp-panel" data-sub="fija">
+      <h2>Prima de riesgo del mercado y prima por riesgo país</h2>
+      <p>Escribe los datos que no salen de la BVC; la app arma la prima por riesgo país (PRP) desde la renta fija, como Damodaran, y el rendimiento esperado del mercado <code>E(Rm) = rf + PRM + PRP</code>. Paso a paso → sección 18 explica cada paso.</p>
+      <div class="form" id="prp-form">
+        <label class="field" for="prp-tes10"><span>TIR del TES tasa fija a 10 años (%)</span><input id="prp-tes10" data-prp="tes10" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field" for="prp-ust10"><span>Tesoro de EE. UU. a 10 años (%) · FRED: DGS10</span><input id="prp-ust10" data-prp="ust10" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field" for="prp-picol"><span>Inflación esperada de Colombia (%)</span><input id="prp-picol" data-prp="picol" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field" for="prp-pius"><span>Inflación esperada de EE. UU. (%)</span><input id="prp-pius" data-prp="pius" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field" for="prp-embi"><span>EMBI de Colombia (puntos básicos; opcional)</span><input id="prp-embi" data-prp="embi" type="number" step="1" inputmode="decimal"></label>
+        <label class="field" for="prp-ratio"><span>σ acciones / σ bonos (vacío = con tus datos)</span><input id="prp-ratio" data-prp="ratio" type="number" step="0.01" inputmode="decimal"></label>
+        <label class="field" for="prp-erp"><span>Prima de un mercado maduro (%) · Damodaran, Implied ERP</span><input id="prp-erp" data-prp="erp" type="number" step="0.01" inputmode="decimal"></label>
+      </div>
+      <div id="prp-out"></div>
+      <div class="row-btns" id="prp-btns"></div>
+      <h3>Dónde se consigue cada dato</h3>
+      <ul>
+        <li><b>TIR del TES a 10 años</b>: BVC (Renta fija → Deuda pública, la referencia TES más cercana a 10 años) o la curva cero cupón del Banco de la República. Si cargas ese archivo, la app la toma sola.</li>
+        <li><b>Tesoro de EE. UU. a 10 años</b>: FRED (fred.stlouisfed.org, serie DGS10) o treasury.gov.</li>
+        <li><b>Inflación esperada</b>: Colombia, encuesta de expectativas del Banco de la República o la meta (3 %); EE. UU., la meta de la Reserva Federal (2 %) o la inflación implícita en los bonos TIPS (FRED, T10YIE).</li>
+        <li><b>EMBI de Colombia</b> (riesgo país): Banco de la República (indicadores de riesgo país) o proveedores como Investing.com; también sirve el CDS soberano a 5 años.</li>
+        <li><b>Prima de un mercado maduro y tabla de primas por país</b>: Aswath Damodaran, pages.stern.nyu.edu/~adamodar → Data → «Implied ERP» y «Country Default Spreads and Risk Premiums» (ctryprem).</li>
+      </ul>
+    </div>
+      <div class="guia-wrap" id="guia-wrap" data-sub="guia">
       <h1 class="guia-title">Guía para aprender a operar acciones y ETF en la BVC</h1>
       <p class="lede">Del mercado a la orden de compra, paso a paso, con la teoría que sostiene cada decisión y la sección de la app donde se practica. Es orientación educativa: normas, tarifas y horarios cambian, confírmalos con tu comisionista y en bvc.com.co.</p>
       <div id="guia"></div>
@@ -309,13 +360,14 @@
     <div class="panel">
       <p id="lib-summary"></p>
       <div class="row-btns">
-        <label class="field inline" for="lib-cut"><span>Calcular con los datos hasta (fecha de corte)</span><input type="date" id="lib-cut"></label>
+        <label class="field inline" for="lib-from"><span>Analizar desde (fecha de inicio)</span><input type="date" id="lib-from"></label>
+        <label class="field inline" for="lib-cut"><span>hasta (fecha de corte)</span><input type="date" id="lib-cut"></label>
         <button type="button" class="btn btn-primary" id="lib-use">Calcular con la biblioteca</button>
       </div>
       <p class="status" id="lib-status" hidden></p>
     </div>
     <div class="panel" id="mx-panel"><h2>Matriz de precios para Excel</h2>
-      <p>Un libro de Excel con la hoja «M. PRECIOS»: ITEM, FECHA, el índice de mercado y una columna por acción o ETF, de la fecha más reciente a la más antigua, una fila por rueda de la BVC (sin fines de semana ni festivos, la misma base de 242 ruedas al año con que se anualizan los rendimientos). Si un activo no se negoció en una rueda, lleva su último precio cotizado hasta la siguiente operación; antes de la primera cotización de cada activo la celda queda vacía. Usa los activos marcados «Usar» y la fecha de corte.</p>
+      <p>Un libro de Excel con la hoja «M. PRECIOS»: ITEM, FECHA, el índice de mercado y una columna por acción o ETF, de la fecha más reciente a la más antigua, una fila por rueda de la BVC (sin fines de semana ni festivos, la misma base de 242 ruedas al año con que se anualizan los rendimientos). Si un activo no se negoció en una rueda, lleva su último precio cotizado hasta la siguiente operación; antes de la primera cotización de cada activo la celda queda vacía. Usa los activos marcados «Usar» y la ventana de análisis (por ahora del 22/08/2023 al 22/08/2026).</p>
       <div class="row-btns">
         <label class="field inline" for="mx-cal"><span>Fechas</span><select id="mx-cal"><option value="ruedas">Ruedas de la BVC (242 al año)</option><option value="habiles">Lunes a viernes (incluye festivos)</option></select></label>
         <button type="button" class="btn btn-primary" id="mx-download">Descargar matriz de precios (Excel)</button>
@@ -343,7 +395,7 @@
   <section class="screen" id="screen-estadistica" hidden>
     <div class="head">
       <h1>Paso a paso: de la varianza a la frontera eficiente</h1>
-      <p class="lede">Cómo se calculan, con tus datos, las medidas de la teoría moderna de portafolios: cada fórmula con sus números, qué significa cada parte y qué autor la propuso (Markowitz, Sharpe, Treynor, Jensen, Damodaran), cómo se grafica la frontera eficiente con la línea del mercado, cómo se elige cada portafolio y dónde queda el que elegiste.</p>
+      <p class="lede">Cómo se calculan, con tus datos, las medidas de la teoría moderna de portafolios: cada fórmula con sus números, qué significa cada parte y qué autor la propuso (Markowitz, Sharpe, Treynor, Jensen, Damodaran), cómo se grafica la frontera eficiente con la línea del mercado, cómo se elige cada portafolio y dónde queda el que elegiste; el rendimiento esperado anual del mercado, el riesgo sistemático y no sistemático, el R², las primas de riesgo (mercado y país) y el D/E de la beta de Damodaran (secciones 15 a 19).</p>
     </div>
     <div id="pasos"><div class="panel"><p>Carga datos en la sección Datos para ver el desarrollo.</p></div></div>
   </section>
@@ -537,7 +589,7 @@
       <h2>Todas las matrices de cálculo en CSV</h2>
       <div class="row-btns">
         <button type="button" class="btn" id="dl-cov">Matriz de covarianzas</button>
-        <button type="button" class="btn" id="dl-corr">Matriz de correlación</button>
+        <button type="button" class="btn" id="dl-corr">Matriz de correlación (Excel con colores Likert)</button>
         <button type="button" class="btn" id="dl-ret">Rendimientos</button>
         <button type="button" class="btn" id="dl-stats">Estadísticas por activo</button>
         <button type="button" class="btn" id="dl-ports">Pesos de los portafolios</button>
@@ -589,13 +641,47 @@
       <h2>Diversificación</h2>
       <p>Para diversificar lo más posible la app usa tres herramientas. Un <strong>peso máximo por activo</strong>: con un tope de 20 % el portafolio necesita al menos cinco activos. El <strong>número efectivo de activos</strong> <code>1 / Σ wᵢ²</code>: vale N con pesos iguales y 1 si todo está en un activo. La <strong>razón de diversificación</strong> <code>Σ wᵢ σᵢ / σp</code> (Choueifaty y Coignard, 2008): cuánto riesgo se elimina al combinar. El portafolio de <strong>máxima diversificación</strong> maximiza esa razón, y el de <strong>paridad de riesgo</strong> reparte el riesgo en partes iguales.</p>
     </div>
+    <div class="panel" id="teo-rf">
+      <h2>La tasa libre de riesgo de un país: se fija en la renta fija</h2>
+      <p><b>Qué es.</b> El rendimiento de una inversión cuyo resultado se conoce de antemano: sin riesgo de impago y sin riesgo de reinversión al plazo del análisis. En la práctica es la tasa de los títulos del Gobierno en su propia moneda, porque un Estado puede pagar en la moneda que emite. En Colombia son los <b>TES</b> (Títulos de Tesorería) clase B que emite el Ministerio de Hacienda.</p>
+      <p><b>Cómo se establece.</b></p>
+      <ol>
+        <li><b>Mercado primario</b>: el Ministerio de Hacienda subasta los TES a través del Banco de la República; los <b>creadores de mercado</b> (bancos y comisionistas autorizados) pujan, y la tasa de corte de la subasta es la tasa a la que el Gobierno se endeuda.</li>
+        <li><b>Mercado secundario</b>: los TES se negocian a diario en el SEN del Banco de la República y en el MEC de la BVC. Ahí se forma su precio y, con él, su <b>tasa interna de retorno (TIR)</b>: la tasa <code>y</code> que cumple <code>P = Σ C / (1 + y)ᵗ + VN / (1 + y)ⁿ</code> (cupones C, valor nominal VN). Si el precio sube, la TIR baja, y al revés.</li>
+        <li><b>Curva de rendimientos</b>: con las TIR de todas las referencias, de 1 a 30 años, se arma la curva de TES. El Banco de la República y los proveedores de precios (Precia, PiP) la ajustan con el modelo de <b>Nelson y Siegel (1987)</b> y la extensión de <b>Svensson (1994)</b>, y publican la curva cero cupón: una tasa libre de riesgo para cada plazo.</li>
+        <li><b>El corto plazo lo ancla la política monetaria</b>: la tasa de intervención del Banco de la República guía el <b>IBR</b> (Indicador Bancario de Referencia), la tasa a la que se prestan los bancos; el índice COLIBR de la BVC la acumula día a día. El largo plazo depende de la inflación esperada, del crecimiento y de la prima por riesgo fiscal (Fisher, 1930: <code>(1 + i) = (1 + r)(1 + πᵉ)</code>).</li>
+      </ol>
+      <p><b>Cuál usar.</b> El plazo de la tasa debe coincidir con el del análisis (Damodaran): para medir un portafolio a un año, la TIR del TES de 1 año o el rendimiento del COLIBR; para valorar acciones (flujos a muchos años), la TIR del TES de 10 años. Como el TES colombiano sí tiene algo de riesgo de impago, Damodaran le resta el diferencial por impago del país: <code>rf = TIR TES − diferencial</code>. Otra vía: la tasa del Tesoro de EE. UU. llevada a pesos con la diferencia de inflaciones, <code>(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1</code>.</p>
+      <p><b>Índices de la BVC que se necesitan</b> (familias de renta fija y mercado monetario): <b>COLIBR</b> (IBR overnight, corto plazo), <b>COLTES CP</b> (TES tasa fija en pesos de 1 a 5 años), <b>COLTES LP</b> (más de 5 años; índice del segmento de renta fija) y <b>COLTES UVR</b> (TES en UVR: tasa real). Son índices de <i>rendimiento total</i>, ponderados por capitalización, que reinvierten los cupones: muestran lo que rindió tener los TES, no la TIR de hoy. Para la TIR se cargan los históricos de las referencias de TES (Renta fija → Deuda pública). Todo se sube en Datos → Renta fija.</p>
+      <p><b>En la app.</b> rf es efectiva anual. Con rendimientos logarítmicos diarios, la tasa por rueda es <code>ln(1 + rf) / 242</code>. Entra en la razón de Sharpe, Treynor, Jensen, el CAPM, la línea del mercado de capitales (su intercepto) y el portafolio tangente.</p>
+    </div>
+    <div class="panel" id="teo-erm">
+      <h2>Rendimiento esperado anual del mercado E(Rm)</h2>
+      <p>Hay dos formas de estimarlo. <b>Histórica</b>: media de los rendimientos logarítmicos diarios del MSCI COLCAP × 242 (continuo); <code>e^μ − 1</code> es la tasa efectiva anual (geométrica) y <code>e^(μ + σ²/2) − 1</code> la media aritmética esperada. Su error estándar, <code>σ / √años</code>, es grande: con 3 años y σ ≈ 15 %, ±8,7 puntos (Merton, 1980). <b>Prospectiva</b>: <code>E(Rm) = rf + PRM + PRP</code>, o el modelo de <b>Gordon (1959)</b>, <code>D₁ / P₀ + g</code>. Paso a paso → sección 15 la calcula con tus datos, y el resultado se puede pasar a Supuestos.</p>
+    </div>
+    <div class="panel" id="teo-prima">
+      <h2>Prima de riesgo del mercado y prima por riesgo país</h2>
+      <p>La <b>prima de riesgo del mercado</b> (PRM) es <code>E(Rm) − rf</code>: lo que se exige por pasar del TES a las acciones. Se estima de forma <i>histórica</i> (Ibbotson; Dimson, Marsh y Staunton: promedio de muchos años), <i>implícita</i> (Damodaran: la tasa que iguala el precio del S&amp;P 500 con sus flujos esperados, menos el Tesoro) o por <i>encuestas</i> (Fernández). La <b>prima por riesgo país</b> (PRP) es el rendimiento adicional por invertir en Colombia y no en un mercado maduro. Se mide desde la renta fija: el diferencial de los bonos soberanos de Colombia en dólares sobre el Tesoro de EE. UU. (el <b>EMBI</b> de J.P. Morgan), el CDS soberano a 5 años, el diferencial típico de su calificación, o el implícito en los TES frente al Tesoro llevado a pesos. Como las acciones son más volátiles que los bonos, Damodaran lo escala: <code>PRP = diferencial × σ acciones / σ bonos</code>. El costo del patrimonio queda <code>Kₑ = rf + β · PRM + λ · PRP</code>, con λ la exposición de la empresa al país (Damodaran, 2003). Datos → Renta fija las calcula y Paso a paso → sección 18 muestra cada paso.</p>
+    </div>
+    <div class="panel" id="teo-sist">
+      <h2>Riesgo sistemático y riesgo no sistemático</h2>
+      <p>El riesgo total de un activo, <code>σᵢ²</code>, se divide en <b>sistemático</b> (de mercado, no diversificable: tasas de interés, inflación, PIB, TRM, petróleo, política) y <b>no sistemático</b> (propio de la empresa o del sector, diversificable). Del modelo de índice único de <b>Sharpe (1963)</b>, <code>rᵢ = αᵢ + βᵢ rₘ + εᵢ</code>: <code>σᵢ² = βᵢ² σₘ² + σ²(εᵢ)</code>. <b>Markowitz (1952)</b> mostró que al combinar activos la covarianza manda, y <b>Evans y Archer (1968)</b> que con unos 15 a 20 acciones el riesgo propio casi desaparece: <code>σp² = σ̄² / N + (1 − 1/N) cov̄</code>. Como lo diversificable se puede quitar sin costo, en equilibrio el mercado solo paga el riesgo sistemático (<b>CAPM</b>: Sharpe, 1964; Lintner, 1965; Mossin, 1966). De ahí salen las medidas: la <b>β</b> mide el riesgo sistemático; la razón de <b>Treynor</b> (1965) premia por unidad de β y el <b>α de Jensen</b> (1968) mide contra la línea del CAPM, que solo remunera β; la razón de <b>Sharpe</b> (1966) usa el riesgo total, para quien no está diversificado; la razón de valoración de <b>Treynor y Black</b> (1973), <code>α / σ(ε)</code>, mide el riesgo propio; y la <b>β de Damodaran</b> estima la parte sistemática del negocio (βU) y la del endeudamiento (D/E), con la «β total» <code>β / ρ</code> para el dueño no diversificado. Paso a paso → sección 16.</p>
+    </div>
+    <div class="panel" id="teo-r2">
+      <h2>Coeficiente de determinación R²</h2>
+      <p>En una regresión <code>y = a + b x + ε</code>, la variación total se divide en explicada y no explicada: <code>SST = SSR + SSE</code>, y <code>R² = SSR / SST = 1 − SSE / SST</code> (análisis de varianza de <b>Fisher</b>, 1925). Con una variable, <code>R² = ρ²</code> (<b>Pearson</b>, 1896). En el modelo de mercado, R² es la <b>proporción sistemática</b> del riesgo, <code>βᵢ² σₘ² / σᵢ²</code>, y <code>1 − R²</code> la no sistemática: la de los residuos, cuya desviación es el error estándar de la estimación <code>√(SSE / (n − 2))</code>. El <b>R² ajustado</b>, <code>1 − (1 − R²)(n − 1)/(n − k − 1)</code>, castiga las variables que no aportan. Su significancia se prueba con <code>F = [R² / (1 − R²)](n − 2)</code>, que con una variable es el cuadrado de la t de la pendiente. Con las <b>variables macroeconómicas</b> se regresa el rendimiento del MSCI COLCAP sobre el <i>cambio</i> de cada variable (no su nivel, para evitar la regresión espuria de Granger y Newbold, 1974). Es el enfoque de factores de <b>Chen, Roll y Ross (1986)</b>, basado en la teoría de valoración por arbitraje de <b>Ross (1976)</b>: el R² de cada factor dice qué parte del riesgo sistemático del mercado le corresponde. Ojo con el nombre: en estadística, «error sistemático» es un sesgo que se repite en el mismo sentido; el residuo ε es el error aleatorio o no sistemático. Paso a paso → sección 17.</p>
+    </div>
+    <div class="panel" id="teo-de">
+      <h2>Deuda / patrimonio (D/E) y la beta de Damodaran</h2>
+      <p><b>Modigliani y Miller (1958, 1963)</b> mostraron que la deuda no cambia el riesgo del negocio, pero lo concentra en el accionista. <b>Hamada (1972)</b> lo llevó a la beta: <code>βL = βU [1 + (1 − t) D/E]</code>. Damodaran calcula la beta «de abajo hacia arriba»: toma la beta desapalancada βU promedio de la industria (más estable que la regresión de una sola acción) y la reapalanca con el D/E propio de la empresa. <b>Cómo se obtiene el D/E:</b> D = obligaciones financieras corrientes y no corrientes + bonos emitidos + pasivos por arrendamiento (NIIF 16), del último estado de situación financiera consolidado que el emisor reporta a la Superintendencia Financiera y publica en su página de inversionistas; no se cuentan proveedores, impuestos ni provisiones. E = valor de mercado del patrimonio: precio en la BVC × acciones en circulación (ordinarias y preferenciales). Se prefiere el valor de mercado al contable porque es lo que paga el inversionista. En bancos y aseguradoras no se reapalanca: su deuda es materia prima. La calculadora está en Paso a paso → sección 19.</p>
+    </div>
     <div class="panel">
       <h2>Límites de este análisis</h2>
       <p>Todo parte de datos históricos. Las medias estimadas tienen mucho error, por lo que la app muestra un intervalo de confianza del 95 % del rendimiento esperado. Además, los portafolios optimizados dentro de la muestra suelen parecer mejores de lo que rinden después. Por eso la opción predeterminada mezcla la media histórica con el CAPM y el recomendado exige un número efectivo de activos mínimo. Los rendimientos pasados no garantizan los futuros, y esta herramienta es educativa: no constituye asesoría de inversión.</p>
     </div>
   </section>
 </main>
-<footer class="app-foot">Frontera Eficiente<span id="app-version"></span> · aplicación de <b>Schrödistein</b>. La teoría y los modelos son de sus autores, citados en cada sección: Markowitz (1952), Tobin (1958), Sharpe (1963, 1964, 1966), Lintner (1965), Treynor (1965), Jensen (1968), Treynor y Black (1973), Damodaran y los demás.</footer>
+<footer class="app-foot">Frontera Eficiente<span id="app-version"></span> · aplicación de <b>Schrödistein</b>. La teoría y los modelos son de sus autores, citados en cada sección: Markowitz (1952), Modigliani y Miller (1958, 1963), Tobin (1958), Sharpe (1963, 1964, 1966), Lintner (1965), Treynor (1965), Jensen (1968), Evans y Archer (1968), Hamada (1972), Treynor y Black (1973), Ross (1976), Chen, Roll y Ross (1986), Nelson y Siegel (1987), Damodaran y los demás.</footer>
 
 <div class="tip" id="tip" role="tooltip" hidden></div>
 <!--APP-END-->
@@ -614,6 +700,7 @@
 <script src="js/macro-banrep.js"></script>
 <script src="js/pasos.js"></script>
 <script src="js/frontera.js"></script>
+<script src="js/riesgo.js"></script>
 <script src="js/guia.js"></script>
 <script src="js/sistema.js"></script>
 <script src="js/indices.js"></script>

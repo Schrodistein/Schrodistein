@@ -447,6 +447,10 @@
     const saved = await PF.lib.saveSeries(combined, 'archivo');
     await refreshLib();
     const usable = libSeries();
+    if (usable.length < 2 && combined.length >= 2) {
+      status(`Los archivos quedaron guardados en la biblioteca, pero sus fechas caen fuera de la ventana de análisis (${windowText()}): ${combined.map((x) => `${x.name} ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}. Cambia las fechas de inicio y de corte en Biblioteca.${allErr ? ' Además: ' + allErr : ''}`, 'bad');
+      return;
+    }
     if (usable.length < 2) {
       status(`Solo hay un instrumento en la biblioteca (${combined[0].name}). Sube también los archivos de tus otras acciones y del índice de mercado (por ejemplo el COLCAP).${allErr ? ' Además: ' + allErr : ''}`, 'bad');
       return;
@@ -546,7 +550,117 @@
   function renderGuia() {
     $('guia').innerHTML = PF.guia.render(guiaCtx());
   }
-  const SCREEN_RENDERERS = { datos: () => renderGuia(), estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
+  /* ---------- Datos → submenú: renta variable, renta fija (tasa libre de riesgo) y guía ---------- */
+  function datosSub(name) {
+    const sub = ['variable', 'fija', 'guia'].includes(name) ? name : 'variable';
+    store.set('datosSub', sub);
+    document.querySelectorAll('#screen-datos [data-sub]').forEach((el) => {
+      if (el.closest('#datos-sub')) return el.getAttribute('data-sub') === sub ? el.setAttribute('aria-current', 'page') : el.removeAttribute('aria-current');
+      el.hidden = !el.getAttribute('data-sub').split(' ').includes(sub);
+    });
+    if (sub === 'fija') renderRf();
+  }
+  // Serie de rendimientos logarítmicos diarios → σ anual (242 ruedas)
+  function annualVol(s) {
+    const r = [];
+    for (let i = 1; i < s.prices.length; i++) if (s.prices[i] > 0 && s.prices[i - 1] > 0) r.push(Math.log(s.prices[i] / s.prices[i - 1]));
+    return r.length > 20 ? Math.sqrt(PF.stats.variance(r) * 242) : NaN;
+  }
+  // σ acciones / σ bonos: MSCI COLCAP frente al índice COLTES (LP si está), con la ventana de análisis
+  function volRatio() {
+    if (!st.model) return NaN;
+    const list = libSeries();
+    const b = list.find((s) => /coltes\s*lp/i.test(s.name)) || list.find((s) => /coltes/i.test(s.name) && s.kind !== 'tasa');
+    const vb = b ? annualVol(b) : NaN;
+    return vb > 0 ? st.model.mktVol / vb : NaN;
+  }
+  const lastInflation = () => {
+    const d = macroData().inflacion;
+    return d && d.values.length ? d.values[d.values.length - 1] / 100 : NaN;
+  };
+  function setRf(v) {
+    $('rf').value = v;
+    compute();
+  }
+  function renderRf() {
+    if (!$('rf-panel')) return;
+    const rfNow = parseFloat($('rf').value) / 100;
+    $('rf-now').innerHTML = `Tasa libre de riesgo en uso (Datos → Renta variable → Supuestos): <b>${pct(rfNow, 2)}</b> efectiva anual. Con rendimientos logarítmicos diarios equivale a <code>ln(1 + rf) / 242</code> = ${Number.isFinite(rfNow) ? (PF.riesgo.dailyLog(rfNow) * 100).toFixed(4).replace('.', ',') + ' %' : '—'} por rueda. La ventana de análisis es ${windowText()}.`;
+    const list = libSeries();
+    const c = PF.riesgo.rfCandidates(list);
+    const use = (x) => (Number.isFinite(x) ? `<button type="button" class="btn btn-ghost" data-use-rf="${(Math.round(x * 10000) / 100).toFixed(2)}">Usar ${pct(x, 2)}</button>` : '');
+    $('rf-cands').innerHTML = c.length
+      ? `<div class="table-scroll"><table class="data"><thead><tr><th>Instrumento</th><th>Tipo</th><th>Plazo</th><th class="n">Último año / último dato</th><th class="n">Promedio (ventana o 20 ruedas)</th><th>Fecha</th><th>Cómo se usa</th><th></th></tr></thead><tbody>${c
+          .map((x) => `<tr><td><b>${esc(x.name)}</b></td><td>${esc(x.tipo)}</td><td>${esc(x.plazo)}</td><td class="n">${pct(x.value, 2)}</td><td class="n">${pct(x.avg, 2)}</td><td>${esc(x.date || '')}</td><td class="sub">${esc(x.note)}</td><td>${use(x.value)}</td></tr>`)
+          .join('')}</tbody></table></div><p class="hint">Los índices COLTES y COLIBR son de rendimiento total: su cifra es lo que <i>rindió</i> mantenerlos (efectivo anual, base 365 días), no la tasa a la que se negocian hoy. La TIR de un TES sí es la tasa de hoy. Para un análisis a un año, la referencia es el COLIBR o la TIR del TES de 1 año; para valorar acciones a largo plazo, la TIR del TES de 10 años menos el diferencial por riesgo de impago (abajo).</p>`
+      : '<p class="hint">Todavía no hay renta fija en la biblioteca. Sube el COLIBR, los COLTES (CP, LP, UVR) o las tasas de los TES con el botón de arriba.</p>';
+    // Primas
+    const inp = Object.assign({}, store.get('prp') || {});
+    const tes = list.filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name)).sort((a, b) => (b.dur || 0) - (a.dur || 0))[0];
+    const infl = lastInflation();
+    document.querySelectorAll('#prp-form [data-prp]').forEach((el) => {
+      const k = el.getAttribute('data-prp');
+      if (document.activeElement !== el) el.value = inp[k] != null ? inp[k] : '';
+      if (k === 'tes10' && tes) el.placeholder = `${(tes.prices[tes.prices.length - 1] * 100).toFixed(2)} (${tes.name})`;
+      if (k === 'picol' && Number.isFinite(infl)) el.placeholder = `${(infl * 100).toFixed(2)} (última inflación)`;
+    });
+    if ((inp.tes10 == null || inp.tes10 === '') && tes) inp.tes10 = tes.prices[tes.prices.length - 1] * 100;
+    if ((inp.picol == null || inp.picol === '') && Number.isFinite(infl)) inp.picol = infl * 100;
+    const vr = volRatio();
+    if (Number.isFinite(vr)) $('prp-ratio').placeholder = vr.toFixed(2) + ' (con tus datos)';
+    const q = PF.riesgo.premiums(inp, { rf: rfNow, volRatio: vr });
+    $('prp-out').innerHTML = PF.riesgo.premiumHTML({ pct, esc }, q);
+    $('prp-btns').innerHTML = [
+      Number.isFinite(q.prp) ? `<button type="button" class="btn" data-use-prp="${(q.prp * 100).toFixed(2)}">Usar PRP ${pct(q.prp, 2)} en la beta de Damodaran</button>` : '',
+      Number.isFinite(q.rfLocal) ? `<button type="button" class="btn" data-use-rf="${(q.rfLocal * 100).toFixed(2)}">Usar rf local ${pct(q.rfLocal, 2)} como tasa libre de riesgo</button>` : '',
+      Number.isFinite(q.em) ? `<button type="button" class="btn btn-primary" data-use-em="${(q.em * 100).toFixed(2)}">Usar E(Rm) = ${pct(q.em, 2)} en Supuestos</button>` : '',
+    ].join(' ');
+  }
+  function wireRf() {
+    $('datos-sub').addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-sub]');
+      if (b) datosSub(b.getAttribute('data-sub'));
+    });
+    $('file-fija').addEventListener('change', async (ev) => {
+      const el = $('rf-status');
+      el.hidden = false;
+      el.className = 'status';
+      el.textContent = 'Leyendo…';
+      await loadFiles(ev.target.files);
+      ev.target.value = '';
+      const u = $('upload-status');
+      el.className = u.className;
+      el.textContent = u.textContent;
+      renderRf();
+    });
+    $('prp-form').addEventListener('change', (ev) => {
+      const k = ev.target.getAttribute('data-prp');
+      if (!k) return;
+      const all = store.get('prp') || {};
+      const v = parseFloat(String(ev.target.value).replace(',', '.'));
+      if (Number.isFinite(v)) all[k] = v;
+      else delete all[k];
+      store.set('prp', all);
+      renderRf();
+    });
+    // Botones «Usar…» de Renta fija y de Paso a paso
+    document.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-use-rf],[data-use-em],[data-use-prp]');
+      if (!b) return;
+      if (b.dataset.useRf) setRf(b.dataset.useRf);
+      else if (b.dataset.useEm) {
+        $('em').value = b.dataset.useEm;
+        compute();
+      } else if (b.dataset.usePrp) {
+        store.set('crp', parseFloat(b.dataset.usePrp) / 100);
+        renderPasos();
+      }
+      b.textContent = '✓ Aplicado';
+      if (st.screen === 'datos') renderRf();
+    });
+  }
+
+  const SCREEN_RENDERERS = { datos: () => (renderGuia(), store.get('datosSub') === 'fija' && renderRf()), estadistica: () => renderPasos(), macro: () => renderMacro(), sistema: () => renderSistema(), biblioteca: () => renderLib() };
   const renderScreen = (screen) => SCREEN_RENDERERS[screen] && SCREEN_RENDERERS[screen]();
 
   function renderSummary() {
@@ -1055,6 +1169,16 @@
         download(rep.bytes(), `frontera-eficiente-calculos-${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         return dlStatus(`Libro generado con ${rep.sheets.length} hojas: ${rep.sheets.map((x) => x.name).join(', ')}.`, 'ok');
       }
+      if (kind === 'corr') {
+        // Excel con la matriz coloreada en la escala de Likert (verde +1, amarillo 0, rojo −1)
+        const N = m.names.length;
+        const rowsC = [[{ v: 'Matriz de correlación (rendimientos logarítmicos diarios)', s: 't' }], [{ v: 'Colores: escala de Likert. Verde = totalmente de acuerdo (+1), amarillo = ni de acuerdo ni en desacuerdo (0), rojo = totalmente en desacuerdo (−1).', s: 'n' }], [{ v: '', s: 'h' }].concat(m.names.map((n) => ({ v: n, s: 'h' })))]
+          .concat(m.names.map((n, i) => [{ v: n, s: 'b' }].concat(m.corr[i].map((v) => ({ v, s: 'num4' })))))
+          .concat([[], [{ v: 'Escala', s: 'b' }]], PF.stats.LIKERT.slice().reverse().map((q, k) => [`${k + 1}. ${q.label}`, { v: q.desc, s: 'n' }]));
+        const bytes = PF.xlsx.build([{ name: 'Correlacion', rows: rowsC, cols: [24].concat(m.names.map(() => 12)), freeze: { row: 3, col: 1 }, colorScale: [`B4:${PF.xlsx.colName(N)}${3 + N}`] }]);
+        download(bytes, `matriz-correlacion-${stamp()}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        return dlStatus('Matriz de correlación en Excel, coloreada con la escala de Likert.', 'ok');
+      }
       let rows;
       let name;
       const extraM = calcMatrices().find((x) => x.key === kind);
@@ -1254,7 +1378,10 @@
   /* ---------- Navegación ---------- */
   function go(screen) {
     if (screen === 'comprar') screen = 'frontera'; // la pestaña Comprar se quitó
-    if (screen === 'guia') screen = 'datos'; // la guía está dentro de Datos
+    if (screen === 'guia') {
+      screen = 'datos'; // la guía está dentro de Datos
+      store.set('datosSub', 'guia');
+    }
     if (!document.getElementById('screen-' + screen)) screen = 'datos';
     st.screen = screen;
     document.querySelectorAll('.screen').forEach((s) => (s.hidden = s.id !== 'screen-' + screen));
@@ -1267,6 +1394,7 @@
       /* marco sin historial */
     }
     if (screen === 'invertir') renderWhere();
+    if (screen === 'datos') datosSub(store.get('datosSub') || 'variable');
     renderScreen(screen);
     renderCharts();
   }
@@ -1280,7 +1408,18 @@
 
   /* ---------- Biblioteca local ---------- */
   st.lib = { series: [], macro: {} };
+  // Ventana del análisis: por ahora del 22/08/2023 al 22/08/2026 (tres años de ruedas). Se fija una vez
+  // por versión; después se cambia en Biblioteca (fecha de inicio y fecha de corte).
+  const WINDOW = { inicio: '2023-08-22', corte: '2026-08-22', v: 1 };
+  if (store.get('ventana') !== WINDOW.v) {
+    store.set('inicio', WINDOW.inicio);
+    store.set('corte', WINDOW.corte);
+    store.set('ventana', WINDOW.v);
+  }
   const libCut = () => store.get('corte') || '';
+  const libFrom = () => store.get('inicio') || '';
+  const windowText = () => (libFrom() && libCut() ? `del ${fmtDay(libFrom())} al ${fmtDay(libCut())}` : libCut() ? `hasta el ${fmtDay(libCut())}` : libFrom() ? `desde el ${fmtDay(libFrom())}` : 'con todos los datos guardados');
+  const fmtDay = (d) => d.split('-').reverse().join('/');
   async function refreshLib() {
     // Un solo activo por nemotécnico, siempre (tramos con número de descarga u otros nombres del mismo activo)
     await PF.lib.mergeDuplicates().catch(() => 0);
@@ -1292,7 +1431,7 @@
     PF.data.combineSeries(
       st.lib.series
         .filter((r) => r.use !== false)
-        .map((r) => PF.lib.toSeries(r, libCut()))
+        .map((r) => PF.lib.toSeries(r, libCut(), libFrom()))
         .filter((x) => x.dates.length >= 3)
     );
   function useLibrary(msg) {
@@ -1301,7 +1440,7 @@
     st.series = usable;
     const plan = suggestSettings(usable);
     const ok = mergeLoaded(true);
-    if (ok) status(msg ? `${msg} ${plan}`.trim() : `Análisis con la biblioteca local: ${usable.length} instrumentos${libCut() ? `, datos hasta el ${libCut()}` : ''}.`, 'ok');
+    if (ok) status(msg ? `${msg} ${plan}`.trim() : `Análisis con la biblioteca local: ${usable.length} instrumentos, ${windowText()}.`, 'ok');
     return ok;
   }
   function libStatus(msg, kind) {
@@ -1333,8 +1472,9 @@
     const n = L.series.reduce((q, r) => q + r.dates.length, 0);
     const last = (a) => a[a.length - 1];
     $('lib-cut').value = cut;
+    $('lib-from').value = libFrom();
     $('lib-summary').textContent = L.series.length
-      ? `${L.series.length} instrumentos y ${Object.keys(L.macro).length} variables macro guardados, con ${n.toLocaleString('es-CO')} datos diarios. ${cut ? `Los cálculos usan los datos hasta el ${cut}.` : 'Los cálculos usan todos los datos guardados.'}`
+      ? `${L.series.length} instrumentos y ${Object.keys(L.macro).length} variables macro guardados, con ${n.toLocaleString('es-CO')} datos diarios. Los cálculos usan los datos ${windowText()}.`
       : 'La biblioteca está vacía: sube los históricos de la BVC en Datos (o actualiza en Mercado, en la app de escritorio) y quedan guardados aquí.';
     $('lib-table').innerHTML = L.series.length
       ? '<thead><tr><th>Usar</th><th>Instrumento</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th class="n">Datos</th><th>Cantidad y volumen</th><th>Fuente</th><th>Última fecha agregada</th><th></th></tr></thead><tbody>' +
@@ -1382,7 +1522,7 @@
     if (!list.length && st.parsed && st.parsed.dates.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))) list = st.parsed.names.map((name, i) => ({ name, dates: st.parsed.dates, prices: st.parsed.values[i] }));
     const mi = PF.data.guessMarket(list.map((r) => r.name));
     const market = list[mi] && PF.data.isMarketName(list[mi].name) ? list[mi].name : null;
-    return PF.matriz.workbook(list, { calendar, market, cut: libCut() });
+    return PF.matriz.workbook(list, { calendar, market, cut: libCut(), from: libFrom() });
   }
   function wireLib() {
     const box = $('screen-biblioteca');
@@ -1406,8 +1546,8 @@
         await PF.lib.setUse(t.dataset.libUse, t.checked);
         await refreshLib();
         useLibrary();
-      } else if (t.id === 'lib-cut') {
-        store.set('corte', t.value || '');
+      } else if (t.id === 'lib-cut' || t.id === 'lib-from') {
+        store.set(t.id === 'lib-cut' ? 'corte' : 'inicio', t.value || '');
         renderLib();
         useLibrary();
       } else if (t.id === 'lib-file' && t.files && t.files[0]) {
@@ -1479,7 +1619,7 @@
       store.set('banrepSeed', B.version);
     }
     await refreshLib();
-    if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos${libCut() ? `, hasta el ${libCut()}` : ''}. Para agregar fechas nuevas, sube los archivos en Datos.`);
+    if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos, ${windowText()}. Para agregar fechas nuevas, sube los archivos en Datos.`);
   }
 
   /* ---------- Paso a paso y betas de Damodaran ---------- */
@@ -1504,10 +1644,23 @@
       ports: PORTS,
       user: st.conf && st.conf.me ? st.conf.me : null,
       tb: st.model ? PF.model.treynorBlack(st.model) : null,
+      inflation: lastInflation(),
+      macroRel: st.model ? PF.macro.relateAll(marketSeries(), macroData()) : {},
+      prp: Object.assign({}, store.get('prp') || {}, (() => {
+        const o = {};
+        const p = store.get('prp') || {};
+        const tes = libSeries().filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name)).sort((a, b) => (b.dur || 0) - (a.dur || 0))[0];
+        if ((p.tes10 == null || p.tes10 === '') && tes) o.tes10 = tes.prices[tes.prices.length - 1] * 100;
+        if ((p.picol == null || p.picol === '') && Number.isFinite(lastInflation())) o.picol = lastInflation() * 100;
+        return o;
+      })()),
+      volRatio: volRatio(),
+      shares: store.get('shares') || {},
+      deCalc: store.get('deCalc') || {},
       width: Math.min(760, Math.max(320, ($('pasos') && $('pasos').clientWidth - 40) || 640)),
     };
   }
-  const pasosHTML = (ctx) => PF.pasos.render(ctx) + PF.frontera.render(ctx);
+  const pasosHTML = (ctx) => PF.pasos.render(ctx) + PF.frontera.render(ctx) + PF.riesgo.render(ctx);
   function renderPasos() {
     if (!st.model) return;
     try {
@@ -1560,6 +1713,13 @@
         all[t.dataset.dam] = Object.assign({}, all[t.dataset.dam], { [t.dataset.f]: t.value });
         store.set('dam', all);
         renderPasos();
+      } else if (t.dataset && t.dataset.de) {
+        const all = store.get('deCalc') || {};
+        all[t.dataset.de] = Object.assign({}, all[t.dataset.de], { [t.dataset.f]: t.value });
+        store.set('deCalc', all);
+        renderPasos();
+        const el = $('paso-de');
+        if (el) el.scrollIntoView({ block: 'nearest' });
       } else if (t.id === 'dam-crp') {
         const v = parseFloat(String(t.value).replace(',', '.'));
         store.set('crp', Number.isFinite(v) ? v / 100 : 0);
@@ -1568,6 +1728,16 @@
         const file = t.files[0];
         file.arrayBuffer().then((buf) => loadDamodaran((X) => X.read(new Uint8Array(buf), { type: 'array' }), file.name));
       }
+    });
+    box.addEventListener('click', (ev) => {
+      const b = ev.target.closest('[data-de-use]');
+      if (!b) return;
+      const all = store.get('dam') || {};
+      all[b.dataset.deUse] = Object.assign({}, all[b.dataset.deUse], { de: b.dataset.deVal });
+      store.set('dam', all);
+      renderPasos();
+      const el = $('dam-panel');
+      if (el) el.scrollIntoView({ block: 'start' });
     });
     box.addEventListener('click', async (ev) => {
       if (!ev.target.closest('#dam-download') || !globalThis.bvc || !globalThis.bvc.damodaran) return;
@@ -1587,7 +1757,8 @@
     const cut = libCut();
     const out = {};
     for (const [k, d] of Object.entries((st.lib && st.lib.macro) || {})) {
-      const keep = d.dates.map((t) => !cut || t <= cut);
+      const from = libFrom();
+      const keep = d.dates.map((t) => (!cut || t <= cut) && (!from || t >= from));
       out[k] = { dates: d.dates.filter((_, i) => keep[i]), values: d.values.filter((_, i) => keep[i]), source: d.source, updated: d.updated };
     }
     return out;
@@ -1905,6 +2076,7 @@
     });
     for (const id of ['rettype', 'history', 'div']) $(id).addEventListener('change', compute);
     wirePasos();
+    wireRf();
     wireMacro();
     wireLib();
     $('sistema').addEventListener('change', (ev) => {
@@ -2095,7 +2267,7 @@
     // Variables macro descargadas por la app de escritorio
     async setMacro(data) {
       // Las variables que vienen del Banco de la República no se mezclan con otras fuentes
-      const fromBanrep = (k) => st.lib && st.lib.macro && st.lib.macro[k] && /^Banco de la República/.test(st.lib.macro[k].source || '');
+      const fromBanrep = (k) => st.lib && st.lib.macro && st.lib.macro[k] && /^(Banco de la República|Superintendencia Financiera)/.test(st.lib.macro[k].source || '');
       for (const [k, d] of Object.entries(data || {})) if (d && d.dates && !fromBanrep(k)) await PF.lib.saveMacro(k, d, d.source);
       await refreshLib();
       if (st.screen === 'macro') renderMacro();

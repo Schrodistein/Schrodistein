@@ -154,10 +154,11 @@
     const N = m.names.length;
     const head = `<tr><th></th>${m.names.map((n) => `<th class="n">${esc(n)}</th>`).join('')}</tr>`;
     const mat = (M, fmt) => `<div class="table-scroll"><table class="data"><thead>${head}</thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td>${M[i].map((x, j) => `<td class="n${i === j ? ' diag' : ''}">${fmt(x)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+    const matC = (M) => `<div class="table-scroll"><table class="data corr-likert"><thead>${head}</thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td>${M[i].map((x) => { const lk = PF.stats.likert(x); return `<td class="n" style="background:${lk.color};color:#1d1d1f" title="${esc(lk.label)}">${n4(x)}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div>`;
     out.push(`<div class="panel"><h2>4. Matrices de todos los activos (anuales)</h2>
       <div class="table-scroll"><table class="data"><thead><tr><th>Activo</th><th class="n">E(R)</th><th class="n">Varianza σ²</th><th class="n">Desviación σ</th></tr></thead><tbody>${m.names.map((n, i) => `<tr><td>${esc(n)}</td><td class="n">${pct(m.mu[i])}</td><td class="n">${nf(m.Sigma[i][i], 6)}</td><td class="n">${pct(m.vol[i])}</td></tr>`).join('')}</tbody></table></div>
       <h3>Matriz de varianzas y covarianzas Σ</h3><p class="hint">La diagonal son las varianzas σᵢ²; fuera de ella, las covarianzas σᵢⱼ, simétricas (σᵢⱼ = σⱼᵢ). Es la matriz que usa el optimizador de Markowitz.</p>${mat(m.Sigma, (x) => nf(x, 6))}
-      <h3>Matriz de correlaciones ρ</h3><p class="hint">ρᵢⱼ = σᵢⱼ / (σᵢ σⱼ). La diagonal vale 1: cada activo está perfectamente correlacionado consigo mismo.</p>${mat(m.corr, (x) => n4(x))}</div>`);
+      <h3>Matriz de correlaciones ρ</h3><p class="hint">ρᵢⱼ = σᵢⱼ / (σᵢ σⱼ). La diagonal vale 1: cada activo está perfectamente correlacionado consigo mismo. Cada celda lleva el color de la escala de Likert: verde = totalmente de acuerdo (+1, se mueven juntos), amarillo = sin relación (0), rojo = totalmente en desacuerdo (−1, se mueven en sentido contrario).</p>${matC(m.corr)}${PF.charts && PF.charts.likertLegend ? PF.charts.likertLegend() : ''}</div>`);
 
     // Varianza del portafolio
     const e = ctx.P && ctx.P.recommended;

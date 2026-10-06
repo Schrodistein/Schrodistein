@@ -201,7 +201,11 @@
         }
       }
       if (di < 0) continue;
-      for (let k = di + 1; k < r.length; k++) {
+      // Valor: la primera cifra después de la fecha o, si no hay, antes (VALOR, …, VIGENCIADESDE)
+      const ks = r.map((_, k) => k).filter((k) => k !== di);
+      const after = ks.filter((k) => k > di).sort((a, b) => a - b);
+      const before = ks.filter((k) => k < di);
+      for (const k of after.concat(before)) {
         const v = toNum(r[k]);
         if (fin(v)) {
           pts.push([d, v]);
@@ -285,29 +289,38 @@
   }
 
   function parseFile(text, name) {
-    const rows = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
-    if (rows.length < 3) throw new Error(`«${name}» no tiene datos suficientes`);
-    const sep = [';', '\t', ','].find((c) => rows[0].includes(c)) || ',';
-    const head = rows[0].split(sep).map((h) => h.trim().toLowerCase());
-    let di = head.findIndex((h) => /fecha|date|periodo|año|ano|mes/.test(h));
-    if (di < 0) di = 0;
-    const vi = head.findIndex((h, i) => i !== di);
-    const cells = rows.slice(1).map((l) => l.split(sep));
-    // Coma decimal: «10,5» o «4.230,25» (punto de miles), como los guarda Excel en español
-    const dc = sep !== ',' && cells.some((c) => {
-      const v = String(c[vi] || '');
-      return /,\d/.test(v) && v.lastIndexOf(',') > v.lastIndexOf('.');
+    const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/).filter((l) => l.trim());
+    if (lines.length < 3) throw new Error(`«${name}» no tiene datos suficientes`);
+    // Separador y comillas como en Excel: «"$3.209,78","COP","06/10/2026"» (TRM de datos.gov.co)
+    const split = PF.data.splitLine;
+    const sep = [';', '\t', ','].map((c) => [c, split(lines[0], c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const rows = lines.map((l) => split(l, sep));
+    const head = rows[0].map((h) => h.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim());
+    const di = head.findIndex((h) => /fecha|date|periodo|ano|mes|vigencia ?desde/.test(h));
+    const vi = head.findIndex((h, i) => i !== di && /^(valor|value|trm|tasa|dato|indice|variacion|tasa de desempleo|inflacion|pib)/.test(h));
+    // Formato de toda la columna: si alguna celda trae coma decimal («4.230,25»), un «4.301» es 4301
+    const dcCol = (k) => rows.slice(1).some((r) => {
+      const v = String(r[k] || '').replace(/[\s$%]/g, '');
+      return /,\d+$/.test(v) && v.lastIndexOf(',') > v.lastIndexOf('.');
     });
-    const pts = [];
-    for (const c of cells) {
-      const d = normDate(String(c[di] || '').trim());
-      let v = String(c[vi] || '').trim().replace(/[%\s$]/g, '');
-      v = dc ? v.replace(/\./g, '').replace(',', '.') : v.replace(/,/g, '');
-      const x = parseFloat(v);
-      if (d && fin(x)) pts.push([d, x]);
+    const numCol = (k) => {
+      const dc = dcCol(k);
+      return (c) => {
+        const v = String(c == null ? '' : c).trim().replace(/[%\s$]/g, '');
+        if (!/^-?[\d.,]+$/.test(v)) return c;
+        const x = parseFloat(dc ? v.replace(/\./g, '').replace(',', '.') : v.replace(/,/g, ''));
+        return fin(x) ? x : c;
+      };
+    };
+    if (di >= 0 && vi >= 0) {
+      try {
+        const nv = numCol(vi);
+        return parseRows(rows.slice(1).map((r) => [r[di], nv(r[vi])]), name);
+      } catch (e) {
+        /* se intenta abajo con todas las columnas */
+      }
     }
-    if (pts.length < 3) throw new Error(`En «${name}» no se reconocieron fechas y valores`);
-    return sortPts(pts);
+    return parseRows(rows, name);
   }
   function normDate(t) {
     let m = t.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
@@ -515,12 +528,13 @@
         const cells = keys.map((k) => {
           const r = relate(a, data[k], k);
           if (!r.ok) return '<td class="n">—</td>';
-          const cl = r.p < 0.05 ? (r.corr > 0 ? 'pos' : 'neg') : '';
-          return `<td class="n ${cl}" title="b = ${nf(r.b * 100)} pp · t = ${nf(r.t)} · n = ${r.n}">${nf(r.corr)}${r.p < 0.05 ? ' *' : ''}</td>`;
+          // Color de la escala de Likert (verde +1, amarillo 0, rojo −1); R² = ρ² en el título
+          const lk = PF.stats.likert(r.corr);
+          return `<td class="n" style="background:${lk.color};color:#1d1d1f" title="${lk.label} · R² = ${nf(r.corr * r.corr)} · b = ${nf(r.b * 100)} pp · t = ${nf(r.t)} · n = ${r.n}">${nf(r.corr)}${r.p < 0.05 ? ' *' : ''}</td>`;
         });
         return `<tr${a === market ? ' class="hl"' : ''}><td>${esc(a.name)}${a === market ? ' (índice)' : ''}</td>${cells.join('')}</tr>`;
       });
-      table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th>${keys.map((k) => `<th class="n">${VARS[k].label}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>
+      table = `<div class="table-scroll"><table class="data"><thead><tr><th>Activo</th>${keys.map((k) => `<th class="n">${VARS[k].label}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>${PF.charts && PF.charts.likertLegend ? PF.charts.likertLegend() : ''}
         `;
     }
     return { cards: cards.join(''), table, results };

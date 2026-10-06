@@ -284,7 +284,8 @@
       .replace(/[^a-z0-9% ]+/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-  const isDateHdr = (h) => /(^| )(fecha|date|time|dia|periodo)( |$)/.test(norm(h));
+  // «VIGENCIADESDE»: TRM de datos.gov.co (Superintendencia Financiera), fechada por el día en que empieza a regir
+  const isDateHdr = (h) => /(^| )(fecha|date|time|dia|periodo)( |$)|^vigencia ?desde$/.test(norm(h));
   const NOT_PRICE = /(%|variacion|var |cambio|change|volumen|volume|vol$|cantidad|monto|apertura|open|maximo|max|high|minimo|min|low|anterior|previo|prev|promedio|avg|numero|nro)/;
   const PRICE_LEVELS = [
     /(cierre ajustado|adj close|adjusted close|precio ajustado)/,
@@ -396,6 +397,8 @@
   const cleanName = (n) => String(n).replace(DOWNLOAD_ID, '').replace(/[\u00a0\u200b\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
 
   function nameFromFile(fileName) {
+    // TRM de datos.gov.co o del Banco de la República: un solo nombre, sea cual sea el archivo
+    if (/tasa[ _-]*de[ _-]*cambio[ _-]*representativa|(^|[^a-z])trm([^a-z]|$)/i.test(String(fileName || ''))) return 'TRM';
     return String(fileName || 'Activo')
       .replace(/\.[a-z0-9]+$/i, '')
       .replace(/\s*(\(\d+\))$/, '')
@@ -431,7 +434,7 @@
     const strCells = body.map((r) => (typeof r[hd.pi] === 'number' ? '' : clean(r[hd.pi])));
     // Las tasas no llevan separador de miles: «10.500» es 10,5 %, y «10,5» también
     const dc = hd.rate ? strCells.some((c) => /,\d/.test(c) && !/\./.test(c)) : columnDecimalComma(strCells.filter(Boolean), ',');
-    const spanish = hd.head.some((h) => /fecha|cierre|ultimo|apertura|precio/.test(norm(h)));
+    const spanish = hd.head.some((h) => /fecha|cierre|ultimo|apertura|precio|vigencia|valor/.test(norm(h)));
     const strDates = parseDates(body.map((r) => (cellDate(r[hd.di]) || clean(r[hd.di]))), spanish);
     // Días sin negociación: la BVC repite un precio de referencia con cantidad vacía.
     // Si el archivo trae cantidad o volumen y casi siempre tiene valor, esos días se omiten.
@@ -841,6 +844,27 @@
     return { price: prices[lo], date: d[lo], exact: d[lo] === iso };
   }
 
+  /* Escala de Likert para leer una matriz de correlaciones grande: +1 «totalmente de acuerdo» (verde,
+   * se mueven juntos en proporción directa), 0 «ni de acuerdo ni en desacuerdo» (amarillo, sin relación
+   * lineal), −1 «totalmente en desacuerdo» (rojo, proporción inversa). Entre esos puntos el color se
+   * interpola; son los mismos tres colores de la escala de color de Excel (rojo-amarillo-verde). */
+  const LIKERT = [
+    { min: 0.6, label: 'Totalmente de acuerdo', desc: 'correlación directa fuerte (0,6 a 1)' },
+    { min: 0.2, label: 'De acuerdo', desc: 'correlación directa moderada (0,2 a 0,6)' },
+    { min: -0.2, label: 'Ni de acuerdo ni en desacuerdo', desc: 'sin relación lineal (−0,2 a 0,2)' },
+    { min: -0.6, label: 'En desacuerdo', desc: 'correlación inversa moderada (−0,6 a −0,2)' },
+    { min: -Infinity, label: 'Totalmente en desacuerdo', desc: 'correlación inversa fuerte (−1 a −0,6)' },
+  ];
+  const LK = { red: [248, 105, 107], yellow: [255, 235, 132], green: [99, 190, 123] };
+  function likert(r) {
+    const x = Math.max(-1, Math.min(1, Number.isFinite(r) ? r : 0));
+    const [a, b, t] = x < 0 ? [LK.yellow, LK.red, -x] : [LK.yellow, LK.green, x];
+    const rgb = a.map((v, k) => Math.round(v + (b[k] - v) * t));
+    const hex = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+    const lv = LIKERT.findIndex((q) => x >= q.min);
+    return { color: hex, label: LIKERT[lv].label, desc: LIKERT[lv].desc, point: 5 - lv };
+  }
+
   const isMarketName = (n) => MARKET_RE.test(n);
   function guessMarket(names) {
     // Primero el MSCI COLCAP (no el ETF ICOLCAP), luego cualquier índice de renta variable
@@ -851,7 +875,7 @@
   }
 
   Object.assign(PF, {
-    stats: { sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
-    data: { assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
+    stats: { likert, LIKERT, LK, sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
+    data: { splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

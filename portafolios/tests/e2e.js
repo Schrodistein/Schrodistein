@@ -74,6 +74,19 @@ const shots = process.argv[3];
     // Guía para operar en la BVC
     await page.click('#tab-datos');
     if (await page.$('#tab-guia')) errors.push(label + ': Guía debe estar dentro de Datos');
+    // Submenú de Datos: renta fija con tasa libre de riesgo y primas
+    await page.click('#datos-sub [data-sub="fija"]');
+    if (await page.isHidden('#rf-panel') || await page.isHidden('#prp-panel') || !(await page.isHidden('#drop'))) errors.push(label + ': el submenú de renta fija no cambia la vista');
+    await page.fill('#prp-tes10', '11');
+    await page.fill('#prp-ust10', '4');
+    await page.fill('#prp-picol', '5');
+    await page.fill('#prp-pius', '2');
+    await page.fill('#prp-erp', '4.5');
+    await page.press('#prp-erp', 'Tab');
+    await page.waitForTimeout(300);
+    if (!/Prima por riesgo país/.test(await page.textContent('#prp-out')) || !(await page.$('#prp-btns [data-use-em]'))) errors.push(label + ': no se calculan las primas');
+    if (shots) await page.screenshot({ path: `${shots}/${label}-rentafija.png`, fullPage: true });
+    await page.click('#datos-sub [data-sub="guia"]');
     if ((await page.$$('#guia .guia-ch')).length < 10) errors.push(label + ': la guía no tiene sus capítulos');
     if (!/Con tus datos/.test(await page.textContent('#guia'))) errors.push(label + ': la guía no usa los datos cargados');
     if (shots) await page.screenshot({ path: `${shots}/${label}-guia.png`, fullPage: false });
@@ -108,6 +121,8 @@ const shots = process.argv[3];
     if (!/Markowitz \(1952\)/.test(pasos) || !/βL = βU/.test(pasos) || !/Varianza del portafolio/.test(pasos)) errors.push(label + ': paso a paso incompleto');
     if (!/Cómo se calcula y se grafica la frontera eficiente/.test(pasos) || !/Dónde queda el portafolio elegido/.test(pasos) || !/promedian las correlaciones/.test(pasos)) errors.push(label + ': falta el paso a paso de la frontera');
     if ((await page.$$('#pasos .chart-box svg')).length < 2) errors.push(label + ': faltan las gráficas de la frontera y la SML en el paso a paso');
+    for (const id of ['paso-erm', 'paso-riesgo', 'paso-r2', 'paso-primas', 'paso-de']) if (!(await page.$('#' + id))) errors.push(`${label}: falta la sección ${id} del paso a paso`);
+    if (!(await page.$('#pasos table.corr-likert td[style*="background"]'))) errors.push(label + ': la matriz de correlación no lleva los colores de Likert');
     if (shots) await page.screenshot({ path: `${shots}/${label}-pasos.png`, fullPage: true });
     await page.click('#tab-macro');
     if ((await page.$$('#macro-cards .macro-card')).length !== 4) errors.push(label + ': faltan las 4 variables macro');
@@ -181,7 +196,9 @@ const shots = process.argv[3];
     // Siempre cotizaciones diarias: una fila por rueda
     const freq = await page.$eval('#freq', (x) => x.value);
     const days = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (freq !== 'diaria' || days < 1000) errors.push(`archivos: frecuencia ${freq}, ruedas unidas ${days}`);
+    if (freq !== 'diaria' || days < 550 || days > 700) errors.push(`archivos: frecuencia ${freq}, ruedas unidas ${days} (ventana 22/08/2023 a 22/08/2026)`);
+    const first = await page.$eval('#csv', (t) => t.value.trim().split('\n')[1].split(/[;,]/)[0]);
+    if (first < '2023-08-22') errors.push('archivos: la ventana de análisis no empieza el 22/08/2023: ' + first);
     if (shots) await page.screenshot({ path: `${shots}/archivos-datos.png`, fullPage: true });
     // Compras por número de acciones y fecha: el precio sale del cierre de ese día
     await page.click('#tab-confirmar');
@@ -242,7 +259,7 @@ const shots = process.argv[3];
     const market = await page.$eval('#market', (s) => s.value);
     if (market !== 'COLCAP') errors.push('bvc: índice detectado ' + market);
     const ruedas = await page.$eval('#csv', (t) => t.value.trim().split('\n').length - 1);
-    if (ruedas < 700) errors.push('bvc: ruedas unidas ' + ruedas);
+    if (ruedas < 500) errors.push('bvc: ruedas unidas ' + ruedas);
     if (shots) await page.screenshot({ path: `${shots}/bvc-datos.png`, fullPage: true });
     await page.close();
   }
@@ -256,7 +273,7 @@ const shots = process.argv[3];
       let seed = 11 * (k + 2);
       const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
       const lines = ['Bolsa de Valores de Colombia;;;;', 'Histórico de operaciones;;;;', 'Nemotécnico;Fecha Operación;Cantidad;Volumen ($);Precio de Cierre ($)'];
-      for (let t = Date.UTC(2022, 0, 3), m = 0; m < 400; t += 864e5) {
+      for (let t = Date.UTC(2024, 0, 2), m = 0; m < 400; t += 864e5) {
         const d = new Date(t);
         if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
         m++;

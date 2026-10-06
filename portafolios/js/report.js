@@ -271,6 +271,11 @@
       }
       Co.push(row);
     }
+    // Escala de Likert (formato condicional de 3 colores sobre la matriz)
+    Co.push([]);
+    Co.push([{ v: 'Colores: escala de Likert de la correlación', s: 'b' }]);
+    PF.stats.LIKERT.slice().reverse().forEach((q, k) => Co.push([`${k + 1}. ${q.label}`, { v: q.desc, s: 'n' }]));
+    Co.push([{ v: 'Verde = +1 (se mueven juntos, no diversifican), amarillo = 0 (sin relación lineal), rojo = −1 (se mueven en sentido contrario, cubren el riesgo).', s: 'n' }]);
 
     /* ---------- Portafolios ---------- */
     const Pt = [];
@@ -451,7 +456,7 @@
       { name: 'Estadisticas', rows: E, cols: [44].concat(wide(NS, 14), [52, 60]), freeze: { row: 12, col: 1 } },
       { name: 'Desviaciones', rows: D, cols: [44].concat(wide(2 * NS + pairs.length, 14)), freeze: { row: 1, col: 1 } },
       { name: 'Covarianza', rows: Cv, cols: [16].concat(wide(NS, 13)) },
-      { name: 'Correlacion', rows: Co, cols: [16].concat(wide(NS, 13)) },
+      { name: 'Correlacion', rows: Co, cols: [16].concat(wide(NS, 13)), colorScale: [`B4:${col(NS)}${3 + NS}`] },
       { name: 'Portafolios', rows: Pt, cols: [40].concat(wide(N, 13), [34]) },
       { name: 'Frontera', rows: Fr, cols: [12, 12, 10].concat(wide(N, 12)) },
     ];

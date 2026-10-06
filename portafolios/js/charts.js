@@ -245,8 +245,9 @@
   /* Mapa de calor de correlaciones (escala divergente, gris en cero). */
   function corr(o) {
     const n = o.names.length;
-    const W = Math.max(280, o.width);
-    const labelW = Math.min(150, W * 0.32);
+    const labelW = Math.min(150, Math.max(280, o.width) * 0.32);
+    // Con muchos activos la matriz se desplaza a lo ancho en lugar de hacer las celdas ilegibles
+    const W = Math.max(280, o.width, labelW + 4 + 14 * n);
     const cell = Math.max(14, Math.min(40, (W - labelW - 4) / n));
     const top = 22;
     const H = top + cell * n + 4;
@@ -261,16 +262,27 @@
       s += `<text x="${labelW - 6}" y="${y + cell / 2 + 4}" text-anchor="end"><tspan class="num">${i + 1}</tspan> ${esc(name)}</text>`;
       o.names.forEach((nm2, j) => {
         const v = o.corr[i][j];
-        const pole = v >= 0 ? 'var(--div-pos)' : 'var(--div-neg)';
-        const k = Math.round(Math.min(1, Math.abs(v)) * 100);
+        // Escala de Likert: verde +1, amarillo 0, rojo −1
+        const lk = PF.stats.likert(v);
         const x = labelW + j * cell;
-        s += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cell - 2}" rx="2" style="fill:color-mix(in oklab, ${pole} ${k}%, var(--div-mid))"${tipAttr(`<b>${esc(nm)}</b> × <b>${esc(nm2)}</b><br>correlación <span class="num">${f1(v)}</span>`)}/>`;
-        if (cell >= 34 && i !== j) s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:${k > 55 ? '#fff' : 'var(--ink)'};font-size:10px">${esc(num(v, 1))}</text>`;
+        s += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cell - 2}" rx="2" style="fill:${lk.color}"${tipAttr(`<b>${esc(nm)}</b> × <b>${esc(nm2)}</b><br>correlación <span class="num">${num(v, 2)}</span><br>${esc(lk.label)}`)}/>`;
+        if (cell >= 34 && i !== j) s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:#1d1d1f;font-size:10px">${esc(num(v, 1))}</text>`;
       });
     });
     s += '</svg>';
-    return s;
+    return s + likertLegend();
   }
 
-  PF.charts = { riskReturn, sml, weights, corr, esc, pct, num, f1, ticks };
+  /* Leyenda de la escala de Likert de las correlaciones (barra de −1 a +1 y los cinco niveles). */
+  function likertLegend() {
+    const L = PF.stats.LIKERT;
+    const C = PF.stats.LK;
+    const rgb = (a) => `rgb(${a.join(',')})`;
+    return `<div class="likert" role="note" aria-label="Escala de colores de la correlación">
+      <div class="likert-bar" style="background:linear-gradient(90deg, ${rgb(C.red)}, ${rgb(C.yellow)}, ${rgb(C.green)})"><span>−1</span><span>0</span><span>+1</span></div>
+      <ul>${L.slice().reverse().map((q, k) => `<li><i style="background:${PF.stats.likert([-0.8, -0.4, 0, 0.4, 0.8][k]).color}"></i><b>${k + 1}. ${esc(q.label)}</b> <span>${esc(q.desc)}</span></li>`).join('')}</ul>
+    </div>`;
+  }
+
+  PF.charts = { likertLegend, riskReturn, sml, weights, corr, esc, pct, num, f1, ticks };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

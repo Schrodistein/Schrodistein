@@ -6,7 +6,7 @@
  * Celda: null | número | texto | { v, f, s }   (f = fórmula sin «=», s = estilo)
  * Estilos: h (encabezado), b (negrita), t (título), n (nota), pct, pctb, num2, num4,
  *          num6, int, money, moneyb, date (fecha m/d/yyyy), px (#,##0.00)
- * Hoja: { name, rows, cols, freeze, colorScale: ['B4:K13'] (rojo −1, amarillo 0, verde +1) } */
+ * Hoja: { name, rows, cols, freeze, colorScale: ['B4:K13'] (correlaciones: rojizos −1, amarillo 0, verdes +1) } */
 (function (root) {
   'use strict';
   const PF = (root.PF = root.PF || {});
@@ -39,6 +39,11 @@
     return `<c r="${at}"${s} t="inlineStr"><is><t xml:space="preserve">${esc(cell.v)}</t></is></c>`;
   }
 
+  // Escala de Likert de las correlaciones (rojizos negativos, amarillo cero, verdes positivos) por bandas
+  const BANDS_DEFAULT = [[-1, -0.6, '7A2012', 'FFFFFF'], [-0.6, -0.35, 'B23C20', 'FFFFFF'], [-0.35, -0.15, 'DF5C2C', 'FFFFFF'], [-0.15, -0.02, 'F28E37', '1D1D1F'], [-0.02, 0.02, 'FFDE46', '1D1D1F'], [0.02, 0.15, 'C2DE6E', '1D1D1F'], [0.15, 0.35, '81CC68', '1D1D1F'], [0.35, 0.6, '45A35F', 'FFFFFF'], [0.6, 1, '1C6B3A', 'FFFFFF']].map(([from, to, color, text]) => ({ from, to, color: '#' + color, text: '#' + text }));
+  const BANDS = (root.PF && root.PF.stats && root.PF.stats.LK_BANDS) || BANDS_DEFAULT;
+  const argb = (hex) => 'FF' + hex.replace('#', '').toUpperCase();
+  const dxfs = () => `<dxfs count="${BANDS.length}">${BANDS.map((b) => `<dxf><font><color rgb="${argb(b.text)}"/></font><fill><patternFill patternType="solid"><bgColor rgb="${argb(b.color)}"/></patternFill></fill></dxf>`).join('')}</dxfs>`;
   function sheetXml(sh) {
     const rows = sh.rows
       .map((row, r) => {
@@ -56,7 +61,7 @@
     }
     // Escala de color de 3 puntos (correlaciones: −1 rojo, 0 amarillo, +1 verde), formato condicional de Excel
     const cf = (sh.colorScale || [])
-      .map((range, k) => `<conditionalFormatting sqref="${range}"><cfRule type="colorScale" priority="${k + 1}"><colorScale><cfvo type="num" val="-1"/><cfvo type="num" val="0"/><cfvo type="num" val="1"/><color rgb="FFF8696B"/><color rgb="FFFFEB84"/><color rgb="FF63BE7B"/></colorScale></cfRule></conditionalFormatting>`)
+      .map((range) => `<conditionalFormatting sqref="${range}">${BANDS.map((b, i) => `<cfRule type="cellIs" dxfId="${i}" priority="${i + 1}" operator="between"><formula>${b.from}</formula><formula>${b.to}</formula></cfRule>`).join('')}</conditionalFormatting>`)
       .join('');
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${view}${cols}<sheetData>${rows}</sheetData>${cf}</worksheet>`;
   }
@@ -83,7 +88,7 @@
 <xf numFmtId="169" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="170" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
 <xf numFmtId="171" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
-</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>__DXFS__</styleSheet>`;
 
   function workbookParts(sheets) {
     const names = sheets.map((s) => s.name.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
@@ -110,7 +115,7 @@
         .map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`)
         .join('')}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     ]);
-    files.push(['xl/styles.xml', STYLES]);
+    files.push(['xl/styles.xml', STYLES.replace('__DXFS__', dxfs())]);
     sheets.forEach((sh, i) => files.push([`xl/worksheets/sheet${i + 1}.xml`, sheetXml(sh)]));
     return files;
   }

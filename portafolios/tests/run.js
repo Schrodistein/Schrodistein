@@ -960,12 +960,25 @@ test('Matriz de precios: sin sábados ni domingos (la TRM del sábado pasa al lu
   assert(mf.dates[0] === '2023-08-22', 'fecha de inicio');
 });
 
-test('Escala de Likert de las correlaciones: rojo −1, amarillo 0, verde +1', () => {
+test('Escala de Likert de las correlaciones: rojizos negativos, amarillo 0, verdes positivos', () => {
   const L = PF.stats.likert;
-  assert(L(1).color === '#63be7b' && L(0).color === '#ffeb84' && L(-1).color === '#f8696b', [L(1).color, L(0).color, L(-1).color].join());
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  const hue = (h) => {
+    const [r, g, b] = rgb(h).map((v) => v / 255);
+    const mx = Math.max(r, g, b);
+    const mn = Math.min(r, g, b);
+    const d = mx - mn || 1e-9;
+    const x = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (x * 60 + 360) % 360;
+  };
+  // Negativas: tonos rojizos/naranjas (0°-40°); cero: amarillo (45°-60°); positivas: verdes (75°-160°)
+  for (const v of [-1, -0.7, -0.4, -0.2, -0.05]) assert(hue(L(v).color) <= 40, `ρ = ${v}: ${L(v).color} (${hue(L(v).color)}°)`);
+  assert(hue(L(0).color) >= 45 && hue(L(0).color) <= 60, 'cero amarillo: ' + L(0).color);
+  for (const v of [0.05, 0.2, 0.4, 0.7, 1]) assert(hue(L(v).color) >= 75 && hue(L(v).color) <= 160, `ρ = ${v}: ${L(v).color} (${hue(L(v).color)}°)`);
+  assert(L(-1).text === '#ffffff' && L(0).text === '#1d1d1f' && L(1).text === '#ffffff', 'texto legible');
   assert(L(0.9).label === 'Totalmente de acuerdo' && L(0).label === 'Ni de acuerdo ni en desacuerdo' && L(-0.9).label === 'Totalmente en desacuerdo' && L(0.4).point === 4);
-  const x = PF.xlsx.build([{ name: 'C', rows: [[1, 0.5], [0.5, 1]], colorScale: ['A1:B2'] }]);
-  assert(new TextDecoder().decode(x).includes('<cfRule type="colorScale"'), 'formato condicional en el xlsx');
+  const x = new TextDecoder().decode(PF.xlsx.build([{ name: 'C', rows: [[1, 0.5], [0.5, 1]], colorScale: ['A1:B2'] }]));
+  assert(x.includes('<cfRule type="cellIs" dxfId="0"') && x.includes('<dxfs count="9">') && PF.stats.LK_BANDS.length === 9, 'bandas de color en el xlsx');
 });
 
 test('Tasa libre de riesgo y primas: candidatas de renta fija, Fisher, PRP de Damodaran', () => {

@@ -530,7 +530,7 @@
           if (!r.ok) return '<td class="n">—</td>';
           // Color de la escala de Likert (verde +1, amarillo 0, rojo −1); R² = ρ² en el título
           const lk = PF.stats.likert(r.corr);
-          return `<td class="n" style="background:${lk.color};color:#1d1d1f" title="${lk.label} · R² = ${nf(r.corr * r.corr)} · b = ${nf(r.b * 100)} pp · t = ${nf(r.t)} · n = ${r.n}">${nf(r.corr)}${r.p < 0.05 ? ' *' : ''}</td>`;
+          return `<td class="n" style="background:${lk.color};color:${lk.text}" title="${lk.label} · R² = ${nf(r.corr * r.corr)} · b = ${nf(r.b * 100)} pp · t = ${nf(r.t)} · n = ${r.n}">${nf(r.corr)}${r.p < 0.05 ? ' *' : ''}</td>`;
         });
         return `<tr${a === market ? ' class="hl"' : ''}><td>${esc(a.name)}${a === market ? ' (índice)' : ''}</td>${cells.join('')}</tr>`;
       });

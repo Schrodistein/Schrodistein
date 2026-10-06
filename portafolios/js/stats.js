@@ -961,10 +961,11 @@
     return { price: prices[lo], date: d[lo], exact: d[lo] === iso };
   }
 
-  /* Escala de Likert para leer una matriz de correlaciones grande: +1 «totalmente de acuerdo» (verde,
-   * se mueven juntos en proporción directa), 0 «ni de acuerdo ni en desacuerdo» (amarillo, sin relación
-   * lineal), −1 «totalmente en desacuerdo» (rojo, proporción inversa). Entre esos puntos el color se
-   * interpola; son los mismos tres colores de la escala de color de Excel (rojo-amarillo-verde). */
+  /* Escala de Likert para leer una matriz de correlaciones grande: +1 «totalmente de acuerdo» (verde
+   * oscuro: se mueven juntos en proporción directa), 0 «ni de acuerdo ni en desacuerdo» (amarillo: sin
+   * relación lineal), −1 «totalmente en desacuerdo» (rojo ladrillo: proporción inversa). Las negativas van
+   * en tonos rojizos (naranja → rojo → ladrillo) y las positivas en verdes (claro → oscuro), con un salto
+   * de tono apenas se deja el cero para que el signo se distinga a simple vista. */
   const LIKERT = [
     { min: 0.6, label: 'Totalmente de acuerdo', desc: 'correlación directa fuerte (0,6 a 1)' },
     { min: 0.2, label: 'De acuerdo', desc: 'correlación directa moderada (0,2 a 0,6)' },
@@ -972,15 +973,40 @@
     { min: -0.6, label: 'En desacuerdo', desc: 'correlación inversa moderada (−0,6 a −0,2)' },
     { min: -Infinity, label: 'Totalmente en desacuerdo', desc: 'correlación inversa fuerte (−1 a −0,6)' },
   ];
-  const LK = { red: [248, 105, 107], yellow: [255, 235, 132], green: [99, 190, 123] };
+  // Paradas de color: [ρ, rgb]
+  const LK_STOPS = [
+    [-1, [122, 32, 18]], // ladrillo oscuro
+    [-0.6, [168, 52, 30]], // ladrillo
+    [-0.35, [214, 72, 40]], // rojo teja
+    [-0.15, [236, 118, 42]], // naranja rojizo
+    [-0.02, [247, 166, 60]], // naranja
+    [0, [255, 222, 70]], // amarillo
+    [0.02, [184, 224, 100]], // verde amarillento
+    [0.15, [160, 214, 110]], // verde claro
+    [0.35, [96, 186, 98]], // verde
+    [0.6, [46, 140, 72]], // verde intenso
+    [1, [20, 92, 48]], // verde oscuro
+  ];
+  const LK = { red: LK_STOPS[0][1], yellow: LK_STOPS[5][1], green: LK_STOPS[10][1], stops: LK_STOPS };
+  const hexOf = (rgb) => '#' + rgb.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
   function likert(r) {
     const x = Math.max(-1, Math.min(1, Number.isFinite(r) ? r : 0));
-    const [a, b, t] = x < 0 ? [LK.yellow, LK.red, -x] : [LK.yellow, LK.green, x];
-    const rgb = a.map((v, k) => Math.round(v + (b[k] - v) * t));
-    const hex = '#' + rgb.map((v) => v.toString(16).padStart(2, '0')).join('');
+    let k = 0;
+    while (k < LK_STOPS.length - 2 && x > LK_STOPS[k + 1][0]) k++;
+    const [x0, c0] = LK_STOPS[k];
+    const [x1, c1] = LK_STOPS[k + 1];
+    const t = x1 > x0 ? (x - x0) / (x1 - x0) : 0;
+    const rgb = c0.map((v, i) => v + (c1[i] - v) * Math.max(0, Math.min(1, t)));
+    // Texto legible: blanco sobre los tonos oscuros, casi negro sobre los claros
+    const lum = (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
     const lv = LIKERT.findIndex((q) => x >= q.min);
-    return { color: hex, label: LIKERT[lv].label, desc: LIKERT[lv].desc, point: 5 - lv };
+    return { color: hexOf(rgb), text: lum < 0.5 ? '#ffffff' : '#1d1d1f', label: LIKERT[lv].label, desc: LIKERT[lv].desc, point: 5 - lv };
   }
+  /* Bandas para Excel (formato condicional por rangos, con el color del centro de cada banda). */
+  const LK_BANDS = [[-1, -0.6], [-0.6, -0.35], [-0.35, -0.15], [-0.15, -0.02], [-0.02, 0.02], [0.02, 0.15], [0.15, 0.35], [0.35, 0.6], [0.6, 1]].map(([a, b]) => {
+    const lk = likert(a === -1 ? -0.8 : b === 1 ? 0.8 : (a + b) / 2);
+    return { from: a, to: b, color: lk.color, text: lk.text };
+  });
 
   const isMarketName = (n) => MARKET_RE.test(n);
   function guessMarket(names) {
@@ -992,7 +1018,7 @@
   }
 
   Object.assign(PF, {
-    stats: { likert, LIKERT, LK, sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
+    stats: { likert, LIKERT, LK, LK_BANDS, sum, mean, dot, matVec, quad, covariance, variance, covMatrix, corrFromCov, solve, regress, pValue, normalCdf, eigSym, nearestCorr },
     data: { roleFromName, splitLine, assetKey, cleanName, CLASSES, DEFAULT_DUR, classify, rateIndex, priceOn, isMarketName, parseCSV, parseNumber, excelNum, toReturns, guessMarket, isSingleAsset, parseSeriesFile, parseSeriesText, seriesFromRows, wideSeriesFromRows, readRows, readText, hasDates, combineSeries, mergeSeries, detectLags, toCSV, periodKey },
   });
 })(typeof globalThis !== 'undefined' ? globalThis : this);

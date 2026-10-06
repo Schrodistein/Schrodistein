@@ -266,7 +266,7 @@
         const lk = PF.stats.likert(v);
         const x = labelW + j * cell;
         s += `<rect x="${x + 1}" y="${y + 1}" width="${cell - 2}" height="${cell - 2}" rx="2" style="fill:${lk.color}"${tipAttr(`<b>${esc(nm)}</b> × <b>${esc(nm2)}</b><br>correlación <span class="num">${num(v, 2)}</span><br>${esc(lk.label)}`)}/>`;
-        if (cell >= 34 && i !== j) s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:#1d1d1f;font-size:10px">${esc(num(v, 1))}</text>`;
+        if (cell >= 34 && i !== j) s += `<text class="num" x="${x + cell / 2}" y="${y + cell / 2 + 4}" text-anchor="middle" pointer-events="none" style="fill:${lk.text};font-size:10px">${esc(num(v, 1))}</text>`;
       });
     });
     s += '</svg>';
@@ -277,9 +277,9 @@
   function likertLegend() {
     const L = PF.stats.LIKERT;
     const C = PF.stats.LK;
-    const rgb = (a) => `rgb(${a.join(',')})`;
+    const grad = C.stops.map(([x, c]) => `rgb(${c.join(',')}) ${((x + 1) * 50).toFixed(1)}%`).join(', ');
     return `<div class="likert" role="note" aria-label="Escala de colores de la correlación">
-      <div class="likert-bar" style="background:linear-gradient(90deg, ${rgb(C.red)}, ${rgb(C.yellow)}, ${rgb(C.green)})"><span>−1</span><span>0</span><span>+1</span></div>
+      <div class="likert-bar" style="background:linear-gradient(90deg, ${grad})"><span style="color:#fff">−1</span><span>0</span><span style="color:#fff">+1</span></div>
       <ul>${L.slice().reverse().map((q, k) => `<li><i style="background:${PF.stats.likert([-0.8, -0.4, 0, 0.4, 0.8][k]).color}"></i><b>${k + 1}. ${esc(q.label)}</b> <span>${esc(q.desc)}</span></li>`).join('')}</ul>
     </div>`;
   }

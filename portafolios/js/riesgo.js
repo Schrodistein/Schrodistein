@@ -331,7 +331,7 @@
           .map(([k, r]) => {
             const lk = PF.stats.likert(r.corr);
             const adj = 1 - ((1 - r.r2) * (r.n - 1)) / (r.n - 2);
-            return `<tr><td>${esc((V[k] && V[k].label) || k)}</td><td class="n">${r.n}</td><td class="n" style="background:${lk.color};color:#1d1d1f">${nf(r.corr, 3)}</td><td class="n"><b>${nf(r.r2, 3)}</b></td><td class="n">${nf(adj, 3)}</td><td class="n">${nf(r.b, 4)}</td><td class="n">${nf(r.t, 2)}</td><td class="n">${fin(r.p) ? nf(r.p, 3) : '—'}</td><td>${r.p < 0.05 ? `Significativa: explica ${pct(r.r2, 0)} de la variación del índice` : 'No significativa al 5 %: con estos datos no se distingue de cero'}</td></tr>`;
+            return `<tr><td>${esc((V[k] && V[k].label) || k)}</td><td class="n">${r.n}</td><td class="n" style="background:${lk.color};color:${lk.text}">${nf(r.corr, 3)}</td><td class="n"><b>${nf(r.r2, 3)}</b></td><td class="n">${nf(adj, 3)}</td><td class="n">${nf(r.b, 4)}</td><td class="n">${nf(r.t, 2)}</td><td class="n">${fin(r.p) ? nf(r.p, 3) : '—'}</td><td>${r.p < 0.05 ? `Significativa: explica ${pct(r.r2, 0)} de la variación del índice` : 'No significativa al 5 %: con estos datos no se distingue de cero'}</td></tr>`;
           })
           .join('')}</tbody></table></div>
         <p class="hint">Un R² macro bajo no quiere decir que la variable no importe: los precios se anticipan a las cifras (se mueven con lo esperado, no con el dato publicado), y con pocos trimestres el estimador tiene mucho error. La sección Macro muestra además si la variable adelanta o rezaga al mercado.</p>` : '<p class="hint">Carga las variables macro (sección Macro) para ver su R² con el índice.</p>'}

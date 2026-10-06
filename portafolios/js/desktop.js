@@ -270,10 +270,6 @@
     $('mk-wipe').addEventListener('click', async () => {
       if (await api.borrarTodo()) status('Borrando los datos de la app; se cerrará en un momento.', 'warn');
     });
-    $('mk-bvc').addEventListener('click', () => {
-      api.abrirBVC();
-      status('Se abrió la BVC en otra ventana. Busca cada acción, descarga su histórico y la app lo importa sola al terminar la descarga.');
-    });
     $('mk-import').addEventListener('click', async () => {
       const r = await api.importar();
       if (r === null) status('');
@@ -313,7 +309,7 @@
       list.push({ name, yahoo: '', news: $('mk-new-news').value.trim() || name + ' acción', enabled: true, index: /colcap|indice|índice/i.test(name) });
       $('mk-new-name').value = '';
       $('mk-new-news').value = '';
-      saveAssets(list).then(() => status(`${name} agregado. Descarga su histórico con «Abrir la BVC y descargar».`, 'ok'));
+      saveAssets(list).then(() => status(`${name} agregado. Descarga su histórico en bvc.com.co y cárgalo con «Importar archivos de la BVC».`, 'ok'));
     });
     const saveSettings = () =>
       api

@@ -8,6 +8,11 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.3**
+- Macro: importa los boletines del DANE en **PDF** (la app encuentra la cifra, por ejemplo «En el segundo trimestre de 2025 … crece 2,1 %», y la muestra con su frase para revisarla antes de guardar), anexos en **Excel** (trimestres 2025-I, meses ene-25, fechas de Excel) y CSV; cada variable muestra el enlace a su información oficial (DANE, Banco de la República, Superintendencia Financiera).
+- Los históricos de la BVC se cargan solo a mano (se quitó la descarga directa). Sin avisos de noticias.
+- App de escritorio: al desinstalar se borra todo lo que guardó; botón «Borrar todos mis datos»; «Limpiar caché».
+
 **Versión 2.2**
 - App de escritorio: descarga directa de la BVC aprendida de una descarga manual (acciones y ETF por semestre, índices por trimestre), al abrir la app.
 - Un solo activo por nemotécnico también para las descargas con número delante del nombre; la biblioteca une los duplicados cada vez que se actualiza.

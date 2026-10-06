@@ -114,6 +114,105 @@
     return sortPts(pts);
   }
   // Archivo propio (DANE, Banco de la República…): columna de fecha y una de valor
+  /* Dónde publica cada variable su fuente oficial (para consultarla o descargar sus archivos). */
+  const OFFICIAL = {
+    pib: [['DANE · PIB trimestral (boletines y anexos)', 'https://www.dane.gov.co/index.php/estadisticas-por-tema/cuentas-nacionales/cuentas-nacionales-trimestrales'], ['Banco de la República · PIB', 'https://www.banrep.gov.co/es/estadisticas/producto-interno-bruto-pib']],
+    inflacion: [['DANE · Índice de precios al consumidor (IPC)', 'https://www.dane.gov.co/index.php/estadisticas-por-tema/precios-y-costos/indice-de-precios-al-consumidor-ipc'], ['Banco de la República · Inflación', 'https://www.banrep.gov.co/es/estadisticas/inflacion-total-y-meta']],
+    desempleo: [['DANE · Mercado laboral (GEIH: empleo y desempleo)', 'https://www.dane.gov.co/index.php/estadisticas-por-tema/mercado-laboral/empleo-y-desempleo'], ['Banco de la República · Tasa de desempleo', 'https://www.banrep.gov.co/es/estadisticas/tasas-de-empleo-y-desempleo']],
+    trm: [['Banco de la República · Tasa representativa del mercado (TRM)', 'https://www.banrep.gov.co/es/estadisticas/trm'], ['Superintendencia Financiera · TRM (datos abiertos)', 'https://www.datos.gov.co/Econom-a-y-Finanzas/Tasa-de-Cambio-Representativa-del-Mercado-Historic/mcec-87by']],
+  };
+  const escH = (x) => String(x == null ? '' : x).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const officialLinks = (key) => (OFFICIAL[key] || []).map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${escH(t)}</a>`).join(' · ');
+
+  /* Texto de un boletín del DANE en PDF → datos. Reconoce las frases con que el DANE presenta la
+   * cifra: «En el segundo trimestre de 2025pr, el Producto Interno Bruto … crece 2,1 %», «En
+   * septiembre de 2025 la variación anual del IPC fue 5,18 %», «la tasa de desempleo … fue 8,6 %».
+   * Devuelve cada fecha con su valor y la frase de donde salió, para revisarla antes de guardar. */
+  const MESES = { enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7, agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12 };
+  const TRIM = { primer: 1, primero: 1, segundo: 2, tercer: 3, tercero: 3, cuarto: 4 };
+  function parsePdfText(text, key) {
+    const t = String(text).replace(/\s+/g, ' ');
+    const out = new Map();
+    const num = (x) => parseFloat(x.replace(/\./g, '').replace(',', '.'));
+    const words = { pib: /(producto interno bruto|pib|econom[ií]a)/i, inflacion: /(ipc|inflaci[oó]n|variaci[oó]n anual|precios)/i, desempleo: /(desempleo|desocupaci[oó]n)/i, trm: /(trm|tasa de cambio|representativa)/i }[key];
+    const take = (date, after, idx) => {
+      // La cifra: el primer porcentaje que sigue a la fecha, en una ventana corta y con el tema correcto
+      const win = after.slice(0, 320);
+      if (words && !words.test(win)) return;
+      const m = win.match(/(-?\d{1,3}(?:[.,]\d{1,3})?)\s?%/);
+      if (!m) return;
+      let v = num(m[1]);
+      const pre = win.slice(0, m.index);
+      if (/(decrec|cay[óo]|contrajo|disminu|baj[óo]|negativ)/i.test(pre) && v > 0) v = -v;
+      if (!Number.isFinite(v) || out.has(date)) return;
+      out.set(date, { date, value: v, text: t.slice(Math.max(0, idx - 20), idx + Math.min(win.length, m.index + m[0].length + 20)).trim() });
+    };
+    if (key === 'pib') {
+      const re = /(primer|primero|segundo|tercer|tercero|cuarto)\s+trimestre\s+(?:de|del)?\s*(?:a[nñ]o\s+)?(\d{4})/gi;
+      for (const m of t.matchAll(re)) {
+        const q = TRIM[m[1].toLowerCase()];
+        take(`${m[2]}-${String(q * 3).padStart(2, '0')}-28`, t.slice(m.index + m[0].length), m.index);
+      }
+      // Cifra anual: «en el año 2024 … creció 1,7 %»
+      for (const m of t.matchAll(/(?:a[nñ]o|en)\s+(\d{4})(?:pr|p)?\s*[,.]?\s*(?:el )?(?:producto interno bruto|pib)/gi)) take(`${m[1]}-12-31`, t.slice(m.index + m[0].length), m.index);
+    } else {
+      const re = /(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+(?:de\s+|del\s+)?(\d{4})/gi;
+      for (const m of t.matchAll(re)) take(`${m[2]}-${String(MESES[m[1].toLowerCase()]).padStart(2, '0')}-28`, t.slice(m.index + m[0].length), m.index);
+    }
+    return [...out.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+
+  /* Filas de una hoja de Excel (DANE, Banco de la República…) → { dates, values }: en cada fila, una
+   * fecha (fecha de Excel, 2025-03, 2025-I, I-2025, mar-2025, 2025) y el primer número que la sigue. */
+  function parseRows(rows, name) {
+    const pts = [];
+    const qRe = /^(\d{4})\s*[-/ ]?\s*(?:t|q|trim(?:estre)?)?\s*(i{1,3}|iv|[1-4])$/i;
+    const qRe2 = /^(i{1,3}|iv|[1-4])\s*(?:t|q|trim(?:estre)?)?\s*[-/ ]?\s*(\d{4})$/i;
+    const roman = { i: 1, ii: 2, iii: 3, iv: 4 };
+    const mRe = /^(ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)[a-z]*\.?\s*[-/ ]?\s*(\d{2,4})$/i;
+    const MON = { ene: 1, feb: 2, mar: 3, abr: 4, may: 5, jun: 6, jul: 7, ago: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12 };
+    const toDate = (c) => {
+      if (c instanceof Date && !isNaN(c)) return c.toISOString().slice(0, 10);
+      if (typeof c === 'number' && c > 20000 && c < 80000) return new Date(Date.UTC(1899, 11, 30) + Math.round(c) * 864e5).toISOString().slice(0, 10);
+      if (typeof c === 'number' && c >= 1990 && c <= 2100 && Number.isInteger(c)) return `${c}-12-31`;
+      const s0 = String(c == null ? '' : c).trim().replace(/(pr|p)$/i, '');
+      let m = s0.match(qRe) || null;
+      if (m) return `${m[1]}-${String((roman[m[2].toLowerCase()] || +m[2]) * 3).padStart(2, '0')}-28`;
+      if ((m = s0.match(qRe2))) return `${m[2]}-${String((roman[m[1].toLowerCase()] || +m[1]) * 3).padStart(2, '0')}-28`;
+      if ((m = s0.match(mRe))) return `${m[2].length === 2 ? '20' + m[2] : m[2]}-${String(MON[m[1].toLowerCase().slice(0, 3)]).padStart(2, '0')}-28`;
+      return normDate(s0);
+    };
+    const toNum = (c) => {
+      if (typeof c === 'number') return c;
+      const s0 = String(c == null ? '' : c).trim().replace(/[%\s$]/g, '');
+      if (!/^-?[\d.,]+$/.test(s0)) return NaN;
+      const dc = /,\d{1,3}$/.test(s0) && (s0.lastIndexOf(',') > s0.lastIndexOf('.'));
+      return parseFloat(dc ? s0.replace(/\./g, '').replace(',', '.') : s0.replace(/,/g, ''));
+    };
+    for (const r of rows || []) {
+      if (!r) continue;
+      let di = -1;
+      let d = null;
+      for (let k = 0; k < r.length && di < 0; k++) {
+        const x = toDate(r[k]);
+        if (x) {
+          di = k;
+          d = x;
+        }
+      }
+      if (di < 0) continue;
+      for (let k = di + 1; k < r.length; k++) {
+        const v = toNum(r[k]);
+        if (fin(v)) {
+          pts.push([d, v]);
+          break;
+        }
+      }
+    }
+    if (pts.length < 3) throw new Error(`En «${name}» no se reconocieron al menos 3 filas con fecha y valor`);
+    return sortPts(pts);
+  }
+
   function parseFile(text, name) {
     const rows = String(text).replace(/^﻿/, '').split(/\r?\n/).filter((l) => l.trim());
     if (rows.length < 3) throw new Error(`«${name}» no tiene datos suficientes`);
@@ -321,7 +420,7 @@
       const V = VARS[key];
       const d = data && data[key];
       if (!hasData(d)) {
-        cards.push(`<article class="macro-card"><h3>${V.long}</h3><p class="sub">Sin datos todavía. ${ctx.desktop ? 'Pulsa «Actualizar variables macro».' : 'Impórtala con un archivo (fecha y valor) del DANE, el Banco de la República o el Banco Mundial.'}</p><p class="hint">${V.theory}</p></article>`);
+        cards.push(`<article class="macro-card"><h3>${V.long}</h3><p class="sub">Sin datos todavía. ${ctx.desktop ? 'Pulsa «Actualizar variables macro» o importa' : 'Importa'} un archivo del DANE o del Banco de la República: Excel, CSV o el boletín en PDF.</p><p class="sub macro-links">Información oficial: ${officialLinks(key)}</p><p class="hint">${V.theory}</p></article>`);
         continue;
       }
       const last = d.values[d.values.length - 1];
@@ -331,6 +430,7 @@
         <div class="macro-now"><b>${fmtValue(key, last)}</b><span class="sub">${esc(d.dates[d.dates.length - 1])} · ${FREQ_NAME[freqOf(d.dates)]} · ${d.dates.length} datos desde ${esc(d.dates[0].slice(0, 7))}</span></div>
         ${lineChart(d.dates, d.values, { width, label: V.long })}
         <p class="sub">Fuente: ${esc(d.source || 'archivo importado')}${d.updated ? ` · descargada el ${esc(String(d.updated).slice(0, 10))}` : ''}</p>
+        <p class="sub macro-links">Información oficial: ${officialLinks(key)}</p>
         ${res && res.ok ? scatter(res, { width, xLabel: V.xLabel }) : ''}
         ${res ? `<p>${esc(interpret(res, key, market.name))}</p>` : '<p class="sub">Carga el índice de mercado para ver la relación.</p>'}
         <details><summary>Qué dice la teoría</summary><p class="hint">${V.theory}</p></details>
@@ -367,5 +467,5 @@
     return rows.join('\r\n');
   }
 
-  PF.macro = { VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
+  PF.macro = { OFFICIAL, parsePdfText, parseRows, VARS, SOURCES, relateAll, fmtValue, hasData, sourceUrl, parseFred, parseWorldBank, parseSocrata, parseFile, freqOf, byPeriod, changes, relate, interpret, render, toCSV, lineChart };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

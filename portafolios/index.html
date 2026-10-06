@@ -162,7 +162,7 @@
       <h2>Cómo obtener cada dato que pide la app</h2>
       <p class="hint">Los datos de mercado vienen de los archivos que cargas. Los supuestos los escribes tú en Supuestos, en Confirmar o en Paso a paso. Esta tabla dice de dónde sale cada uno y cómo lo usa la app.</p>
       <div class="table-scroll"><table class="data guia"><thead><tr><th>Dato</th><th>Qué es</th><th>Dónde se obtiene en Colombia</th><th>Cómo se calcula o se usa</th></tr></thead><tbody>
-        <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). Es la única fuente de precios de la app; en la app de escritorio, «Abrir la BVC y descargar» importa cada archivo solo.</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
+        <tr><td><b>Precios históricos</b></td><td>Cierre diario de cada acción, ETF o índice.</td><td>bvc.com.co → ficha del emisor o del índice → Históricos (CSV en tramos de 6 meses). Es la única fuente de precios de la app: acciones y ETF en tramos de 6 meses, índices por trimestre. Se cargan en Datos (o en Mercado, en la app de escritorio).</td><td>Rendimiento <code>rₜ = ln(Pₜ / Pₜ₋₁)</code>. Los días sin negociación repiten el último precio.</td></tr>
         <tr><td><b>Tasa libre de riesgo (rf)</b></td><td>Lo que rinde una inversión sin riesgo de impago, al plazo del análisis.</td><td>Rendimiento de los TES de corto plazo (1 año) que publica el Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES), la tasa de los CDT a 90 días (DTF) o el rendimiento anual del COLIBR (botón en «Índices de referencia», si lo cargas).</td><td>Se escribe en % efectivo anual. Entra en Sharpe <code>(E(R) − rf)/σ</code>, Treynor, Jensen, CAPM y la línea del mercado de capitales.</td></tr>
         <tr><td><b>Rendimiento esperado del mercado E(Rm)</b></td><td>Lo que se espera que rinda el índice de referencia en un año.</td><td>Si se deja vacío, la app usa la media histórica anual del índice cargado (MSCI COLCAP). También se puede escribir <code>rf + prima de mercado</code>.</td><td>Base del CAPM <code>E(Rᵢ) = rf + βᵢ (E(Rm) − rf)</code> y del α de Jensen.</td></tr>
         <tr><td><b>Prima de riesgo de mercado</b></td><td><code>E(Rm) − rf</code>: lo que se paga por asumir el riesgo del mercado accionario.</td><td>Histórica: la app la calcula con el COLCAP (Activos → fila del mercado). Implícita: la que publica Aswath Damodaran para mercados maduros (pages.stern.nyu.edu/~adamodar → Data → Implied ERP), más la prima por riesgo país de Colombia.</td><td>Se obtiene restando: escribe E(Rm) = rf + prima en Supuestos. Es la pendiente de la línea del mercado de valores.</td></tr>
@@ -323,7 +323,7 @@
       <p class="status" id="mx-status" hidden></p></div>
     <div class="panel" id="cat-panel"><h2>Todos los activos de la BVC</h2>
       <p id="cat-summary"></p>
-      <div class="row-btns"><button type="button" class="btn btn-primary" id="cat-download">Abrir la BVC para descargar los que faltan</button></div>
+      <div class="row-btns"><button type="button" class="btn" data-go="datos">Cargar archivos en Datos</button></div>
       <p class="status" id="cat-status" hidden></p>
       <div class="table-scroll"><table class="data" id="cat-table"></table></div></div>
     <div class="panel"><h2>Acciones, ETF, índices e instrumentos</h2><div class="table-scroll"><table class="data" id="lib-table"></table></div></div>
@@ -359,9 +359,10 @@
         <button type="button" class="btn btn-primary desktop-only" id="macro-update" hidden>Actualizar variables macro</button>
         <label class="field inline" for="macro-var"><span>Importar archivo de</span>
           <select id="macro-var"><option value="pib">PIB (crecimiento %)</option><option value="inflacion">Inflación anual (%)</option><option value="desempleo">Desempleo (%)</option><option value="trm">TRM (pesos por dólar)</option></select></label>
-        <label class="btn file" for="macro-file">Elegir archivo (CSV: fecha y valor)<input type="file" id="macro-file" accept=".csv,.txt"></label>
+        <label class="btn file" for="macro-file">Elegir archivo (PDF del DANE, Excel o CSV)<input type="file" id="macro-file" accept=".pdf,.xlsx,.xls,.csv,.txt" multiple></label>
       </div>
       <p class="status" id="macro-status" hidden></p>
+      <div id="macro-preview" hidden></div>
     </div>
     <div class="macro-grid" id="macro-cards"></div>
     <div class="panel"><h2>Relación de cada activo con cada variable</h2><div id="macro-table"><p class="sub">Carga datos de activos y de las variables.</p></div></div>
@@ -460,7 +461,6 @@
     <div class="panel">
       <div class="mk-bar">
         <button type="button" class="btn btn-primary" id="mk-update">Actualizar ahora</button>
-        <button type="button" class="btn" id="mk-bvc">Abrir la BVC y descargar</button>
         <button type="button" class="btn" id="mk-import">Importar archivos de la BVC</button>
         <button type="button" class="btn" id="mk-use">Usar estos datos en el análisis</button>
         <button type="button" class="btn btn-ghost" id="mk-export">Exportar mis datos</button>
@@ -470,7 +470,7 @@
         <button type="button" class="btn btn-ghost" id="mk-cache">Limpiar caché</button>
         <button type="button" class="btn btn-ghost" id="mk-wipe">Borrar todos mis datos</button>
       </div>
-      <p class="meta">Los precios de acciones, índices y ETF salen solo de la BVC: descárgalos con «Abrir la BVC y descargar» o impórtalos. La fuente automática se usa únicamente para las divisas (dólar y euro).</p>
+      <p class="meta">Los precios de acciones, índices y ETF salen solo de la BVC: descarga los históricos en bvc.com.co (6 meses por archivo para acciones y ETF, un trimestre para los índices) y cárgalos con «Importar archivos de la BVC» o en Datos. La fuente automática se usa únicamente para las divisas (dólar y euro).</p>
       <p class="status" id="mk-status" role="status" hidden></p>
       <p class="meta" id="mk-meta"></p>
     </div>
@@ -489,7 +489,7 @@
         <label class="check"><input type="checkbox" id="set-auto"> Actualizar sola cada <select id="set-interval"><option value="1">hora</option><option value="3">3 horas</option><option value="6">6 horas</option><option value="12">12 horas</option><option value="24">día</option><option value="168">semana</option></select></label>
         <label class="check"><input type="checkbox" id="set-yahoo"> Traer el dólar y el euro de la fuente automática (las acciones, índices y ETF salen solo de la BVC)</label>
         <label class="check"><input type="checkbox" id="set-news"> Traer noticias</label>
-        <label class="check"><input type="checkbox" id="set-notify"> Avisarme de cierres y noticias nuevas</label>
+        <label class="check"><input type="checkbox" id="set-notify"> Avisarme cuando se actualicen las variables macro</label>
         <label class="check"><input type="checkbox" id="set-background"> Al cerrar la ventana, seguir en la bandeja del sistema</label>
         <label class="check"><input type="checkbox" id="set-login"> Abrir al iniciar sesión (Windows y macOS)</label>
         <label class="check"><input type="checkbox" id="set-reload"> Recalcular el análisis con cada actualización</label>

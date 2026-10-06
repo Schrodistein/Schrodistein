@@ -326,48 +326,6 @@ test('variables macro: fuentes con respaldo y biblioteca local', async () => {
   assert(st2.data.macro.trm.dates.length === m.trm.dates.length);
 });
 
-test('descarga directa de la BVC: aprende la plantilla; acciones y ETF por semestre, índices por trimestre', async () => {
-  const B = require('../lib/bvcauto');
-  // Plantilla aprendida de la dirección que usó la descarga manual
-  const t = B.learnTemplate('https://rest.bvc.com.co/market-information/rv/historico?nemo=ECOPETROL&desde=2026-03-01&hasta=2026-08-31&formato=csv', 'ECOPETROL');
-  assert(t && t.url === 'https://rest.bvc.com.co/market-information/rv/historico?nemo={NEMO}&desde={DESDE}&hasta={HASTA}&formato=csv' && t.fmt === 'iso', JSON.stringify(t));
-  const t2 = B.learnTemplate('https://www.bvc.com.co/api/hist/COLTES%20LP?start=01%2F03%2F2026&end=31%2F08%2F2026', 'COLTES LP');
-  assert(t2 && /\{NEMO\}/.test(t2.url) && t2.fmt === 'dmy' && t2.enc && B.fill(t2, 'ISA', '2025-01-01', '2025-06-30') === 'https://www.bvc.com.co/api/hist/ISA?start=01%2F01%2F2025&end=30%2F06%2F2025', B.fill(t2, 'ISA', '2025-01-01', '2025-06-30'));
-  assert(B.learnTemplate('https://www.bvc.com.co/otra/cosa', 'ECOPETROL') === null, 'sin el nemotécnico no se aprende');
-  // Tramos de 6 meses hacia atrás hasta la última fecha guardada
-  const w = B.windows('2026-09-30', '2025-01-15');
-  assert(w[0][1] === '2026-09-30' && w[w.length - 1][0] === '2025-01-15' && w.length === 4, JSON.stringify(w));
-  // Índices: tramos trimestrales
-  const wq = B.windows('2026-09-30', '2025-10-01', 3);
-  assert(wq.length === 4 && wq[0][0] === '2026-07-01' && wq[0][1] === '2026-09-30' && wq[3][0] === '2025-10-01', JSON.stringify(wq));
-  // JSON del sitio → tabla que entiende el lector
-  const csv = B.jsonToCsv({ data: { items: [{ tradeDate: '2026-08-13', closingPrice: 1500, volume: 1500000 }, { tradeDate: '2026-08-14', closingPrice: 1520, volume: 1520000 }] } });
-  assert(/trade Date;closing Price;volume/.test(csv), csv);
-  // Descarga de varios activos con respuestas simuladas (JSON para uno, CSV para otro)
-  const st = new Store(tmp());
-  const calls = [];
-  const fakeFetch = async (u) => {
-    calls.push(u);
-    const nemo = decodeURIComponent(/nemo=([^&]+)/.exec(u)[1]);
-    const desde = /desde=([\d-]+)/.exec(u)[1];
-    const hasta = /hasta=([\d-]+)/.exec(u)[1];
-    if (desde < '2025-09-01') return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ data: [] }) };
-    const d = [hasta.slice(0, 8) + '01', hasta.slice(0, 8) + '02'];
-    if (nemo === 'ISA') return { ok: true, headers: { get: () => 'text/csv' }, text: async () => `Fecha;Nemotécnico;Precio cierre\n${d[0]};ISA;20.000,00\n${d[1]};ISA;20.100,00\n` };
-    return { ok: true, headers: { get: () => 'application/json' }, json: async () => ({ data: d.map((x, i) => ({ tradeDate: x, closingPrice: 1500 + i, nemo })) }) };
-  };
-  const r = await B.downloadAll({ template: t, nemos: ['ECOPETROL', 'ISA', 'MSCI COLCAP'], fetch: fakeFetch, importFile: (f) => updater.importFiles(st, [f], null), today: '2026-09-30', monthsFor: (n) => (/COLCAP/.test(n) ? 3 : 6) });
-  const colcapCalls = calls.filter((u) => /nemo=MSCI/.test(u)).map((u) => [/desde=([\d-]+)/.exec(u)[1], /hasta=([\d-]+)/.exec(u)[1]]);
-  assert(colcapCalls[0][0] === '2026-07-01' && colcapCalls[0][1] === '2026-09-30', 'el índice se pide por trimestre: ' + JSON.stringify(colcapCalls[0]));
-  assert(calls.filter((u) => /nemo=ISA/.test(u))[0].includes('desde=2026-03-31'), 'las acciones por semestre');
-  assert(r.assets.ECOPETROL > 0 && r.assets.ISA > 0, JSON.stringify(r));
-  assert(st.history('ISA').prices.includes(20100) && st.history('ISA').sources.every((x) => x === 'bvc'), 'ISA desde CSV, fuente BVC');
-  assert(st.history('ECOPETROL').dates.length >= 4, 'ECOPETROL desde JSON: ' + st.history('ECOPETROL').dates.join());
-  assert(calls.every((u) => u.startsWith('https://rest.bvc.com.co/')), 'solo pide a la BVC');
-  // Se detiene tras dos tramos vacíos (no pide hasta 2010)
-  assert(calls.filter((u) => /nemo=ISA/.test(u)).length <= 4, calls.filter((u) => /nemo=ISA/.test(u)).length);
-});
-
 Promise.all(pending).then(() => {
   console.log(`${passed} pruebas correctas, ${failed} fallidas`);
   if (failed) process.exit(1);

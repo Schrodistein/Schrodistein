@@ -111,6 +111,8 @@ const shots = process.argv[3];
     if (shots) await page.screenshot({ path: `${shots}/${label}-pasos.png`, fullPage: true });
     await page.click('#tab-macro');
     if ((await page.$$('#macro-cards .macro-card')).length !== 4) errors.push(label + ': faltan las 4 variables macro');
+    if ((await page.$$('#macro-cards .macro-links a[href^="https://www.dane.gov.co"]')).length < 3) errors.push(label + ': faltan los enlaces oficiales del DANE');
+    if (!/pdf/.test(await page.getAttribute('#macro-file', 'accept'))) errors.push(label + ': macro no acepta PDF');
     // Sin alarmas de advertencia en portafolios ni activos; el sistema financiero con sus referencias
     await page.click('#tab-frontera');
     const bann = await page.$eval('#banner', (b) => (b.hidden ? '' : b.textContent));

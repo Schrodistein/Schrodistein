@@ -1317,13 +1317,7 @@
     const cat = PF.catalog || [];
     const have = cat.filter((c) => inLib.has(key(c.nemo))).length;
     const desk = !!globalThis.bvc;
-    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. Los precios salen solo de la BVC. ${desk ? 'Descarga directa: la primera vez abre la BVC y descarga el histórico de una acción; la app aprende cómo lo entrega la BVC y desde ahí descarga sola todas las acciones, ETF e índices al abrirse.' : 'En bvc.com.co busca cada nemotécnico y descarga sus históricos (hasta 6 meses por archivo); súbelos en Datos y los tramos se unen solos. La app de escritorio los descarga sola.'}`;
-    if (desk && globalThis.bvc.bvcEstado)
-      globalThis.bvc.bvcEstado().then((e) => {
-        $('cat-download').textContent = e && e.template ? 'Descargar todo desde la BVC ahora' : 'Abrir la BVC y enseñar la descarga';
-        if (e && e.template) $('cat-summary').textContent += ` Descarga directa configurada (aprendida de ${e.template.from}${e.last ? `; última: ${String(e.last.at).slice(0, 16).replace('T', ' ')}, ${e.last.assets} activos con datos nuevos` : ''}).`;
-      });
-    $('cat-download').hidden = !desk;
+    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. Los precios salen solo de la BVC y se cargan a mano: en bvc.com.co busca cada nemotécnico y descarga sus históricos (6 meses por archivo para acciones y ETF; un trimestre para los índices como el MSCI COLCAP). Súbelos en Datos${desk ? ' o con Mercado → «Importar archivos de la BVC»' : ''}: los tramos de un mismo activo se unen solos y quedan en la biblioteca.`;
     $('cat-table').innerHTML = '<thead><tr><th>Nemotécnico</th><th>Emisor o instrumento</th><th>Sector</th><th>En la biblioteca</th><th>Desde</th><th class="n">Días</th></tr></thead><tbody>' +
       cat.map((c) => {
         const r = inLib.get(key(c.nemo));
@@ -1405,29 +1399,6 @@
       const nFill = mx.filled.reduce((q, c) => q + c.filter(Boolean).length, 0);
       el.className = 'status ok';
       el.textContent = `Matriz de ${mx.names.length} activos y ${mx.dates.length.toLocaleString('es-CO')} fechas (${mx.dates[0]} a ${mx.dates[mx.dates.length - 1]}); ${nFill.toLocaleString('es-CO')} celdas completadas con el último precio cotizado.`;
-    });
-    $('cat-download').addEventListener('click', async () => {
-      const api = globalThis.bvc;
-      if (!api) return;
-      const est = api.bvcEstado ? await api.bvcEstado() : null;
-      if (est && est.template) {
-        $('cat-download').disabled = true;
-        catStatus('Descargando de la BVC el historial de todas las acciones, ETF e índices (en tramos de 6 meses)… puede tardar unos minutos.');
-        try {
-          const r = await api.bvcDescargar();
-          await saveDesktopSeries(await api.series());
-          renderLib();
-          const n = Object.keys(r.assets || {}).length;
-          catStatus(`Listo: ${n} activos con fechas nuevas desde la BVC.${r.errors && r.errors.length ? ` Sin datos en la BVC para: ${r.errors.join(', ')}.` : ''}`, r.errors && r.errors.length ? 'warn' : 'ok');
-        } catch (e) {
-          catStatus('No se pudo descargar de la BVC: ' + e.message, 'bad');
-        } finally {
-          $('cat-download').disabled = false;
-        }
-        return;
-      }
-      await api.abrirBVC();
-      catStatus('Se abrió la BVC. Busca una acción (por ejemplo ECOPETROL), entra a sus históricos y descárgalos una vez: la app aprende cómo los entrega la BVC y desde ahí descarga sola el historial de todas las acciones, ETF e índices, ahora y cada vez que se abra.', 'ok');
     });
     box.addEventListener('change', async (ev) => {
       const t = ev.target;
@@ -1627,28 +1598,115 @@
     $('macro-cards').innerHTML = r.cards;
     $('macro-table').innerHTML = r.table || '<p class="sub">Carga datos de activos y de las variables.</p>';
   }
+  /* Lector de PDF (pdf.js, desde cdnjs) para los boletines del DANE. */
+  const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+  let pdfjs = null;
+  function loadPdfJS() {
+    if (globalThis.pdfjsLib) return Promise.resolve(globalThis.pdfjsLib);
+    if (!pdfjs)
+      pdfjs = new Promise((ok, ko) => {
+        const sc = document.createElement('script');
+        sc.src = PDFJS;
+        sc.onload = () => {
+          const L = globalThis.pdfjsLib;
+          if (!L) return ko(new Error('El lector de PDF no se inicializó.'));
+          L.GlobalWorkerOptions.workerSrc = PDFJS.replace('pdf.min.js', 'pdf.worker.min.js');
+          ok(L);
+        };
+        sc.onerror = () => {
+          pdfjs = null;
+          ko(new Error('No se pudo cargar el lector de PDF (se necesita internet).'));
+        };
+        document.head.appendChild(sc);
+      });
+    return pdfjs;
+  }
+  async function pdfText(buf) {
+    const L = await loadPdfJS();
+    const doc = await L.getDocument({ data: new Uint8Array(buf) }).promise;
+    let text = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const c = await page.getTextContent();
+      text += c.items.map((x) => x.str).join(' ') + '\n';
+    }
+    return text;
+  }
+  async function saveMacroPts(key, pts, source) {
+    const d = { dates: pts.map((p) => p.date || p[0]), values: pts.map((p) => (p.value != null ? p.value : p[1])) };
+    const added = await PF.lib.saveMacro(key, d, source);
+    await refreshLib();
+    renderMacro();
+    return added;
+  }
   function wireMacro() {
+    let pending = null; // datos leídos de un PDF, en revisión
     $('macro-file').addEventListener('change', async (ev) => {
-      const file = ev.target.files && ev.target.files[0];
-      if (!file) return;
+      const files = [...(ev.target.files || [])];
+      if (!files.length) return;
       const key = $('macro-var').value;
+      const V = PF.macro.VARS[key];
+      $('macro-preview').hidden = true;
       try {
-        const buf = await file.arrayBuffer();
-        let text;
-        try {
-          text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
-        } catch (e) {
-          text = new TextDecoder('windows-1252').decode(buf);
+        for (const file of files) {
+          const buf = await file.arrayBuffer();
+          const ext = (file.name.match(/\.([a-z0-9]+)$/i) || [])[1] || '';
+          if (/^pdf$/i.test(ext)) {
+            macroStatus(`Leyendo el PDF «${file.name}»…`);
+            const found = PF.macro.parsePdfText(await pdfText(buf), key);
+            if (!found.length) throw new Error(`En «${file.name}» no se encontró la cifra de ${V.long.toLowerCase()} (por ejemplo «En el segundo trimestre de 2025 … crece 2,1 %»). Prueba con el anexo en Excel del mismo boletín.`);
+            pending = { key, found, source: 'Boletín en PDF: ' + file.name };
+            $('macro-preview').hidden = false;
+            $('macro-preview').innerHTML = `<h3>Datos encontrados en «${esc(file.name)}»</h3><p class="sub">Revisa cada cifra con la frase del boletín de donde salió, corrige si hace falta y guarda las que estén bien.</p>
+              <div class="table-scroll"><table class="data"><thead><tr><th></th><th>Fecha</th><th class="n">${esc(V.long)}</th><th>Frase del boletín</th></tr></thead><tbody>${found
+                .map((f, i) => `<tr><td><input type="checkbox" data-mp="${i}" checked aria-label="Guardar ${esc(f.date)}"></td><td>${esc(f.date.slice(0, 7))}</td><td class="n"><input class="cell" data-mv="${i}" value="${String(f.value).replace('.', ',')}" inputmode="decimal" aria-label="Valor de ${esc(f.date)}"></td><td class="sub">${esc(f.text)}</td></tr>`)
+                .join('')}</tbody></table></div><div class="row-btns"><button type="button" class="btn btn-primary" id="macro-save">Guardar los datos marcados</button></div>`;
+            macroStatus(`${found.length} dato(s) encontrados en el PDF: revísalos abajo y guárdalos.`, 'ok');
+            continue;
+          }
+          let d;
+          if (/^xlsx?$/i.test(ext)) {
+            const X = await loadSheetJS();
+            const wb = X.read(buf, { type: 'array', cellDates: true });
+            let err = null;
+            for (const sh of wb.SheetNames) {
+              try {
+                d = PF.macro.parseRows(X.utils.sheet_to_json(wb.Sheets[sh], { header: 1, raw: true }), file.name);
+                break;
+              } catch (e) {
+                err = e;
+              }
+            }
+            if (!d) throw err || new Error(`«${file.name}» no tiene fechas y valores`);
+          } else {
+            let text;
+            try {
+              text = new TextDecoder('utf-8', { fatal: true }).decode(buf);
+            } catch (e) {
+              text = new TextDecoder('windows-1252').decode(buf);
+            }
+            d = PF.macro.parseFile(text, file.name);
+          }
+          await PF.lib.saveMacro(key, d, 'Archivo importado: ' + file.name);
+          await refreshLib();
+          macroStatus(`${V.long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]} (${file.name}).`, 'ok');
+          renderMacro();
         }
-        const d = PF.macro.parseFile(text, file.name);
-        await PF.lib.saveMacro(key, d, 'Archivo importado: ' + file.name);
-        await refreshLib();
-        macroStatus(`${PF.macro.VARS[key].long}: ${d.dates.length} datos de ${d.dates[0]} a ${d.dates[d.dates.length - 1]}.`, 'ok');
-        renderMacro();
       } catch (e) {
         macroStatus(e.message, 'bad');
       }
       ev.target.value = '';
+    });
+    $('macro-preview').addEventListener('click', async (ev) => {
+      if (!ev.target.closest('#macro-save') || !pending) return;
+      const pts = pending.found
+        .map((f, i) => ({ date: f.date, value: PF.data.parseNumber($('macro-preview').querySelector(`[data-mv="${i}"]`).value, true), on: $('macro-preview').querySelector(`[data-mp="${i}"]`).checked }))
+        .filter((p) => p.on && Number.isFinite(p.value));
+      if (!pts.length) return macroStatus('No hay datos marcados para guardar.', 'bad');
+      const added = await saveMacroPts(pending.key, pts, pending.source);
+      macroStatus(`${PF.macro.VARS[pending.key].long}: ${added} dato(s) nuevos guardados del boletín (los ya guardados no cambian).`, 'ok');
+      pending = null;
+      $('macro-preview').hidden = true;
     });
   }
 

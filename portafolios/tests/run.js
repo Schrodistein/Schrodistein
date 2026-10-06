@@ -757,6 +757,26 @@ test('tramos con número de descarga: 1790829234836-COLTES LP y los demás son u
   assert(g.puts[0].dates.join() === '2026-01-02,2026-01-05,2026-07-01,2026-07-02' && g.puts[0].prices.join() === '443.97,444,401.89,396.49', 'mismos valores de cada tramo');
 });
 
+test('macro: boletín del DANE en PDF (texto), Excel con trimestres y meses, y enlaces oficiales', () => {
+  const pib = 'Boletín técnico Producto Interno Bruto (PIB) II trimestre 2025pr. En el segundo trimestre de 2025pr, el Producto Interno Bruto, en su serie original, crece 2,1% respecto al mismo periodo de 2024pr. En el primer trimestre de 2025 el PIB decrece 0,4% frente al trimestre anterior.';
+  const f = PF.macro.parsePdfText(pib, 'pib');
+  assert(f.length === 2 && f[1].date === '2025-06-28' && f[1].value === 2.1 && f[0].date === '2025-03-28' && f[0].value === -0.4, JSON.stringify(f));
+  const ipc = 'En septiembre de 2025, la variación anual del IPC fue 5,18%, y la mensual 0,32%.';
+  const g = PF.macro.parsePdfText(ipc, 'inflacion');
+  assert(g.length === 1 && g[0].date === '2025-09-28' && g[0].value === 5.18, JSON.stringify(g));
+  const des = 'En agosto de 2025 la tasa de desempleo en el total nacional fue 8,6%.';
+  assert(PF.macro.parsePdfText(des, 'desempleo')[0].value === 8.6);
+  // Excel con títulos arriba, trimestres «2024-I» y valores con coma decimal
+  const rows = [['DANE · Cuentas nacionales'], ['Periodo', 'Variación anual (%)'], ['2024-I', '0,7'], ['2024-II', '2,1'], ['2024-III', 2.0], ['2024-IV', '2,3'], ['Fuente: DANE']];
+  const r = PF.macro.parseRows(rows, 'pib.xlsx');
+  assert(r.dates.join() === '2024-03-28,2024-06-28,2024-09-28,2024-12-28' && r.values.join() === '0.7,2.1,2,2.3', JSON.stringify(r));
+  const m = PF.macro.parseRows([['Mes', 'TD'], ['ene-25', 11.6], ['feb-25', 10.3], ['mar-25', 9.6]], 'td.xlsx');
+  assert(m.dates[0] === '2025-01-28' && m.values[2] === 9.6);
+  const serial = PF.macro.parseRows([[45658, 4400.5], [45659, 4410], [45660, 4395.25]], 'trm.xlsx');
+  assert(serial.dates[0] === '2025-01-01' && serial.values[1] === 4410, JSON.stringify(serial));
+  for (const k of ['pib', 'inflacion', 'desempleo', 'trm']) assert(PF.macro.OFFICIAL[k].length >= 1 && PF.macro.OFFICIAL[k].every(([, u]) => /^https:\/\/www\.(dane|banrep|datos)\.gov\.co\//.test(u)), k);
+});
+
 test('CSV para Excel en español: punto de miles, coma decimal y se vuelve a leer igual', () => {
   const X = PF.data.excelNum;
   assert(X(2400) === '2.400' && X(2400.5) === '2.400,5' && X(1234567.891) === '1.234.567,891' && X(-0.0525) === '-0,0525' && X(10.500000000000002) === '10,5' && X(NaN) === '' && X(999) === '999');

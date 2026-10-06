@@ -87,7 +87,7 @@
       title: '5. Conseguir y guardar los datos',
       body: () => `
         <ol>
-          <li>Descarga el histórico de cada acción o ETF en bvc.com.co (hasta 6 meses por archivo): la BVC es la única fuente de precios de la app. En la app de escritorio, «Abrir la BVC y descargar» importa cada archivo solo.</li>
+          <li>Descarga el histórico de cada acción o ETF en bvc.com.co (hasta 6 meses por archivo): la BVC es la única fuente de precios de la app. Los índices, como el MSCI COLCAP, se descargan por trimestre.</li>
           <li>Descarga también el índice de tu segmento: <b>MSCI COLCAP</b> para acciones y ETF.</li>
           <li>Sube los archivos en Datos: los tramos de un mismo nemotécnico se unen en un solo activo y quedan guardados en la Biblioteca, fieles a la fuente.</li>
           <li>Define los supuestos: tasa libre de riesgo (TES o COLIBR), rendimiento esperado del mercado o prima de riesgo, frecuencia y límites de peso. La guía de Datos dice de dónde sale cada uno.</li>

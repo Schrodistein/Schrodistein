@@ -47,6 +47,8 @@
       cls: s.cls || (old && old.cls) || null,
       kind: s.kind || (old && old.kind) || null,
       dur: s.dur || (old && old.dur) || null,
+      // Referencia (curva cero cupón de TES): se guarda y se consulta, pero no entra al portafolio
+      ref: !!(s.ref || (old && old.ref)),
       // Las series de tasa se guardan como tasa (no como índice) para poder unir tramos
       dates,
       prices: rows.map((x) => x.p),
@@ -68,6 +70,7 @@
     const s = { name: rec.name, dates: rec.dates.filter((_, i) => keep[i]), prices: pick(rec.prices), column: `biblioteca (${rec.source})`, rank: 2, parts: 1 };
     if (rec.cls) s.cls = rec.cls;
     if (rec.kind === 'tasa') Object.assign(s, { kind: 'tasa', dur: rec.dur });
+    if (rec.ref) s.ref = true;
     if (rec.qty) {
       s.qty = pick(rec.qty);
       s.vol = pick(rec.vol);

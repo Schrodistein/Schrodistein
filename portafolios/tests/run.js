@@ -1,7 +1,7 @@
 /* Pruebas sin dependencias: node portafolios/tests/run.js */
 'use strict';
 const path = require('path');
-for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca', 'riesgo']) require(path.join(__dirname, '..', 'js', f + '.js'));
+for (const f of ['stats', 'optim', 'model', 'sample', 'plan', 'xlsx', 'report', 'macro', 'pasos', 'frontera', 'guia', 'catalogo', 'matriz', 'macro-banrep', 'sistema', 'indices', 'biblioteca', 'riesgo', 'tes-banrep']) require(path.join(__dirname, '..', 'js', f + '.js'));
 const PF = globalThis.PF;
 const { dot, quad, matVec, solve } = PF.stats;
 let failed = 0;
@@ -982,6 +982,36 @@ test('Tasa libre de riesgo y primas: candidatas de renta fija, Fisher, PRP de Da
   assert(near(q.spread, 0.025, 1e-12) && near(q.prp, 0.0375, 1e-12) && near(q.rfLocal, 0.085, 1e-12) && near(q.em, 0.09 + 0.045 + 0.0375, 1e-12), JSON.stringify(q));
   const q2 = PF.riesgo.premiums({ tes10: 11, ust10: 4, picol: 5, pius: 2 }, { volRatio: 2 });
   assert(near(q2.spread, 0.11 - PF.riesgo.fisher(0.04, 0.05, 0.02), 1e-12) && q2.ratio === 2 && q2.spreadSrc === 'TES');
+});
+
+test('Graficador del Banco de la República: tasas cero cupón TES como tasas; bid-ask se rechaza con explicación', () => {
+  const z = [['Fecha', 'Tasa cero cupón TES pesos 1 año (Dato diario)', 'Tasa cero cupón TES pesos 10 años (Dato diario)'], ['dd/mm/aaaa', 'Porcentaje', 'Porcentaje'], ['22/08/2023', '11,52', '10,31'], ['23/08/2023', '11,50', '10,40'], ['24/08/2023', '11,48', '10,35'], [''], ['Descargado de sistema del Banco de la República']];
+  const s = PF.data.readRows(z, 'graficador_series.xlsx').series;
+  assert(s.length === 2 && s[0].kind === 'tasa' && s[0].dur === 1 && s[1].dur === 10 && near(s[1].prices[2], 0.1035, 1e-12) && s[0].dates[0] === '2023-08-22', JSON.stringify(s));
+  const c = PF.riesgo.rfCandidates(s);
+  assert(c.length === 2 && near(c[1].value, 0.1035, 1e-12), 'candidatas: ' + JSON.stringify(c));
+  let msg = '';
+  try {
+    PF.data.readRows([['Fecha', 'BID-ASK Spread TES Pesos(Dato diario)'], ['dd/mm/aaaa', 'Pesos colombianos'], ['22/08/2023', '6,04'], ['23/08/2023', '4,52']], 'g.xlsx');
+  } catch (e) {
+    msg = e.message;
+  }
+  assert(/liquidez/.test(msg) && /cero cupón/.test(msg), msg);
+});
+
+test('Tasas cero cupón TES del Banco de la República (CSV de suameca): seis series de referencia', () => {
+  const csv = '﻿"Periodo(MMM DD, AAAA)";"Tasa de interés Cero Cupón, Títulos de Tesorería (TES), pesos - 1 año";"Tasa de interés Cero Cupón, Títulos de Tesorería (TES), pesos - 10 años";"Tasa de interés Cero Cupón, Títulos de Tesorería (TES), UVR - 10 años"\n"2026/09/30";12,34;13,2;6,7\n"2026/10/01";12,45;13,2;\n"2026/10/02";12,44;13,3;6,84\n';
+  const r = PF.data.readText(csv, 'Deuda_p_blica.csv');
+  assert(r.series.map((s) => s.name).join() === 'TES cero cupón pesos 1 año,TES cero cupón pesos 10 años,TES cero cupón UVR 10 años', r.series.map((s) => s.name).join());
+  assert(r.series.every((s) => s.kind === 'tasa' && s.ref) && r.series[1].dur === 10 && near(r.series[1].prices[2], 0.133, 1e-12) && r.series[2].dates.length === 2);
+  // Por la biblioteca: la tasa vuelve como «rates» (prices es el índice) y la candidata usa la tasa
+  const comb = PF.data.combineSeries(r.series).find((x) => /pesos 10/.test(x.name));
+  const { rec } = PF.lib.mergeRecord(null, Object.assign({}, comb, { prices: comb.rates }), 'archivo', '2026-10-06');
+  assert(rec.ref && near(rec.prices[2], 0.133, 1e-12), JSON.stringify(rec));
+  const back = PF.data.combineSeries([PF.lib.toSeries(rec)]);
+  const c = PF.riesgo.rfCandidates(back);
+  assert(back[0].ref && near(c[0].value, 0.133, 1e-12), JSON.stringify(c));
+  assert(Object.keys(PF.tesBanrep.series).length === 6, 'semilla de TES');
 });
 
 Promise.all(pending).then(() => {

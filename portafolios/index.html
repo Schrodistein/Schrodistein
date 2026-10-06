@@ -216,7 +216,7 @@
         <tr><td><b>COLTES CP</b></td><td>TES tasa fija en pesos de 1 a 5 años (rendimiento total: precio + cupones).</td><td>bvc.com.co → Índices → Renta fija → COLTES CP</td><td>Rendimiento realizado de la deuda pública de corto y mediano plazo.</td></tr>
         <tr><td><b>COLTES LP</b></td><td>TES tasa fija en pesos de más de 5 años.</td><td>bvc.com.co → Índices → Renta fija → COLTES LP</td><td>Índice de referencia del segmento de renta fija (β de TES y bonos) y σ de los bonos para la prima por riesgo país.</td></tr>
         <tr><td><b>COLTES UVR</b></td><td>TES denominados en UVR (indexados a la inflación).</td><td>bvc.com.co → Índices → Renta fija → COLTES UVR</td><td>Tasa libre de riesgo real.</td></tr>
-        <tr><td><b>TES tasa fija de 1 y de 10 años</b></td><td>Tasa (TIR) a la que se negocia cada referencia de TES (nemotécnicos TFIT…).</td><td>bvc.com.co → Renta fija → Deuda pública → la referencia → Históricos; o la curva cero cupón de TES del Banco de la República (banrep.gov.co → Estadísticas → Tasas de interés → TES)</td><td>La TIR del TES de 1 año es la rf de corto plazo; la del TES de 10 años, la rf de largo plazo para valorar acciones (Damodaran).</td></tr>
+        <tr><td><b>Tasas cero cupón TES en pesos a 1 y a 10 años</b></td><td>Tasa de los TES a plazo fijo, de la curva que estima el Banco de la República con el modelo de Nelson y Siegel. En la BVC no hay un «TES a 1 año» ni «a 10 años»: cada referencia vence en una fecha fija y la mayoría de los TES se negocia en el SEN del Banco de la República.</td><td>suameca.banrep.gov.co → Deuda pública → «Tasas cero cupón TES» → descargar en Excel (graficador de series). No sirve el «BID-ASK Spread TES», que es una medida de liquidez.</td><td>La TIR del TES de 1 año es la rf de corto plazo; la del TES de 10 años, la rf de largo plazo para valorar acciones (Damodaran).</td></tr>
         <tr><td><b>Bonos corporativos y CDT</b> (opcional)</td><td>Tasa de negociación de bonos de empresas y CDT.</td><td>bvc.com.co → Renta fija → Deuda privada</td><td>Comparar con los TES: la diferencia es la prima por riesgo de crédito de la empresa.</td></tr>
       </tbody></table></div>
       <p class="hint">Los archivos con columna de tasa (TIR, tasa de negociación, tasa de valoración) se guardan como tasas; los de los índices COLTES y COLIBR, como precios del índice. Todo queda en la biblioteca y se usa con la ventana de análisis (Biblioteca).</p>
@@ -242,7 +242,7 @@
       <div class="row-btns" id="prp-btns"></div>
       <h3>Dónde se consigue cada dato</h3>
       <ul>
-        <li><b>TIR del TES a 10 años</b>: BVC (Renta fija → Deuda pública, la referencia TES más cercana a 10 años) o la curva cero cupón del Banco de la República. Si cargas ese archivo, la app la toma sola.</li>
+        <li><b>Tasa del TES a 10 años</b>: serie «Tasas cero cupón TES» del Banco de la República (suameca), en Excel. Si cargas ese archivo arriba, la app toma sola la tasa a 10 años.</li>
         <li><b>Tesoro de EE. UU. a 10 años</b>: FRED (fred.stlouisfed.org, serie DGS10) o treasury.gov.</li>
         <li><b>Inflación esperada</b>: Colombia, encuesta de expectativas del Banco de la República o la meta (3 %); EE. UU., la meta de la Reserva Federal (2 %) o la inflación implícita en los bonos TIPS (FRED, T10YIE).</li>
         <li><b>EMBI de Colombia</b> (riesgo país): Banco de la República (indicadores de riesgo país) o proveedores como Investing.com; también sirve el CDS soberano a 5 años.</li>
@@ -652,7 +652,7 @@
         <li><b>El corto plazo lo ancla la política monetaria</b>: la tasa de intervención del Banco de la República guía el <b>IBR</b> (Indicador Bancario de Referencia), la tasa a la que se prestan los bancos; el índice COLIBR de la BVC la acumula día a día. El largo plazo depende de la inflación esperada, del crecimiento y de la prima por riesgo fiscal (Fisher, 1930: <code>(1 + i) = (1 + r)(1 + πᵉ)</code>).</li>
       </ol>
       <p><b>Cuál usar.</b> El plazo de la tasa debe coincidir con el del análisis (Damodaran): para medir un portafolio a un año, la TIR del TES de 1 año o el rendimiento del COLIBR; para valorar acciones (flujos a muchos años), la TIR del TES de 10 años. Como el TES colombiano sí tiene algo de riesgo de impago, Damodaran le resta el diferencial por impago del país: <code>rf = TIR TES − diferencial</code>. Otra vía: la tasa del Tesoro de EE. UU. llevada a pesos con la diferencia de inflaciones, <code>(1 + rf USD)(1 + π Col) / (1 + π EE. UU.) − 1</code>.</p>
-      <p><b>Índices de la BVC que se necesitan</b> (familias de renta fija y mercado monetario): <b>COLIBR</b> (IBR overnight, corto plazo), <b>COLTES CP</b> (TES tasa fija en pesos de 1 a 5 años), <b>COLTES LP</b> (más de 5 años; índice del segmento de renta fija) y <b>COLTES UVR</b> (TES en UVR: tasa real). Son índices de <i>rendimiento total</i>, ponderados por capitalización, que reinvierten los cupones: muestran lo que rindió tener los TES, no la TIR de hoy. Para la TIR se cargan los históricos de las referencias de TES (Renta fija → Deuda pública). Todo se sube en Datos → Renta fija.</p>
+      <p><b>Índices de la BVC que se necesitan</b> (familias de renta fija y mercado monetario): <b>COLIBR</b> (IBR overnight, corto plazo), <b>COLTES CP</b> (TES tasa fija en pesos de 1 a 5 años), <b>COLTES LP</b> (más de 5 años; índice del segmento de renta fija) y <b>COLTES UVR</b> (TES en UVR: tasa real). Son índices de <i>rendimiento total</i>, ponderados por capitalización, que reinvierten los cupones: muestran lo que rindió tener los TES, no la TIR de hoy. Para la tasa de hoy a un plazo fijo se usa la serie «Tasas cero cupón TES» del Banco de la República (1, 5 y 10 años). Todo se sube en Datos → Renta fija.</p>
       <p><b>En la app.</b> rf es efectiva anual. Con rendimientos logarítmicos diarios, la tasa por rueda es <code>ln(1 + rf) / 242</code>. Entra en la razón de Sharpe, Treynor, Jensen, el CAPM, la línea del mercado de capitales (su intercepto) y el portafolio tangente.</p>
     </div>
     <div class="panel" id="teo-erm">
@@ -698,6 +698,7 @@
 <script src="js/biblioteca.js"></script>
 <script src="js/macro.js"></script>
 <script src="js/macro-banrep.js"></script>
+<script src="js/tes-banrep.js"></script>
 <script src="js/pasos.js"></script>
 <script src="js/frontera.js"></script>
 <script src="js/riesgo.js"></script>

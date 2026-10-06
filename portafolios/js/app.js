@@ -447,6 +447,12 @@
     const saved = await PF.lib.saveSeries(combined, 'archivo');
     await refreshLib();
     const usable = libSeries();
+    // Solo curvas de referencia (tasas cero cupón de TES): quedan para la tasa libre de riesgo
+    if (combined.every((x) => x.ref)) {
+      status(`Tasas de referencia guardadas en la biblioteca: ${combined.map((x) => `${x.name} (${x.dates[0]} a ${x.dates[x.dates.length - 1]})`).join('; ')}. Se usan en Datos → Renta fija para la tasa libre de riesgo y la prima por riesgo país; no entran al portafolio.${allErr ? ' No se pudieron leer: ' + allErr : ''}`, 'ok');
+      if (st.screen === 'datos') renderRf();
+      return;
+    }
     if (usable.length < 2 && combined.length >= 2) {
       status(`Los archivos quedaron guardados en la biblioteca, pero sus fechas caen fuera de la ventana de análisis (${windowText()}): ${combined.map((x) => `${x.name} ${x.dates[0]} a ${x.dates[x.dates.length - 1]}`).join('; ')}. Cambia las fechas de inicio y de corte en Biblioteca.${allErr ? ' Además: ' + allErr : ''}`, 'bad');
       return;
@@ -578,6 +584,8 @@
     const d = macroData().inflacion;
     return d && d.values.length ? d.values[d.values.length - 1] / 100 : NaN;
   };
+  // Tasa del TES en pesos más cercana a 10 años (no UVR: esa es tasa real)
+  const tes10Of = (list) => list.filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name) && !/uvr/i.test(s.name)).sort((a, b) => Math.abs((a.dur || 0) - 10) - Math.abs((b.dur || 0) - 10))[0];
   function setRf(v) {
     $('rf').value = v;
     compute();
@@ -586,7 +594,7 @@
     if (!$('rf-panel')) return;
     const rfNow = parseFloat($('rf').value) / 100;
     $('rf-now').innerHTML = `Tasa libre de riesgo en uso (Datos → Renta variable → Supuestos): <b>${pct(rfNow, 2)}</b> efectiva anual. Con rendimientos logarítmicos diarios equivale a <code>ln(1 + rf) / 242</code> = ${Number.isFinite(rfNow) ? (PF.riesgo.dailyLog(rfNow) * 100).toFixed(4).replace('.', ',') + ' %' : '—'} por rueda. La ventana de análisis es ${windowText()}.`;
-    const list = libSeries();
+    const list = libSeries().concat(libRefSeries());
     const c = PF.riesgo.rfCandidates(list);
     const use = (x) => (Number.isFinite(x) ? `<button type="button" class="btn btn-ghost" data-use-rf="${(Math.round(x * 10000) / 100).toFixed(2)}">Usar ${pct(x, 2)}</button>` : '');
     $('rf-cands').innerHTML = c.length
@@ -596,15 +604,15 @@
       : '<p class="hint">Todavía no hay renta fija en la biblioteca. Sube el COLIBR, los COLTES (CP, LP, UVR) o las tasas de los TES con el botón de arriba.</p>';
     // Primas
     const inp = Object.assign({}, store.get('prp') || {});
-    const tes = list.filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name)).sort((a, b) => (b.dur || 0) - (a.dur || 0))[0];
+    const tes = tes10Of(list);
     const infl = lastInflation();
     document.querySelectorAll('#prp-form [data-prp]').forEach((el) => {
       const k = el.getAttribute('data-prp');
       if (document.activeElement !== el) el.value = inp[k] != null ? inp[k] : '';
-      if (k === 'tes10' && tes) el.placeholder = `${(tes.prices[tes.prices.length - 1] * 100).toFixed(2)} (${tes.name})`;
+      if (k === 'tes10' && tes) el.placeholder = `${((tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100).toFixed(2)} (${tes.name})`;
       if (k === 'picol' && Number.isFinite(infl)) el.placeholder = `${(infl * 100).toFixed(2)} (última inflación)`;
     });
-    if ((inp.tes10 == null || inp.tes10 === '') && tes) inp.tes10 = tes.prices[tes.prices.length - 1] * 100;
+    if ((inp.tes10 == null || inp.tes10 === '') && tes) inp.tes10 = (tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100;
     if ((inp.picol == null || inp.picol === '') && Number.isFinite(infl)) inp.picol = infl * 100;
     const vr = volRatio();
     if (Number.isFinite(vr)) $('prp-ratio').placeholder = vr.toFixed(2) + ' (con tus datos)';
@@ -1430,10 +1438,13 @@
   const libSeries = () =>
     PF.data.combineSeries(
       st.lib.series
-        .filter((r) => r.use !== false)
+        .filter((r) => r.use !== false && !r.ref)
         .map((r) => PF.lib.toSeries(r, libCut(), libFrom()))
         .filter((x) => x.dates.length >= 3)
     );
+  // Curvas de referencia (tasas cero cupón de TES): para la tasa libre de riesgo, no para el portafolio
+  const libRefSeries = () =>
+    PF.data.combineSeries(st.lib.series.filter((r) => r.ref).map((r) => PF.lib.toSeries(r, libCut(), libFrom())).filter((x) => x.dates.length >= 3));
   function useLibrary(msg) {
     const usable = libSeries();
     if (usable.length < 2) return false;
@@ -1479,7 +1490,7 @@
     $('lib-table').innerHTML = L.series.length
       ? '<thead><tr><th>Usar</th><th>Instrumento</th><th>Tipo</th><th>Desde</th><th>Hasta</th><th class="n">Datos</th><th>Cantidad y volumen</th><th>Fuente</th><th>Última fecha agregada</th><th></th></tr></thead><tbody>' +
         L.series
-          .map((r) => `<tr><td><input type="checkbox" data-lib-use="${esc(r.name)}"${r.use !== false ? ' checked' : ''} aria-label="Usar ${esc(r.name)} en el análisis"></td><td>${esc(r.name)}</td><td>${esc(C[r.cls] || (r.kind === 'tasa' ? 'Renta fija' : ''))}</td><td>${esc(r.dates[0])}</td><td>${esc(last(r.dates))}</td><td class="n">${r.dates.length.toLocaleString('es-CO')}</td><td>${r.qty ? 'Sí' : '—'}</td><td>${esc(r.source)}</td><td>${esc(String(r.updated).slice(0, 10))}</td><td><button type="button" class="btn btn-ghost" data-lib-dl="${esc(r.name)}">Descargar CSV</button> <button type="button" class="btn btn-ghost" data-lib-del="${esc(r.name)}">Quitar</button></td></tr>`)
+          .map((r) => `<tr><td><input type="checkbox" data-lib-use="${esc(r.name)}"${r.use !== false ? ' checked' : ''} aria-label="Usar ${esc(r.name)} en el análisis"></td><td>${esc(r.name)}</td><td>${r.ref ? 'Tasa de referencia (rf)' : esc(C[r.cls] || (r.kind === 'tasa' ? 'Renta fija' : ''))}</td><td>${esc(r.dates[0])}</td><td>${esc(last(r.dates))}</td><td class="n">${r.dates.length.toLocaleString('es-CO')}</td><td>${r.qty ? 'Sí' : '—'}</td><td>${esc(r.source)}</td><td>${esc(String(r.updated).slice(0, 10))}</td><td><button type="button" class="btn btn-ghost" data-lib-dl="${esc(r.name)}">Descargar CSV</button> <button type="button" class="btn btn-ghost" data-lib-del="${esc(r.name)}">Quitar</button></td></tr>`)
           .join('') +
         '</tbody>'
       : '';
@@ -1618,6 +1629,12 @@
       }
       store.set('banrepSeed', B.version);
     }
+    // Tasas cero cupón de los TES del Banco de la República (referencia para la tasa libre de riesgo)
+    const T = PF.tesBanrep;
+    if (T && store.get('tesSeed') !== T.version) {
+      await PF.lib.saveSeries(Object.entries(T.series).map(([name, d]) => ({ name, dates: d.dates, prices: d.values.map((v) => v / 100), kind: 'tasa', cls: 'tes', dur: d.dur, ref: true, column: T.source })), T.source);
+      store.set('tesSeed', T.version);
+    }
     await refreshLib();
     if (libSeries().length >= 2 && !(st.series && st.series.length)) useLibrary(`Datos cargados desde la biblioteca local: ${libSeries().length} instrumentos, ${windowText()}. Para agregar fechas nuevas, sube los archivos en Datos.`);
   }
@@ -1649,8 +1666,8 @@
       prp: Object.assign({}, store.get('prp') || {}, (() => {
         const o = {};
         const p = store.get('prp') || {};
-        const tes = libSeries().filter((s) => s.kind === 'tasa' && /tes|tfit/i.test(s.name)).sort((a, b) => (b.dur || 0) - (a.dur || 0))[0];
-        if ((p.tes10 == null || p.tes10 === '') && tes) o.tes10 = tes.prices[tes.prices.length - 1] * 100;
+        const tes = tes10Of(libSeries().concat(libRefSeries()));
+        if ((p.tes10 == null || p.tes10 === '') && tes) o.tes10 = (tes.rates || tes.prices)[(tes.rates || tes.prices).length - 1] * 100;
         if ((p.picol == null || p.picol === '') && Number.isFinite(lastInflation())) o.picol = lastInflation() * 100;
         return o;
       })()),

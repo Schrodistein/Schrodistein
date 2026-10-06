@@ -36,17 +36,24 @@
     for (const s of series || []) {
       if (!s || !s.dates || s.dates.length < 3) continue;
       if (s.kind === 'tasa') {
-        const k = s.prices.length - 1;
-        const last20 = s.prices.slice(-20).filter(fin);
+        // Al pasar por la biblioteca, prices es el índice de rendimiento total y rates la tasa original
+        const y = s.rates || s.prices;
+        const k = y.length - 1;
+        const last20 = y.slice(-20).filter(fin);
         out.push({
           name: s.name,
-          tipo: 'Tasa negociada (TIR)',
-          plazo: fin(s.dur) ? `Duración ≈ ${String(Math.round(s.dur * 10) / 10).replace('.', ',')} años` : '—',
-          value: s.prices[k],
+          tipo: /cero cup/i.test(s.name) ? `Tasa cero cupón ${/uvr/i.test(s.name) ? 'real (UVR)' : 'en pesos'} · Banco de la República` : 'Tasa negociada (TIR)',
+          plazo: /cero cup/i.test(s.name) && fin(s.dur) ? `${s.dur} año${s.dur === 1 ? '' : 's'}` : fin(s.dur) ? `Duración ≈ ${String(Math.round(s.dur * 10) / 10).replace('.', ',')} años` : '—',
+          value: y[k],
           avg: last20.length ? last20.reduce((q, x) => q + x, 0) / last20.length : NaN,
           date: s.dates[k],
-          note: 'Es la tasa a la que se negocia hoy el título: la referencia correcta de tasa libre de riesgo a ese plazo.',
-          pri: /tes|tfit|tfu|tco/i.test(s.name) ? 0 : 2,
+          note: /uvr/i.test(s.name)
+            ? 'Tasa real (sobre la inflación, en UVR): la tasa libre de riesgo real a ese plazo. No se usa como rf nominal; sirve para ver la inflación esperada: (1 + tasa en pesos) / (1 + tasa UVR) − 1.'
+            : /cero cup/i.test(s.name)
+              ? 'Tasa cero cupón del Banco de la República (Nelson y Siegel): la tasa libre de riesgo en pesos a ese plazo.'
+              : 'Es la tasa a la que se negocia hoy el título: la referencia correcta de tasa libre de riesgo a ese plazo.',
+          pri: /uvr/i.test(s.name) ? 1.5 : /tes|tfit|tfu|tco/i.test(s.name) ? 0 : 2,
+          dur: s.dur,
         });
         continue;
       }
@@ -67,7 +74,7 @@
         pri: /colibr|ibr/i.test(s.name) ? 1 : 3,
       });
     }
-    return out.sort((a, b) => a.pri - b.pri || a.name.localeCompare(b.name));
+    return out.sort((a, b) => a.pri - b.pri || (a.dur || 0) - (b.dur || 0) || a.name.localeCompare(b.name));
   }
   /* rf en pesos a partir de la tasa en dólares (paridad de Fisher). */
   const fisher = (rUsd, piCol, piUs) => ((1 + rUsd) * (1 + piCol)) / (1 + piUs) - 1;

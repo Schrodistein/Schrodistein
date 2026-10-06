@@ -555,7 +555,58 @@
 
   /* Lee una hoja o un CSV en cualquier formato reconocido:
    * formato largo (fecha + precio de cierre, con o sin nemotécnico) o tabla ancha. */
+  /* «Graficador de series» del Banco de la República (suameca): fila 1 con «Fecha» y el nombre de cada
+   * serie («… (Dato diario)»), fila 2 con las unidades («dd/mm/aaaa», «Porcentaje»…), fechas dd/mm/aaaa y
+   * cifras con coma decimal. Las tasas (cero cupón de los TES, IBR…) se guardan como renta fija en tasa;
+   * los diferenciales de compra y venta (bid-ask) no son precios ni tasas y se rechazan con su explicación. */
+  // Nombre corto de una serie de tasas cero cupón: «TES cero cupón pesos 10 años»
+  const shortName = (h) => {
+    const m = h.match(/cero cup[oó]n.*?(pesos|uvr)\s*[-–]\s*(\d+)\s*a(?:ñ|n)os?/i);
+    return m ? `TES cero cupón ${m[1].toLowerCase() === 'uvr' ? 'UVR' : 'pesos'} ${m[2]} año${m[2] === '1' ? '' : 's'}` : h;
+  };
+  function banrepSeries(rows, fileName) {
+    const r0 = (rows[0] || []).map(clean);
+    const r1 = (rows[1] || []).map(clean);
+    // Descarga en CSV de suameca: «Periodo(MMM DD, AAAA)» y una columna por serie, sin fila de unidades
+    const csvSuameca = /^periodo\s*\(/i.test(r0[0] || '') && r0.slice(1).some((h) => /tasa|cero cup|tes/i.test(h));
+    if (!csvSuameca && (!/^fecha$/i.test(r0[0] || '') || !/^dd\/mm\/aaaa$/i.test(r1[0] || ''))) return null;
+    if (csvSuameca) rows = [rows[0], [''].concat(r0.slice(1).map(() => ''))].concat(rows.slice(1));
+    const cols = r0.map((h, k) => k).filter((k) => k > 0 && r0[k]);
+    const name = (k) => shortName(r0[k].replace(/\s*\((dato|promedio|fin de)[^)]*\)\s*$/i, '').trim());
+    const bad = cols.filter((k) => /bid.?ask|spread|diferencial de compra/i.test(r0[k]));
+    if (bad.length === cols.length) throw new Error(`«${fileName}» trae ${bad.map(name).join(' y ')}: la diferencia entre la mejor oferta de compra y de venta de los TES (en puntos básicos), una medida de liquidez del mercado. No es un precio ni una tasa, así que no sirve para la tasa libre de riesgo. Del mismo graficador del Banco de la República descarga «Tasas cero cupón TES» (pesos, 1 y 10 años).`);
+    const body = rows.slice(2).filter((r) => (r && /^(\d{1,2}\/\d{1,2}\/\d{4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})$/.test(clean(r[0]))) || (r && cellDate(r[0])));
+    const dates = parseDates(body.map((r) => cellDate(r[0]) || clean(r[0])), true);
+    const out = [];
+    for (const k of cols) {
+      if (bad.includes(k)) continue;
+      const unit = norm(r1[k] || '');
+      const nm = name(k);
+      const rate = /(porcentaje|%|tasa|puntos)/.test(unit) || /(tasa|cero cupon|cero cupón|rendimiento|ibr|tir)/i.test(nm);
+      const pts = [];
+      body.forEach((r, i) => {
+        const v = typeof r[k] === 'number' ? r[k] : parseNumber(clean(r[k]), true);
+        if (dates[i] && Number.isFinite(v)) pts.push([dates[i], rate ? v / 100 : v]);
+      });
+      const s = finishSeries(pts, nm, r0[k]);
+      if (!s) continue;
+      if (rate) {
+        const y = nm.match(/(\d+(?:[.,]\d+)?)\s*a(?:ñ|n)os?/i);
+        // Cero cupón: la duración es igual al plazo
+        Object.assign(s, { kind: 'tasa', cls: 'tes', rank: 3, dur: y ? parseFloat(y[1].replace(',', '.')) : DEFAULT_DUR.tes });
+        if (/uvr/i.test(nm)) s.real = true;
+        // Curva del Banco de la República: referencia para la tasa libre de riesgo, no un título que se compre
+        if (/cero cup/i.test(nm)) s.ref = true;
+      } else Object.assign(s, { rank: 3, cls: classify(nm) });
+      out.push(s);
+    }
+    if (!out.length) throw new Error(`«${fileName}» no tiene series con fechas y valores.`);
+    return out;
+  }
+
   function readRows(rows, fileName) {
+    const br = banrepSeries(rows, fileName);
+    if (br) return { series: br, layout: 'banrep', returnsLike: false };
     if (findHeader(rows)) return { series: seriesFromRows(rows, fileName), layout: 'largo', returnsLike: false };
     const w = wideSeriesFromRows(rows, fileName);
     if (w) return { series: w.series, layout: 'ancho', returnsLike: w.returnsLike };
@@ -612,7 +663,7 @@
     const by = new Map();
     for (const s of list) {
       const k = assetKey(s.name);
-      if (!by.has(k)) by.set(k, { name: cleanName(s.name), column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur });
+      if (!by.has(k)) by.set(k, { name: cleanName(s.name), column: s.column, pts: [], parts: 0, noTrade: 0, cls: s.cls, kind: s.kind, dur: s.dur, ref: !!s.ref });
       const g = by.get(k);
       g.parts++;
       g.noTrade += s.noTrade || 0;
@@ -626,6 +677,7 @@
     return [...by.values()].map((g) => {
       const f = finishSeries(g.pts, g.name, g.column);
       const out = Object.assign(f, { parts: g.parts, noTrade: g.noTrade, cls: g.cls || classify(g.name) });
+      if (g.ref) out.ref = true;
       if (g.kind !== 'tasa') return out;
       const dur = g.dur || DEFAULT_DUR[out.cls] || DEFAULT_DUR.bono;
       const rates = f.prices;

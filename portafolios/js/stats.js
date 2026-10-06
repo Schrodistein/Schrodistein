@@ -288,7 +288,7 @@
   const NOT_PRICE = /(%|variacion|var |cambio|change|volumen|volume|vol$|cantidad|monto|apertura|open|maximo|max|high|minimo|min|low|anterior|previo|prev|promedio|avg|numero|nro)/;
   const PRICE_LEVELS = [
     /(cierre ajustado|adj close|adjusted close|precio ajustado)/,
-    /(precio de cierre|precio cierre|cierre|close|ultimo|last)/,
+    /(precio de cierre|precio cierre|cierre|close|closing|ultimo|last)/,
     /(precio de liquidacion|precio liquidacion|liquidacion|settle|precio de valoracion|precio valoracion|precio de mercado|precio sucio|precio limpio)/,
     /^(precio|price|valor)( |$)/,
   ];
@@ -392,8 +392,8 @@
   }
 
   // Número largo que algunas descargas ponen antes del nombre (1790829234836-COLTES LP)
-  const DOWNLOAD_ID = /^\d{6,}\s*[-_ ]\s*(?=\S)/;
-  const cleanName = (n) => String(n).replace(DOWNLOAD_ID, '').trim();
+  const DOWNLOAD_ID = /^[\s\u00a0\u200b\ufeff]*\d{6,}[\s\u00a0]*[-_\u2010-\u2015.\s\u00a0]+[\s\u00a0]*(?=\S)/;
+  const cleanName = (n) => String(n).replace(DOWNLOAD_ID, '').replace(/[\u00a0\u200b\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
 
   function nameFromFile(fileName) {
     return String(fileName || 'Activo')

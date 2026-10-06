@@ -7,8 +7,9 @@
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, Notification, dialog, nativeImage, session, powerMonitor } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { Store } = require('./lib/store');
+const { Store, catalog, isFx } = require('./lib/store');
 const updater = require('./lib/updater');
+const bvcauto = require('./lib/bvcauto');
 const macro = require('./lib/macro');
 const biblioteca = require('./lib/biblioteca');
 
@@ -194,21 +195,94 @@ function openBvc() {
   });
 }
 
+/* ---------- Descarga directa de la BVC (aprendida de una descarga manual) ---------- */
+const bvcRecent = []; // peticiones recientes del sitio de la BVC (para aprender la plantilla)
+function watchBvcRequests() {
+  session.defaultSession.webRequest.onCompleted({ urls: ['*://*.bvc.com.co/*'] }, (d) => {
+    if (!['xhr', 'fetch', 'other'].includes(d.resourceType) || d.method !== 'GET') return;
+    bvcRecent.push({ url: d.url, t: Date.now() });
+    if (bvcRecent.length > 200) bvcRecent.splice(0, bvcRecent.length - 200);
+  });
+}
+function learnBvc(downloadUrl, names) {
+  if (store.data.meta.bvcTemplate || !names.length) return null;
+  for (const nemo of names) {
+    let t = bvcauto.learnTemplate(downloadUrl, nemo);
+    if (!t) {
+      const recent = bvcRecent.filter((r) => Date.now() - r.t < 120000).reverse();
+      for (const r of recent) if ((t = bvcauto.learnTemplate(r.url, nemo))) break;
+    }
+    if (t) {
+      store.data.meta.bvcTemplate = Object.assign(t, { from: nemo, at: new Date().toISOString() });
+      store.save();
+      log(`descarga directa de la BVC aprendida de ${nemo}: ${t.url}`);
+      return t;
+    }
+  }
+  return null;
+}
+let bvcRunning = null;
+/* Descarga de la BVC el historial de todas las acciones, ETF e índices (solo las fechas que faltan). */
+function bvcSync(reason) {
+  const tpl = store.data.meta.bvcTemplate;
+  if (!tpl) return Promise.resolve(null);
+  if (bvcRunning) return bvcRunning;
+  bvcRunning = (async () => {
+    const nemos = [...new Set(catalog().filter((c) => c.type !== 'divisa').map((c) => c.nemo).concat(store.data.assets.filter((a) => a.enabled && !isFx(a)).map((a) => a.name)))];
+    const lastDate = (n) => {
+      const h = store.history(n);
+      const k = h.sources.lastIndexOf('bvc');
+      return k >= 0 ? h.dates[k] : null;
+    };
+    const r = await bvcauto.downloadAll({
+      template: tpl,
+      nemos,
+      // Con la sesión de la ventana de la BVC (sus cookies); en pruebas, las respuestas grabadas
+      fetch: process.env.FE_FIXTURES ? getFetch() : (u) => session.defaultSession.fetch(u),
+      importFile: (f) => updater.importFiles(store, [f], readExcel),
+      lastDate,
+      // Índices: tramos trimestrales (así los entrega la BVC, por ejemplo el MSCI COLCAP); acciones y ETF: 6 meses
+      monthsFor: (n) => {
+        const c = catalog().find((x) => x.nemo === n);
+        const a = store.asset(n);
+        return (c && c.type === 'indice') || (a && (a.index || a.cls === 'indice')) || /colcap|coltes|colibr|coleqty|colsc|colir/i.test(n) ? 3 : 6;
+      },
+      log,
+      delay: 250,
+    });
+    store.data.meta.bvcLast = { at: new Date().toISOString(), assets: Object.keys(r.assets).length, errors: r.errors };
+    store.save();
+    writeLibrary();
+    log(`BVC (${reason}): ${Object.keys(r.assets).length} activos con fechas nuevas, ${r.errors.length} sin datos`);
+    broadcast({ imported: { assets: r.assets, errors: r.errors.length ? [`Sin datos en la BVC para: ${r.errors.join(', ')}`] : [] }, bvc: store.data.meta.bvcLast });
+    return r;
+  })().finally(() => {
+    bvcRunning = null;
+  });
+  return bvcRunning;
+}
+
 function handleDownloads() {
   session.defaultSession.on('will-download', (e, item, wc) => {
     // Solo se importan las descargas de la ventana de la BVC; las demás (el libro de
     // Excel o los CSV que genera la app) se guardan donde elija el usuario.
     if (!bvcWin || bvcWin.isDestroyed() || wc !== bvcWin.webContents) return;
-    const dir = path.join(app.getPath('userData'), 'descargas');
+    // Cada descarga en su propia carpeta y con el nombre original del archivo: el nombre del activo
+    // sale del archivo, así que no se le agrega nada (antes se anteponía la hora y aparecían
+    // activos como «1790829309508-COLTES LP»)
+    const dir = path.join(app.getPath('userData'), 'descargas', String(Date.now()));
     fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, `${Date.now()}-${item.getFilename()}`);
+    const file = path.join(dir, item.getFilename());
     item.setSavePath(file);
     item.once('done', (ev, state) => {
       if (state !== 'completed') return;
       const r = updater.importFiles(store, [file], readExcel);
+      // La primera descarga enseña a la app cómo pedir los históricos a la BVC; luego descarga el resto sola
+      const learned = learnBvc(item.getURL(), Object.keys(r.assets));
       store.save();
+      if (learned) setTimeout(() => bvcSync('aprendida'), 1500);
       // El tramo descargado ya quedó unido al historial del activo: un solo archivo por activo
-      if (Object.keys(r.assets).length) fs.rm(file, { force: true }, () => {});
+      if (Object.keys(r.assets).length) fs.rm(dir, { recursive: true, force: true }, () => {});
       writeLibrary();
       const names = Object.keys(r.assets);
       if (!names.length && r.errors.length) notify('No se pudo importar la descarga', r.errors[0]);
@@ -285,6 +359,17 @@ function registerIpc() {
     broadcast({ restored: res });
     return res;
   });
+  ipcMain.handle('bvc:estado', () => ({ template: store.data.meta.bvcTemplate || null, last: store.data.meta.bvcLast || null, running: !!bvcRunning }));
+  ipcMain.handle('bvc:descargar', async () => {
+    if (!store.data.meta.bvcTemplate) return { needsLearning: true };
+    const r = await bvcSync('manual');
+    return { assets: r ? r.assets : {}, errors: r ? r.errors : [] };
+  });
+  ipcMain.handle('bvc:olvidar', () => {
+    delete store.data.meta.bvcTemplate;
+    store.save();
+    return true;
+  });
   ipcMain.handle('bvc:abrir', () => {
     openBvc();
     return true;
@@ -347,6 +432,9 @@ app.whenReady().then(() => {
   store = new Store(app.getPath('userData'));
   registerIpc();
   handleDownloads();
+  watchBvcRequests();
+  // Al abrir: la descarga directa de la BVC trae las fechas que falten de cada activo
+  setTimeout(() => bvcSync('al abrir').catch((e) => log('BVC: ' + e.message)), 5000);
   createTray();
   applyLogin();
   if (!process.argv.includes('--oculta')) createWindow();

@@ -153,7 +153,7 @@
     }
     if (payload && payload.result) await loadMacro();
     // Cada actualización agrega a la biblioteca local los historiales descargados
-    if (payload && payload.result && globalThis.PFApp && globalThis.PFApp.saveToLibrary) await globalThis.PFApp.saveToLibrary(await api.series());
+    if (payload && (payload.result || payload.imported) && globalThis.PFApp && globalThis.PFApp.saveToLibrary) await globalThis.PFApp.saveToLibrary(await api.series());
     if (payload && (payload.result || payload.imported)) setTimeout(() => saveLibrary(true), 1500);
     if (payload && (payload.result || payload.imported) && fromDesktop && prefs().reload !== false) {
       const before = lastRecommended();
@@ -213,6 +213,8 @@
   }
 
   function init() {
+    // Versión instalada, visible en el pie de la app
+    if (api.version) api.version().then((v) => { const el = document.getElementById('app-version'); if (el && v) el.textContent = ` ${v}`; }).catch(() => {});
     document.querySelectorAll('.desktop-only').forEach((el) => (el.hidden = false));
     api.alActualizar(refreshAll);
     loadMacro();

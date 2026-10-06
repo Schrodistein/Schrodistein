@@ -8,6 +8,10 @@ Autor de la aplicación: **Schrödistein**. La teoría y los modelos que usa son
 
 ## Qué hace
 
+**Versión 2.2**
+- App de escritorio: descarga directa de la BVC aprendida de una descarga manual (acciones y ETF por semestre, índices por trimestre), al abrir la app.
+- Un solo activo por nemotécnico también para las descargas con número delante del nombre; la biblioteca une los duplicados cada vez que se actualiza.
+
 **Versión 2.1.2**
 - Rendimientos siempre logarítmicos, rₜ = ln(Pₜ / Pₜ₋₁), también en la Terminal y en Mercado: variación del día, rendimiento a 1 año, desempeño por periodo y rendimiento acumulado ln(Pₜ / P₀) = Σ rₜ, que reemplaza la «base 100».
 

@@ -1282,6 +1282,8 @@
   st.lib = { series: [], macro: {} };
   const libCut = () => store.get('corte') || '';
   async function refreshLib() {
+    // Un solo activo por nemotécnico, siempre (tramos con número de descarga u otros nombres del mismo activo)
+    await PF.lib.mergeDuplicates().catch(() => 0);
     st.lib = await PF.lib.all();
     if (st.screen === 'biblioteca') renderLib();
   }
@@ -1315,7 +1317,12 @@
     const cat = PF.catalog || [];
     const have = cat.filter((c) => inLib.has(key(c.nemo))).length;
     const desk = !!globalThis.bvc;
-    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. Los precios salen solo de la BVC: en bvc.com.co busca cada nemotécnico y descarga sus históricos (hasta 6 meses por archivo). ${desk ? '«Abrir la BVC para descargar los que faltan» abre el sitio dentro de la app: cada archivo que descargas se importa solo, los tramos de un mismo activo se unen y quedan en la biblioteca.' : 'Sube los archivos en Datos: los tramos de un mismo activo se unen solos y quedan en la biblioteca.'}`;
+    $('cat-summary').textContent = `${have} de ${cat.length} activos del catálogo están en la biblioteca. Los precios salen solo de la BVC. ${desk ? 'Descarga directa: la primera vez abre la BVC y descarga el histórico de una acción; la app aprende cómo lo entrega la BVC y desde ahí descarga sola todas las acciones, ETF e índices al abrirse.' : 'En bvc.com.co busca cada nemotécnico y descarga sus históricos (hasta 6 meses por archivo); súbelos en Datos y los tramos se unen solos. La app de escritorio los descarga sola.'}`;
+    if (desk && globalThis.bvc.bvcEstado)
+      globalThis.bvc.bvcEstado().then((e) => {
+        $('cat-download').textContent = e && e.template ? 'Descargar todo desde la BVC ahora' : 'Abrir la BVC y enseñar la descarga';
+        if (e && e.template) $('cat-summary').textContent += ` Descarga directa configurada (aprendida de ${e.template.from}${e.last ? `; última: ${String(e.last.at).slice(0, 16).replace('T', ' ')}, ${e.last.assets} activos con datos nuevos` : ''}).`;
+      });
     $('cat-download').hidden = !desk;
     $('cat-table').innerHTML = '<thead><tr><th>Nemotécnico</th><th>Emisor o instrumento</th><th>Sector</th><th>En la biblioteca</th><th>Desde</th><th class="n">Días</th></tr></thead><tbody>' +
       cat.map((c) => {
@@ -1402,9 +1409,25 @@
     $('cat-download').addEventListener('click', async () => {
       const api = globalThis.bvc;
       if (!api) return;
+      const est = api.bvcEstado ? await api.bvcEstado() : null;
+      if (est && est.template) {
+        $('cat-download').disabled = true;
+        catStatus('Descargando de la BVC el historial de todas las acciones, ETF e índices (en tramos de 6 meses)… puede tardar unos minutos.');
+        try {
+          const r = await api.bvcDescargar();
+          await saveDesktopSeries(await api.series());
+          renderLib();
+          const n = Object.keys(r.assets || {}).length;
+          catStatus(`Listo: ${n} activos con fechas nuevas desde la BVC.${r.errors && r.errors.length ? ` Sin datos en la BVC para: ${r.errors.join(', ')}.` : ''}`, r.errors && r.errors.length ? 'warn' : 'ok');
+        } catch (e) {
+          catStatus('No se pudo descargar de la BVC: ' + e.message, 'bad');
+        } finally {
+          $('cat-download').disabled = false;
+        }
+        return;
+      }
       await api.abrirBVC();
-      const miss = (PF.catalog || []).filter((c) => c.type !== 'divisa' && !st.lib.series.some((r) => PF.data.assetKey(r.name) === PF.data.assetKey(c.nemo)));
-      catStatus(`Se abrió la BVC. Faltan ${miss.length}: ${miss.map((c) => c.nemo).join(', ')}. Busca cada uno, descarga sus históricos y la app los importa solos.`, 'ok');
+      catStatus('Se abrió la BVC. Busca una acción (por ejemplo ECOPETROL), entra a sus históricos y descárgalos una vez: la app aprende cómo los entrega la BVC y desde ahí descarga sola el historial de todas las acciones, ETF e índices, ahora y cada vez que se abra.', 'ok');
     });
     box.addEventListener('change', async (ev) => {
       const t = ev.target;

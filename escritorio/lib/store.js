@@ -11,7 +11,7 @@ const RANK = { bvc: 2, yahoo: 1 };
 /* Precios de acciones, índices y ETF: solo de la BVC. La fuente automática (Yahoo Finance) queda
  * únicamente para divisas (dólar, euro), que no se negocian en la BVC. */
 // Número largo de descarga antes del nombre (1790829234836-COLTES LP): no es parte del activo
-const cleanName = (n) => String(n).replace(/^\d{6,}\s*[-_ ]\s*(?=\S)/, '').trim();
+const cleanName = (n) => String(n).replace(/^[\s\u00a0\u200b\ufeff]*\d{6,}[\s\u00a0]*[-_\u2010-\u2015.\s\u00a0]+[\s\u00a0]*(?=\S)/, '').replace(/[\u00a0\u200b\ufeff]/g, ' ').replace(/\s+/g, ' ').trim();
 const keyOf = (n) => cleanName(n).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[\s_]+/g, ' ');
 
 const isFx = (a) => !!a && (a.cls === 'divisa' || /^[A-Z]{3}\/[A-Z]{3}$/i.test(a.name));
